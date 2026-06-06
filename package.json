@@ -1,0 +1,23 @@
+{
+  "name": "water-filter-maintenance",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=packages/backend",
+    "dev:admin": "npm run dev --workspace=packages/admin-app",
+    "dev:scheduling": "npm run dev --workspace=packages/scheduling-app",
+    "dev:technician": "npm run dev --workspace=packages/technician-app",
+    "build:admin": "npm run build --workspace=packages/admin-app",
+    "build:scheduling": "npm run build --workspace=packages/scheduling-app",
+    "build:technician": "npm run build --workspace=packages/technician-app",
+    "build:all": "npm run build:admin && npm run build:scheduling && npm run build:technician",
+    "db:generate": "npm run db:generate --workspace=packages/backend",
+    "db:migrate": "npm run db:migrate --workspace=packages/backend",
+    "db:seed": "npm run db:seed --workspace=packages/backend"
+  },
+  "devDependencies": {
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
+  }
+}

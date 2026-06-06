@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="WFM System — نظام صيانة فلاتر المياه | Pure Home Water Filter Maintenance System">
+  <title>WFM System — تنزيل التطبيق</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b1120;
+      --surface:   #131e2e;
+      --surface2:  #1a2840;
+      --border:    #243347;
+      --accent:    #2563eb;
+      --accent-h:  #1d4ed8;
+      --accent-2:  #3b82f6;
+      --green:     #16a34a;
+      --text:      #e2e8f0;
+      --muted:     #7c93b0;
+      --dim:       #3d5270;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+                   "Noto Sans Arabic", "Cairo", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 40px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .logo-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .logo-sub {
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .lang-toggle {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .lang-toggle:hover { background: var(--border); color: var(--text); }
+
+    /* ── Hero ── */
+    .hero {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 80px 24px 60px;
+      text-align: center;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(37, 99, 235, 0.12);
+      border: 1px solid rgba(37, 99, 235, 0.3);
+      color: var(--accent-2);
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-2);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      color: #f1f5f9;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      color: var(--muted);
+      margin-bottom: 48px;
+      max-width: 520px;
+      margin-inline: auto;
+      margin-bottom: 48px;
+    }
+
+    /* ── Download card ── */
+    .download-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      margin-bottom: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .download-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), #818cf8);
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      padding: 16px 40px;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 4px 24px rgba(37, 99, 235, 0.35);
+    }
+
+    .download-btn:hover {
+      background: var(--accent-h);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 32px rgba(37, 99, 235, 0.45);
+    }
+
+    .download-btn:active { transform: translateY(0); }
+
+    .download-btn.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .download-icon {
+      font-size: 1.3rem;
+      line-height: 1;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .meta-item strong { color: var(--text); }
+
+    .meta-sep { color: var(--dim); }
+
+    /* ── Requirements ── */
+    .req-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .req-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    /* ── Steps ── */
+    .steps-section {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(37, 99, 235, 0.15);
+      border: 1px solid rgba(37, 99, 235, 0.3);
+      color: var(--accent-2);
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .step-label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .step-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 40px;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--dim);
+    }
+
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    /* ── Skeleton loader ── */
+    .skel {
+      display: inline-block;
+      background: var(--surface2);
+      border-radius: 4px;
+      animation: shimmer 1.4s infinite;
+    }
+
+    @keyframes shimmer {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── LTR (English) overrides ── */
+    html[lang="en"] { direction: ltr; }
+
+    /* ── Mobile ── */
+    @media (max-width: 600px) {
+      header { padding: 14px 20px; }
+      .hero { padding: 48px 16px 40px; }
+      .download-card { padding: 24px 18px; }
+      .steps-section { padding: 0 16px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════ HEADER ═══ -->
+<header>
+  <a href="#" class="logo">
+    <div class="logo-icon">💧</div>
+    <div>
+      <div class="logo-name">WFM System</div>
+      <div class="logo-sub" data-ar="نظام صيانة فلاتر المياه" data-en="Water Filter Maintenance">نظام صيانة فلاتر المياه</div>
+    </div>
+  </a>
+  <button class="lang-toggle" onclick="toggleLang()" id="lang-btn">English</button>
+</header>
+
+<!-- ═══════════════════════════════════════ HERO ═══ -->
+<section class="hero">
+  <div class="badge">
+    <span class="badge-dot"></span>
+    <span data-ar="نسخة رسمية" data-en="Official Release">نسخة رسمية</span>
+  </div>
+
+  <h1>
+    <span data-ar="تنزيل" data-en="Download">تنزيل</span>
+    WFM System
+  </h1>
+
+  <p class="subtitle" data-ar="نظام إدارة صيانة فلاتر المياه — Pure Home. للتنزيل على أجهزة الموظفين فقط."
+                       data-en="Pure Home Water Filter Maintenance System. Install on employee workstations only.">
+    نظام إدارة صيانة فلاتر المياه — Pure Home. للتنزيل على أجهزة الموظفين فقط.
+  </p>
+
+  <!-- Download card -->
+  <div class="download-card">
+    <a id="download-btn" class="download-btn loading" href="#" onclick="handleDownload(event)">
+      <span class="download-icon">⬇</span>
+      <span id="btn-label" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</span>
+    </a>
+
+    <div class="meta">
+      <div class="meta-item">
+        <span>📦</span>
+        <span data-ar="الإصدار" data-en="Version">الإصدار</span>
+        <strong id="version"><span class="skel" style="width:60px;height:14px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></strong>
+      </div>
+      <span class="meta-sep">·</span>
+      <div class="meta-item">
+        <span>📅</span>
+        <span id="date"><span class="skel" style="width:80px;height:14px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></span>
+      </div>
+      <span class="meta-sep">·</span>
+      <div class="meta-item">
+        <span>💾</span>
+        <strong id="size"><span class="skel" style="width:40px;height:14px;">&nbsp;&nbsp;&nbsp;&nbsp;</span></strong>
+      </div>
+    </div>
+
+    <div class="req-row">
+      <div class="req-chip">🪟 Windows 10 / 11</div>
+      <div class="req-chip">🖥️ 64-bit</div>
+      <div class="req-chip">
+        <span data-ar="شبكة LAN مطلوبة" data-en="LAN network required">شبكة LAN مطلوبة</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note about updates -->
+  <p style="font-size:0.75rem; color:var(--muted); margin-bottom: 4px;"
+     data-ar="✓ التطبيق يتحقق من التحديثات تلقائياً عند كل تشغيل"
+     data-en="✓ The app checks for updates automatically on every launch">
+    ✓ التطبيق يتحقق من التحديثات تلقائياً عند كل تشغيل
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════ STEPS ═══ -->
+<section class="steps-section">
+  <p class="section-title" data-ar="خطوات التثبيت" data-en="Installation Steps">خطوات التثبيت</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-label" data-ar="تنزيل الملف" data-en="Download">تنزيل الملف</div>
+      <div class="step-desc"
+           data-ar="اضغط زر التنزيل أعلاه وانتظر اكتمال تنزيل ملف الإعداد"
+           data-en="Click the download button above and wait for the setup file to finish downloading">
+        اضغط زر التنزيل أعلاه وانتظر اكتمال تنزيل ملف الإعداد
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-label" data-ar="تشغيل الإعداد" data-en="Run Installer">تشغيل الإعداد</div>
+      <div class="step-desc"
+           data-ar="انقر نقراً مزدوجاً على ملف .exe واتبع خطوات المعالج"
+           data-en="Double-click the .exe file and follow the setup wizard">
+        انقر نقراً مزدوجاً على ملف .exe واتبع خطوات المعالج
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-label" data-ar="إعداد عنوان الخادم" data-en="Set Server URL">إعداد عنوان الخادم</div>
+      <div class="step-desc"
+           data-ar="عند الفتح: إعدادات الخادم ← أدخل عنوان IP الخاص بالخادم"
+           data-en="On first launch: Server Setup → enter your server IP address">
+        عند الفتح: إعدادات الخادم ← أدخل عنوان IP الخاص بالخادم
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-label" data-ar="تسجيل الدخول" data-en="Log In">تسجيل الدخول</div>
+      <div class="step-desc"
+           data-ar="اختر قسمك وأدخل رمز الدخول الخاص بك"
+           data-en="Select your department and enter your access code">
+        اختر قسمك وأدخل رمز الدخول الخاص بك
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ FOOTER ═══ -->
+<footer>
+  <span>WFM System &copy; 2026 Pure Home</span>
+  &nbsp;·&nbsp;
+  <a id="releases-link" href="#" target="_blank" rel="noopener"
+     data-ar="جميع الإصدارات" data-en="All Releases">جميع الإصدارات</a>
+</footer>
+
+<script>
+  // ═══════════════════════════════════════════════════════════
+  //  CONFIGURATION
+  //  Replace these two values with your actual GitHub details
+  // ═══════════════════════════════════════════════════════════
+  const GITHUB_OWNER = 'Fahd070';  // GitHub username
+  const GITHUB_REPO  = 'wfm-system';            // ← change this if different
+  // ═══════════════════════════════════════════════════════════
+
+  const RELEASES_URL  = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
+  const LATEST_API    = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
+
+  let downloadUrl = RELEASES_URL;  // fallback until we load the real URL
+  let isAr = true;
+
+  // ── Load release info from GitHub ──────────────────────────
+  async function loadRelease() {
+    try {
+      const res = await fetch(LATEST_API, {
+        headers: { Accept: 'application/vnd.github+json' }
+      });
+      if (!res.ok) throw new Error('not ok');
+      const data = await res.json();
+
+      const version = data.tag_name || '—';
+      const date = data.published_at
+        ? new Date(data.published_at).toLocaleDateString(isAr ? 'ar-SA' : 'en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
+        : '—';
+
+      // Find Windows installer (.exe)
+      const asset = (data.assets || []).find(a => a.name && a.name.endsWith('.exe'));
+      downloadUrl = asset?.browser_download_url || RELEASES_URL;
+      const sizeMB = asset ? `${(asset.size / 1024 / 1024).toFixed(0)} MB` : '—';
+
+      document.getElementById('version').textContent = version;
+      document.getElementById('date').textContent = date;
+      document.getElementById('size').textContent = sizeMB;
+
+      const btn = document.getElementById('download-btn');
+      btn.href = downloadUrl;
+      btn.classList.remove('loading');
+      updateBtnLabel();
+    } catch {
+      // Fallback: send user to releases page
+      const btn = document.getElementById('download-btn');
+      btn.href = RELEASES_URL;
+      btn.classList.remove('loading');
+      updateBtnLabel();
+      document.getElementById('version').textContent = '—';
+      document.getElementById('date').textContent = '—';
+      document.getElementById('size').textContent = '—';
+    }
+
+    document.getElementById('releases-link').href = RELEASES_URL;
+  }
+
+  function handleDownload(e) {
+    if (document.getElementById('download-btn').classList.contains('loading')) {
+      e.preventDefault();
+    }
+    // otherwise let the <a href> do its job
+  }
+
+  // ── Language toggle ─────────────────────────────────────────
+  function setLang(ar) {
+    isAr = ar;
+    document.documentElement.lang = ar ? 'ar' : 'en';
+    document.getElementById('lang-btn').textContent = ar ? 'English' : 'عربي';
+
+    document.querySelectorAll('[data-ar]').forEach(el => {
+      el.textContent = ar ? el.dataset.ar : el.dataset.en;
+    });
+
+    // Re-render date in new locale
+    loadRelease();
+  }
+
+  function toggleLang() {
+    setLang(!isAr);
+  }
+
+  function updateBtnLabel() {
+    const label = document.getElementById('btn-label');
+    if (label) {
+      label.textContent = isAr ? 'تنزيل WFM System' : 'Download WFM System';
+      label.dataset.ar = 'تنزيل WFM System';
+      label.dataset.en = 'Download WFM System';
+    }
+  }
+
+  // ── Init ────────────────────────────────────────────────────
+  loadRelease();
+</script>
+</body>
+</html>

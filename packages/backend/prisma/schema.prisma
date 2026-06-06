@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SCHEDULING
+  TECHNICIAN
+}
+
+enum MaintenanceCycle {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum AppointmentType {
+  INSTALLATION
+  MAINTENANCE
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  RESCHEDULED
+  CANCELLED
+  PENDING
+}
+
+enum TaskStatus {
+  PENDING_APPROVAL
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  customersCreated    Customer[]           @relation("CustomerCreatedBy")
+  appointmentsCreated Appointment[]        @relation("AppointmentCreatedBy")
+  tasks               MaintenanceTask[]    @relation("TaskAssignedTo")
+  taskHistory         TaskHistory[]        @relation("HistoryChangedBy")
+  postponements       PostponementRecord[] @relation("PostponementTechnician")
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  messages            Message[]
+  sentDirectMessages  DirectMessage[]      @relation("DMSender")
+  @@map("users")
+}
+
+model Customer {
+  id                   String           @id @default(uuid())
+  name                 String
+  phone                String
+  maintenanceCycle     MaintenanceCycle
+  maintenanceFrequency Int              @default(1)
+  isActive             Boolean          @default(true)
+  activityDismissed    Boolean          @default(false)
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  createdById          String?
+  createdBy            User?            @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  address              Address?
+  appointments         Appointment[]
+  @@map("customers")
+}
+
+model Address {
+  id          String   @id @default(uuid())
+  city        String
+  district    String
+  street      String
+  postalCode  String?
+  buildingNo  String?
+  floorNo     String?
+  apartmentNo String?
+  customerId  String   @unique
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  @@map("addresses")
+}
+
+model Appointment {
+  id            String            @id @default(uuid())
+  type          AppointmentType
+  status        AppointmentStatus @default(SCHEDULED)
+  scheduledDate DateTime
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  customerId    String
+  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdById   String?
+  createdBy     User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  task          MaintenanceTask?
+  @@map("appointments")
+}
+
+model MaintenanceTask {
+  id            String       @id @default(uuid())
+  status        TaskStatus   @default(PENDING_APPROVAL)
+  notes         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  appointmentId String       @unique
+  appointment   Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  technicianId  String?
+  technician    User?        @relation("TaskAssignedTo", fields: [technicianId], references: [id])
+  history       TaskHistory[]
+  postponements PostponementRecord[]
+  @@map("maintenance_tasks")
+}
+
+model TaskHistory {
+  id          String     @id @default(uuid())
+  status      TaskStatus
+  notes       String?
+  createdAt   DateTime   @default(now())
+  taskId      String
+  task        MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  changedById String?
+  changedBy   User?      @relation("HistoryChangedBy", fields: [changedById], references: [id])
+  @@map("task_history")
+}
+
+model PostponementRecord {
+  id            String          @id @default(uuid())
+  reason        String
+  newDate       DateTime?
+  createdAt     DateTime        @default(now())
+  taskId        String
+  task          MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestedById String?
+  requestedBy   User?           @relation("PostponementTechnician", fields: [requestedById], references: [id])
+  @@map("postponement_records")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  @@map("notifications")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  @@map("messages")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  entityType String
+  entityId   String
+  createdAt  DateTime @default(now())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  @@map("audit_logs")
+}
+
+model DirectMessage {
+  id            String   @id @default(uuid())
+  content       String
+  senderId      String
+  sender        User     @relation("DMSender", fields: [senderId], references: [id])
+  recipientRole String
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  @@map("direct_messages")
+}
