@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+
+const RENDER_URL = "https://wfm-system.onrender.com";
 
 export interface AuthUser { id: string; name: string; email: string; role: string; }
 interface DeptAuth { user: AuthUser; token: string; }
@@ -24,7 +26,7 @@ interface AppStore {
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
-      serverUrl: "http://localhost:3001",
+      serverUrl: RENDER_URL,
       adminAuth: null, schedulingAuth: null, technicianAuth: null,
       adminLoginTime: 0, schedulingLoginTime: 0, technicianLoginTime: 0,
       setServerUrl: (serverUrl) => set({ serverUrl }),
@@ -35,6 +37,16 @@ export const useAppStore = create<AppStore>()(
       clearSchedulingAuth: () => set({ schedulingAuth: null }),
       clearTechnicianAuth: () => set({ technicianAuth: null }),
     }),
-    { name: "wfm-unified" }
+    {
+      name: "wfm-unified",
+      version: 2,
+      migrate: (state: any, version: number) => {
+        if (version < 2) {
+          // Migrate existing installs from local/Tailscale URL to Render
+          state.serverUrl = RENDER_URL;
+        }
+        return state;
+      },
+    }
   )
 );
