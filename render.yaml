@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: wfm-system
+    runtime: node
+    rootDir: packages/backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_CODE
+        sync: false
+      - key: SCHEDULING_CODE
+        sync: false
+      - key: TECHNICIAN_CODE
+        sync: false
+      - key: TECHNICIAN_EMAIL
+        sync: false
