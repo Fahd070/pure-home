@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import axios from "axios";
 import { useAppStore } from "../store/appStore";
 
 const logoUrl = new URL("../../assets/icon.png", import.meta.url).href;
@@ -11,12 +12,27 @@ const depts = [
   { id: "technician", label_ar: "الفنيون",          label_en: "Technicians",              color: "border-orange-500 hover:bg-orange-50", badge: "bg-orange-600", icon: "🟠" },
 ];
 
+type ServerStatus = "checking" | "online" | "offline";
+
 export default function DepartmentSelector() {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   const { serverUrl } = useAppStore();
   const isAr = i18n.language === "ar";
-  const isLocalhost = serverUrl.includes("localhost") || serverUrl.includes("127.0.0.1");
+
+  const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
+
+  useEffect(() => {
+    setServerStatus("checking");
+    const controller = new AbortController();
+    axios
+      .get(serverUrl + "/health", { signal: controller.signal, timeout: 10000 })
+      .then(() => setServerStatus("online"))
+      .catch(() => {
+        if (!controller.signal.aborted) setServerStatus("offline");
+      });
+    return () => controller.abort();
+  }, [serverUrl]);
 
   return (
     <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 p-6">
@@ -39,8 +55,22 @@ export default function DepartmentSelector() {
 
       {/* Server status indicator */}
       <div className="mt-6 flex items-center gap-1.5 text-xs">
-        <span className={`w-1.5 h-1.5 rounded-full ${isLocalhost ? "bg-yellow-400" : "bg-green-400"}`} />
-        <span className="text-slate-400">{serverUrl}</span>
+        {serverStatus === "checking" && (
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+        )}
+        {serverStatus === "online" && (
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+        )}
+        {serverStatus === "offline" && (
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+        )}
+        <span className="text-slate-400">
+          {serverStatus === "checking"
+            ? (isAr ? "جاري الاتصال..." : "Connecting...")
+            : serverStatus === "offline"
+            ? (isAr ? "تعذر الاتصال — تحقق من الإنترنت" : "Cannot reach server — check your connection")
+            : serverUrl}
+        </span>
       </div>
 
       <div className="mt-3 flex items-center gap-4">
