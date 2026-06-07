@@ -1,6 +1,6 @@
 {
   "name": "@wfm/unified-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -11,7 +11,7 @@
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.6.5",
     "electron-store": "^8.1.0",
-    "electron-updater": "^6.3.9",
+    "electron-updater": "^6.8.9",
     "i18next": "^23.7.16",
     "i18next-browser-languagedetector": "^7.2.1",
     "react": "^18.2.0",
@@ -50,13 +50,17 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": false,
       "installerIcon": "assets/icon.ico",
-      "shortcutName": "WFM System"
+      "shortcutName": "WFM System",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "publish": {
       "provider": "github",

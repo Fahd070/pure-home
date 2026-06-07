@@ -41,31 +41,22 @@ export default function UpdateBanner() {
   if (state.phase === "idle" || dismissed) return null;
 
   if (state.phase === "available") {
+    // Auto-download is enabled — transition immediately to downloading state
+    // This "available" phase is only visible for a brief moment before progress events arrive
     return (
       <div className="bg-blue-600 text-white text-xs px-4 py-1.5 flex items-center justify-between select-none shrink-0 z-50">
         <span className="font-medium">
           {isAr
-            ? `تحديث جديد متاح — الإصدار ${state.version}`
-            : `New update available — v${state.version}`}
+            ? `تحديث جديد (${state.version}) — جاري التنزيل تلقائيًا...`
+            : `Update v${state.version} available — downloading automatically...`}
         </span>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              setState({ phase: "downloading", percent: 0 });
-              window.electron.updater.download().catch(() => setState({ phase: "idle" }));
-            }}
-            className="bg-white text-blue-700 font-semibold px-3 py-0.5 rounded text-xs hover:bg-blue-50 transition-colors"
-          >
-            {isAr ? "تنزيل الآن" : "Download Now"}
-          </button>
-          <button
-            onClick={() => setDismissed(true)}
-            className="opacity-60 hover:opacity-100 transition-opacity text-base leading-none px-1"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="opacity-60 hover:opacity-100 transition-opacity text-base leading-none px-1 ml-3"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
       </div>
     );
   }
