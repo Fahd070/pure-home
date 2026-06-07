@@ -69,6 +69,7 @@ model Customer {
   isActive             Boolean          @default(true)
   activityDismissed    Boolean          @default(false)
   notes                String?
+  version              Int              @default(1)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   createdById          String?
@@ -98,6 +99,7 @@ model Appointment {
   status        AppointmentStatus @default(SCHEDULED)
   scheduledDate DateTime
   notes         String?
+  version       Int               @default(1)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   customerId    String
@@ -114,6 +116,7 @@ model MaintenanceTask {
   notes         String?
   startedAt     DateTime?
   completedAt   DateTime?
+  version       Int          @default(1)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   appointmentId String       @unique
@@ -171,14 +174,33 @@ model Message {
 }
 
 model AuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  entityType  String
+  entityId    String
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime @default(now())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model EventLog {
   id         String   @id @default(uuid())
-  action     String
+  eventType  String
   entityType String
   entityId   String
-  createdAt  DateTime @default(now())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  @@map("audit_logs")
+  payload    Json
+  createdAt  DateTime @default(now())
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@map("event_logs")
 }
 
 model DirectMessage {

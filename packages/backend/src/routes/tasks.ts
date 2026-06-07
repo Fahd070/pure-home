@@ -4,17 +4,38 @@ import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToAll, emitToRole } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
+import { writeAudit } from '../services/audit.service';
+import { emitEvent, EVENT_TYPES } from '../services/event.service';
 
 const router = Router();
 router.use(authenticate);
+
+function conflict(res: any, current: number, yours: number) {
+  return res.status(409).json({
+    success: false,
+    error: 'CONFLICT',
+    message: 'This record was modified by someone else. Please refresh and try again.',
+    currentVersion: current,
+    yourVersion: yours,
+  });
+}
+
+function taskFields(t: any) {
+  return { id: t.id, status: t.status, technicianId: t.technicianId, notes: t.notes, version: t.version, startedAt: t.startedAt, completedAt: t.completedAt };
+}
 
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
     const where: any = {};
     if (req.user!.role === 'TECHNICIAN') where.technicianId = req.user!.userId;
     const tasks = await prisma.maintenanceTask.findMany({
-      where, include: { technician: true, appointment: { include: { customer: { include: { address: true } } } }, history: { orderBy: { createdAt: 'desc' }, take: 5 } },
-      orderBy: { createdAt: 'desc' }
+      where,
+      include: {
+        technician: true,
+        appointment: { include: { customer: { include: { address: true } } } },
+        history: { orderBy: { createdAt: 'desc' }, take: 5 },
+      },
+      orderBy: { createdAt: 'desc' },
     });
     res.json({ success: true, data: tasks });
   } catch (e) { next(e); }
@@ -22,79 +43,139 @@ router.get('/', async (req: AuthRequest, res, next) => {
 
 router.patch('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const { technicianId } = z.object({ technicianId: z.string() }).parse(req.body);
+    const { technicianId, version } = z.object({
+      technicianId: z.string(),
+      version: z.number().int().optional(),
+    }).parse(req.body);
+
+    const before = await prisma.maintenanceTask.findUnique({
+      where: { id: req.params.id },
+      include: { appointment: { include: { customer: true } } },
+    });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+    if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
-      data: { status: 'APPROVED', technicianId, history: { create: { status: 'APPROVED', changedById: req.user!.userId } } },
-      include: { technician: true, appointment: { include: { customer: true } } }
+      data: {
+        status: 'APPROVED', technicianId, version: { increment: 1 },
+        history: { create: { status: 'APPROVED', changedById: req.user!.userId } },
+      },
+      include: { technician: true, appointment: { include: { customer: true } } },
     });
-    const log = await prisma.auditLog.create({
-      data: { action: `Maintenance for '${task.appointment.customer.name}' approved and assigned to ${task.technician?.name || 'technician'}`, entityType: 'task', entityId: task.id, userId: req.user!.userId },
-      include: { user: { select: { id: true, name: true, role: true } } }
+
+    await writeAudit({
+      action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
+      label: `Maintenance for '${task.appointment.customer.name}' approved and assigned to ${task.technician?.name || 'technician'}`,
+      before: taskFields(before), after: taskFields(task),
     });
+    await emitEvent({ type: EVENT_TYPES.TASK_APPROVED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
     emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.TASK_APPROVED, task);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.TASK_APPROVED, task);
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.json({ success: true, data: task });
   } catch (e) { next(e); }
 });
 
 router.patch('/:id/start', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) => {
   try {
+    const { version } = z.object({ version: z.number().int().optional() }).parse(req.body);
+
+    const before = await prisma.maintenanceTask.findUnique({
+      where: { id: req.params.id },
+      include: { appointment: { include: { customer: true } } },
+    });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+    if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
-      data: { status: 'IN_PROGRESS', startedAt: new Date(), history: { create: { status: 'IN_PROGRESS', changedById: req.user!.userId } } },
-      include: { technician: true, appointment: { include: { customer: { include: { address: true } } } } }
+      data: {
+        status: 'IN_PROGRESS', startedAt: new Date(), version: { increment: 1 },
+        history: { create: { status: 'IN_PROGRESS', changedById: req.user!.userId } },
+      },
+      include: { technician: true, appointment: { include: { customer: { include: { address: true } } } } },
     });
     await prisma.customer.update({ where: { id: task.appointment.customerId }, data: { activityDismissed: false } });
-    const log = await prisma.auditLog.create({
-      data: { action: `Technician ${task.technician?.name || ''} started maintenance for '${task.appointment.customer.name}'`, entityType: 'task', entityId: task.id, userId: req.user!.userId },
-      include: { user: { select: { id: true, name: true, role: true } } }
+
+    await writeAudit({
+      action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
+      label: `Technician ${task.technician?.name || ''} started maintenance for '${task.appointment.customer.name}'`,
+      before: taskFields(before), after: taskFields(task),
     });
+    await emitEvent({ type: EVENT_TYPES.TASK_STARTED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
     emitToAll(SOCKET_EVENTS.TASK_APPROVED, task);
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.json({ success: true, data: task });
   } catch (e) { next(e); }
 });
 
 router.patch('/:id/complete', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) => {
   try {
-    const { notes } = z.object({ notes: z.string().max(2000).optional() }).parse(req.body);
+    const { notes, version } = z.object({
+      notes: z.string().max(2000).optional(),
+      version: z.number().int().optional(),
+    }).parse(req.body);
+
+    const before = await prisma.maintenanceTask.findUnique({
+      where: { id: req.params.id },
+      include: { appointment: { include: { customer: true } } },
+    });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+    if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
-      data: { status: 'COMPLETED', completedAt: new Date(), notes, history: { create: { status: 'COMPLETED', changedById: req.user!.userId, notes } } },
-      include: { technician: true, appointment: { include: { customer: true } } }
+      data: {
+        status: 'COMPLETED', completedAt: new Date(), notes, version: { increment: 1 },
+        history: { create: { status: 'COMPLETED', changedById: req.user!.userId, notes } },
+      },
+      include: { technician: true, appointment: { include: { customer: true } } },
     });
     await prisma.customer.update({ where: { id: task.appointment.customerId }, data: { activityDismissed: false } });
-    const log = await prisma.auditLog.create({
-      data: { action: `Maintenance for '${task.appointment.customer.name}' was completed by ${task.technician?.name || 'technician'}`, entityType: 'task', entityId: task.id, userId: req.user!.userId },
-      include: { user: { select: { id: true, name: true, role: true } } }
+
+    await writeAudit({
+      action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
+      label: `Maintenance for '${task.appointment.customer.name}' was completed by ${task.technician?.name || 'technician'}`,
+      before: taskFields(before), after: taskFields(task),
     });
+    await emitEvent({ type: EVENT_TYPES.TASK_COMPLETED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
     emitToAll(SOCKET_EVENTS.TASK_COMPLETED, task);
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.json({ success: true, data: task });
   } catch (e) { next(e); }
 });
 
 router.patch('/:id/postpone', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) => {
   try {
-    const { reason, newDate } = z.object({ reason: z.string().min(1).max(1000), newDate: z.string().optional() }).parse(req.body);
+    const { reason, newDate, version } = z.object({
+      reason: z.string().min(1).max(1000),
+      newDate: z.string().optional(),
+      version: z.number().int().optional(),
+    }).parse(req.body);
+
+    const before = await prisma.maintenanceTask.findUnique({
+      where: { id: req.params.id },
+      include: { appointment: { include: { customer: true } } },
+    });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+    if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
       data: {
-        status: 'POSTPONED',
+        status: 'POSTPONED', version: { increment: 1 },
         history: { create: { status: 'POSTPONED', changedById: req.user!.userId, notes: reason } },
-        postponements: { create: { reason, newDate: newDate ? new Date(newDate) : null, requestedById: req.user!.userId } }
+        postponements: { create: { reason, newDate: newDate ? new Date(newDate) : null, requestedById: req.user!.userId } },
       },
-      include: { technician: true, appointment: { include: { customer: true } } }
+      include: { technician: true, appointment: { include: { customer: true } } },
     });
     await prisma.customer.update({ where: { id: task.appointment.customerId }, data: { activityDismissed: false } });
-    const log = await prisma.auditLog.create({
-      data: { action: `Maintenance for '${task.appointment.customer.name}' was postponed: ${reason}`, entityType: 'task', entityId: task.id, userId: req.user!.userId },
-      include: { user: { select: { id: true, name: true, role: true } } }
+
+    await writeAudit({
+      action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
+      label: `Maintenance for '${task.appointment.customer.name}' was postponed: ${reason}`,
+      before: taskFields(before), after: taskFields(task),
     });
+    await emitEvent({ type: EVENT_TYPES.TASK_POSTPONED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
     emitToAll(SOCKET_EVENTS.TASK_POSTPONED, task);
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.json({ success: true, data: task });
   } catch (e) { next(e); }
 });
