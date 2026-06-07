@@ -4,6 +4,8 @@ import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToAll } from '../socket';
 import { SOCKET_EVENTS } from '../constants';
+import { writeAudit } from '../services/audit.service';
+import { emitEvent, EVENT_TYPES } from '../services/event.service';
 
 const router = Router();
 router.use(authenticate);
@@ -20,8 +22,18 @@ const customerSchema = z.object({
   notes: z.string().max(2000).optional(), address: addressSchema,
 });
 
-async function writeAudit(userId: string, action: string, entityType: string, entityId: string) {
-  await prisma.auditLog.create({ data: { action, entityType, entityId, userId } });
+function conflict(res: any, current: number, yours: number) {
+  return res.status(409).json({
+    success: false,
+    error: 'CONFLICT',
+    message: 'This record was modified by someone else. Please refresh and try again.',
+    currentVersion: current,
+    yourVersion: yours,
+  });
+}
+
+function customerFields(c: any) {
+  return { id: c.id, name: c.name, phone: c.phone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version };
 }
 
 router.get('/', async (req: AuthRequest, res, next) => {
@@ -75,7 +87,10 @@ router.get('/', async (req: AuthRequest, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({ where: { id: req.params.id }, include: { address: true, appointments: { include: { task: { include: { technician: { select: { id: true, name: true } } } } }, orderBy: { scheduledDate: 'desc' }, take: 10 } } });
+    const customer = await prisma.customer.findUnique({
+      where: { id: req.params.id },
+      include: { address: true, appointments: { include: { task: { include: { technician: { select: { id: true, name: true } } } } }, orderBy: { scheduledDate: 'desc' }, take: 10 } },
+    });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: customer });
   } catch (e) { next(e); }
@@ -85,10 +100,17 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
     const { address, ...rest } = body;
-    const customer = await prisma.customer.create({ data: { ...rest, createdById: req.user!.userId, address: { create: address } }, include: { address: true } });
-    const log = await prisma.auditLog.create({ data: { action: `Customer '${customer.name}' was created`, entityType: 'customer', entityId: customer.id, userId: req.user!.userId }, include: { user: { select: { id: true, name: true, role: true } } } });
+    const customer = await prisma.customer.create({
+      data: { ...rest, createdById: req.user!.userId, address: { create: address } },
+      include: { address: true },
+    });
+    await writeAudit({
+      action: 'CREATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
+      label: `Customer '${customer.name}' was created`,
+      after: customerFields(customer),
+    });
+    await emitEvent({ type: EVENT_TYPES.CUSTOMER_CREATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
     emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, customer);
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.status(201).json({ success: true, data: customer });
   } catch (e) { next(e); }
 });
@@ -96,11 +118,24 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
 router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.partial().parse(req.body);
-    const { address, ...rest } = body;
-    const customer = await prisma.customer.update({ where: { id: req.params.id }, data: { ...rest, ...(address ? { address: { update: address } } : {}) }, include: { address: true } });
-    const log = await prisma.auditLog.create({ data: { action: `Customer '${customer.name}' was updated`, entityType: 'customer', entityId: customer.id, userId: req.user!.userId }, include: { user: { select: { id: true, name: true, role: true } } } });
+    const { address, version, ...rest } = body as any;
+
+    const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+    if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+
+    const customer = await prisma.customer.update({
+      where: { id: req.params.id },
+      data: { ...rest, version: { increment: 1 }, ...(address ? { address: { update: address } } : {}) },
+      include: { address: true },
+    });
+    await writeAudit({
+      action: 'UPDATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
+      label: `Customer '${customer.name}' was updated`,
+      before: customerFields(before), after: customerFields(customer),
+    });
+    await emitEvent({ type: EVENT_TYPES.CUSTOMER_UPDATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
     emitToAll(SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.json({ success: true, data: customer });
   } catch (e) { next(e); }
 });
@@ -109,7 +144,17 @@ router.patch('/:id/toggle-active', requireRole('ADMIN'), async (req: AuthRequest
   try {
     const existing = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ success: false, message: 'Not found' });
-    const customer = await prisma.customer.update({ where: { id: req.params.id }, data: { isActive: !existing.isActive }, include: { address: true } });
+    const customer = await prisma.customer.update({
+      where: { id: req.params.id },
+      data: { isActive: !existing.isActive, version: { increment: 1 } },
+      include: { address: true },
+    });
+    await writeAudit({
+      action: 'UPDATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
+      label: `Customer '${customer.name}' ${customer.isActive ? 'activated' : 'deactivated'}`,
+      before: customerFields(existing), after: customerFields(customer),
+    });
+    await emitEvent({ type: EVENT_TYPES.CUSTOMER_UPDATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
     emitToAll(SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
     res.json({ success: true, data: customer });
   } catch (e) { next(e); }
@@ -120,9 +165,13 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
     const customer = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     await prisma.customer.delete({ where: { id: req.params.id } });
-    const log = await prisma.auditLog.create({ data: { action: `Customer '${customer.name}' was deleted`, entityType: 'customer', entityId: req.params.id, userId: req.user!.userId }, include: { user: { select: { id: true, name: true, role: true } } } });
+    await writeAudit({
+      action: 'DELETE', entityType: 'customer', entityId: req.params.id, userId: req.user!.userId,
+      label: `Customer '${customer.name}' was deleted`,
+      before: customerFields(customer),
+    });
+    await emitEvent({ type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: req.params.id, userId: req.user!.userId, payload: { id: req.params.id, name: customer.name } });
     emitToAll(SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
-    emitToAll(SOCKET_EVENTS.AUDIT_NEW, log);
     res.json({ success: true });
   } catch (e) { next(e); }
 });
