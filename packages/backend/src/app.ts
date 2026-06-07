@@ -15,8 +15,8 @@ import reportRoutes from './routes/reports';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './prisma';
 
-// Allow: Electron (no origin), private LAN ranges (RFC 1918), Tailscale CGNAT (100.64/10)
-// Primary security is JWT — CORS is a browser-layer supplement, not the auth gate.
+// Allow: Electron desktop app (no Origin header), localhost dev, private LAN, Tailscale CGNAT.
+// Render cloud: Electron sends no Origin header so it always passes. JWT is the auth gate.
 const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true;                                                      // Electron file:// → no origin
   if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;               // local dev
