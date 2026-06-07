@@ -107,7 +107,7 @@ router.delete('/conversation/:otherRole', async (req: AuthRequest, res, next) =>
     });
 
     const toDelete = await prisma.directMessage.findMany({
-      where: { recipientRole: myRole, sender: { role: otherRole } },
+      where: { recipientRole: myRole as any, sender: { role: otherRole as any } },
       select: { id: true }
     });
     if (toDelete.length > 0) {

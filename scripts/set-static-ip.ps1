@@ -1,8 +1,16 @@
-# WFM System — Set Static LAN IP on the Server PC
-# Run once on the SERVER PC (as Administrator).
-# This prevents the server's IP from changing after a router restart.
+# WFM System - Set Static LAN IP on the Server PC
 #
-# Usage:  Right-click PowerShell → Run as Administrator, then:
+# NOTE: With Tailscale networking, this script is OPTIONAL.
+# Tailscale assigns each machine a stable 100.x.x.x address that does not
+# change regardless of DHCP or router restarts. You do NOT need a static
+# LAN IP for WFM employee connectivity to work.
+#
+# This script may still be useful if:
+#   - You want a predictable LAN address for IT management purposes
+#   - You access the server via its LAN IP for other services
+#   - Your network administrator requires static IPs for server machines
+#
+# Run once on the SERVER PC (as Administrator) if needed:
 #         .\scripts\set-static-ip.ps1
 #
 # The script reads the current DHCP configuration and converts it to static
@@ -11,17 +19,17 @@
 
 #Requires -RunAsAdministrator
 
-# ─── CONFIGURATION ────────────────────────────────────────────────────────────
+# --- CONFIGURATION ---
 # Leave $staticIP empty to auto-detect and use the current IP.
 # Or set it explicitly, e.g. "192.168.1.100"
 $staticIP   = ""
 $prefixLen  = 24          # 24 = /24 = 255.255.255.0 (most home/office routers)
 $gateway    = ""          # Leave empty to auto-detect from current route
-$dnsServers = @("8.8.8.8", "8.8.4.4")   # Google DNS — change if your ISP requires specific DNS
-# ──────────────────────────────────────────────────────────────────────────────
+$dnsServers = @("8.8.8.8", "8.8.4.4")   # Google DNS - change if your ISP requires specific DNS
+# ---------------------
 
 Write-Host ""
-Write-Host "=== WFM System — Static IP Configuration ==="
+Write-Host "=== WFM System - Static IP Configuration ==="
 Write-Host ""
 
 # Find the active network adapter (first connected, non-loopback, IPv4)
@@ -48,8 +56,9 @@ if (-not $staticIP) { $staticIP = $ipConfig.IPAddress }
 if (-not $gateway)  { $gateway  = $routeConfig.NextHop }
 if (-not $prefixLen){ $prefixLen = $ipConfig.PrefixLength }
 
+$originLabel = if ($ipConfig.PrefixOrigin -eq 'Dhcp') { 'DHCP' } else { 'Static' }
 Write-Host ""
-Write-Host "Current IP : $($ipConfig.IPAddress) ($(if ($ipConfig.PrefixOrigin -eq 'Dhcp') {'DHCP'} else {'Static'}))"
+Write-Host "Current IP : $($ipConfig.IPAddress) ($originLabel)"
 Write-Host "Will set   : $staticIP / $prefixLen"
 Write-Host "Gateway    : $gateway"
 Write-Host "DNS        : $($dnsServers -join ', ')"

@@ -15,15 +15,16 @@ import reportRoutes from './routes/reports';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './prisma';
 
-// Allow localhost and all RFC 1918 private LAN ranges (10.x, 172.16-31.x, 192.168.x)
-// Electron renderers load from file:// and send no Origin header, so the !origin branch
-// is what covers all production client PCs. LAN IP patterns cover future web/dev scenarios.
+// Allow: Electron (no origin), private LAN ranges (RFC 1918), Tailscale CGNAT (100.64/10)
+// Primary security is JWT — CORS is a browser-layer supplement, not the auth gate.
 const isAllowedOrigin = (origin: string | undefined): boolean => {
-  if (!origin) return true;
-  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
-  if (/^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
-  if (/^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
-  if (/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
+  if (!origin) return true;                                                      // Electron file:// → no origin
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;               // local dev
+  if (/^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;   // RFC 1918 /8
+  if (/^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true; // RFC 1918 /12
+  if (/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;      // RFC 1918 /16
+  // Tailscale CGNAT range: 100.64.0.0/10 (100.64.x.x – 100.127.x.x)
+  if (/^https?:\/\/100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
   return false;
 };
 

@@ -1,4 +1,4 @@
-# WFM System — Register Backend as a Windows Scheduled Task (auto-start)
+# WFM System - Register Backend as a Windows Scheduled Task (auto-start)
 # Run once on the SERVER PC (as Administrator) after the backend has been built.
 #
 # After this script runs:
@@ -6,7 +6,14 @@
 #   - No manual launch required.
 #   - Restarts automatically if it crashes (up to 3 times, 60 second delay each).
 #
-# Usage:  Right-click PowerShell → Run as Administrator, then:
+# Prerequisites:
+#   - Tailscale installed and connected on this PC (run: tailscale up)
+#   - Node.js installed for all users
+#   - PostgreSQL running as a Windows service
+#   - Backend .env file configured
+#   - Backend compiled (dist/ folder present, or let this script build it)
+#
+# Usage:  Right-click PowerShell -> Run as Administrator, then:
 #         .\scripts\install-autostart.ps1
 #
 # To stop/remove the task later:
@@ -22,7 +29,7 @@ $distIndex  = Join-Path $backendDir "dist\index.js"
 $envFile    = Join-Path $backendDir ".env"
 
 Write-Host ""
-Write-Host "=== WFM System — Auto-Start Installation ==="
+Write-Host "=== WFM System - Auto-Start Installation ==="
 Write-Host ""
 
 # Validate prerequisites
@@ -43,17 +50,15 @@ if (-not (Test-Path $distIndex)) {
     Write-Host "Build complete."
 }
 
-# Find node.exe — check PATH, then common install locations
+# Find node.exe - check PATH, then common install locations
 $nodeExe = $null
 try { $nodeExe = (Get-Command node.exe -ErrorAction Stop).Source } catch {}
 if (-not $nodeExe) {
     foreach ($path in @(
         "$env:ProgramFiles\nodejs\node.exe",
-        "$env:ProgramFiles(x86)\nodejs\node.exe",
-        "$env:APPDATA\nvm\v*\node.exe"
+        "${env:ProgramFiles(x86)}\nodejs\node.exe"
     )) {
-        $found = Get-Item $path -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($found) { $nodeExe = $found.FullName; break }
+        if (Test-Path $path) { $nodeExe = $path; break }
     }
 }
 if (-not $nodeExe) {
@@ -82,7 +87,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable      `
     -MultipleInstances       IgnoreNew
 
-# Run as SYSTEM — no password required, starts before login
+# Run as SYSTEM - no password required, starts before login
 $principal = New-ScheduledTaskPrincipal `
     -UserId    "SYSTEM" `
     -LogonType ServiceAccount `
@@ -98,8 +103,8 @@ Register-ScheduledTask `
     -Force | Out-Null
 
 Write-Host "Scheduled task registered: '$taskName'"
-Write-Host "  Trigger : At system startup"
-Write-Host "  Account : SYSTEM (runs before login)"
+Write-Host "  Trigger : At system startup (before login)"
+Write-Host "  Account : SYSTEM"
 Write-Host "  Restart : Up to 3 times on failure (60 s delay)"
 Write-Host ""
 
@@ -113,9 +118,32 @@ Write-Host "Task state : $((Get-ScheduledTask -TaskName $taskName).State)"
 Write-Host "Last run   : $($taskInfo.LastRunTime)"
 Write-Host "Last result: $($taskInfo.LastTaskResult)  (0 = still running / success)"
 Write-Host ""
+
+# Show Tailscale IP for employee setup
+$tailscaleIP = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object {
+        $parts = $_.IPAddress.Split('.')
+        $parts[0] -eq '100' -and [int]$parts[1] -ge 64 -and [int]$parts[1] -le 127
+    } | Select-Object -First 1).IPAddress
+
+Write-Host "=== Employee PC Setup Instructions ==="
+if ($tailscaleIP) {
+    Write-Host "  Server Tailscale IP: $tailscaleIP"
+    Write-Host "  Tell employees to:"
+    Write-Host "    1. Install Tailscale from https://tailscale.com/download"
+    Write-Host "    2. Sign in to Tailscale with the company account"
+    Write-Host "    3. Open WFM System -> Server Setup"
+    Write-Host "    4. Enter: http://${tailscaleIP}:3001"
+    Write-Host "    5. Click Test and Save"
+} else {
+    Write-Host "  WARNING: Tailscale IP not detected on this server."
+    Write-Host "  Install Tailscale: https://tailscale.com/download"
+    Write-Host "  Then run: tailscale up"
+    Write-Host "  Re-run this script after Tailscale is connected to see the server IP."
+}
+Write-Host ""
 Write-Host "Verify the backend is running:"
 Write-Host "  Invoke-WebRequest http://127.0.0.1:3001/health | Select-Object -Expand Content"
 Write-Host ""
-Write-Host "To view logs: Task Scheduler → Task Scheduler Library → WFM Backend"
 Write-Host "To uninstall: Unregister-ScheduledTask -TaskName '$taskName' -Confirm:`$false"
 Write-Host ""

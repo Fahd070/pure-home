@@ -9,7 +9,8 @@ nativeTheme.themeSource = "light";
 
 // No console noise from updater; errors are silenced (app runs on LAN, may have no internet)
 autoUpdater.logger = null;
-autoUpdater.autoDownload = false;
+autoUpdater.autoDownload = true;          // download silently in background
+autoUpdater.autoInstallOnAppQuit = true;  // install automatically when the user closes the app
 
 const ALLOWED_STORE_KEYS = new Set(["wfm-unified", "serverUrl", "language", "theme"]);
 
