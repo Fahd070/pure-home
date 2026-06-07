@@ -31,7 +31,7 @@ export default function CodeEntry() {
     setError("");
     setLoading(true);
     try {
-      const res = await axios.post(`${serverUrl}/api/auth/code-login`, { code, dept });
+      const res = await axios.post(`${serverUrl}/api/auth/code-login`, { code, dept }, { timeout: 30000 });
       const { token, user } = res.data.data;
       if (dept === "admin")      setAdminAuth(user, token);
       if (dept === "scheduling") setSchedulingAuth(user, token);
@@ -42,8 +42,10 @@ export default function CodeEntry() {
         setError(isAr ? "رمز الدخول غير صحيح" : "Wrong access code");
       } else if (err.response?.status === 429) {
         setError(isAr ? "محاولات كثيرة، حاول لاحقاً" : "Too many attempts, try again later");
+      } else if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        setError(isAr ? "الخادم يستيقظ — يرجى المحاولة مجدداً خلال لحظات" : "Server is waking up — please retry in a moment");
       } else if (!err.response) {
-        setError(isAr ? "تعذر الاتصال بالخادم — تأكد من تشغيل الخادم" : "Cannot connect to server — ensure the backend is running");
+        setError(isAr ? "تعذر الاتصال — تحقق من اتصالك بالإنترنت" : "Cannot connect — check your internet connection");
       } else {
         setError(isAr ? `خطأ في الخادم: ${err.response.status}` : `Server error: ${err.response.status}`);
       }

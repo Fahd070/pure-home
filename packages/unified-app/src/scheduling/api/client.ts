@@ -2,7 +2,7 @@ import axios from "axios";
 import { getAuthState } from "../store/authStore";
 import { useAppStore } from "../../store/appStore";
 
-const instance = axios.create();
+const instance = axios.create({ timeout: 30000 });
 instance.interceptors.request.use(config => {
   const { token, serverUrl } = getAuthState();
   config.baseURL = serverUrl + "/api";
