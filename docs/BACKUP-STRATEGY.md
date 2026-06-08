@@ -1,97 +1,179 @@
 # WFM System — Backup & Recovery Strategy
 
-Version 1.4.0 | Database: Supabase (PostgreSQL) | Backend: Render
+Version 1.4.0 | Database: Supabase (PostgreSQL) | Backup runner: GitHub Actions
 
 ---
 
-## Overview
+## What Actually Runs (Implementation Summary)
 
-The WFM System database is hosted on Supabase. All data resides in PostgreSQL. This document covers
-automated backup availability, manual backup procedures, and step-by-step restore instructions.
+| Layer | Type | Automated? | Where stored | Retention |
+|---|---|---|---|---|
+| **GitHub Actions** | `pg_dump` (custom format, compressed) | Yes — daily 02:00 UTC | GitHub Actions artifacts | **90 days** |
+| **Supabase built-in** | Platform snapshot | Yes — daily ~00:00 UTC | Supabase internal (inaccessible via API on free tier) | 7 days |
+| **Manual / on-demand** | `pg_dump` via PowerShell script | No — must be triggered | Local `backups/` directory | 30 most recent |
 
-No application downtime is required for any backup or restore operation.
-
----
-
-## Automated Backups (Supabase Built-In)
-
-### Free Tier
-- **Daily backups** retained for **7 days**
-- Backups run automatically at approximately 00:00 UTC each day
-- Access: Supabase Dashboard → Your Project → Settings → Backups
-
-### Pro / Team Tier
-- **Point-in-Time Recovery (PITR)** — restore to any second within the retention window
-- Retention: 7 days (Pro), 14 days (Team), 30 days (Enterprise)
-- No manual intervention required
-
-> Verify your plan's backup coverage in the Supabase dashboard before relying on automated backups.
+The **primary automated backup** is the GitHub Actions workflow. The Supabase platform backup is a
+secondary safety net but cannot be downloaded or scripted on the free tier — it only supports point-
+and-click restore from the dashboard.
 
 ---
 
-## Manual Backup (pg_dump)
+## GitHub Actions Backup (Primary)
 
-Run this from any machine that has PostgreSQL client tools installed.
-Use the **direct connection string** (not the pooler URL) for pg_dump.
+### How it works
 
-```bash
-# 1. Get the direct connection string from:
-#    Supabase Dashboard → Project Settings → Database → Connection String → URI mode
-#    It looks like: postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+File: `.github/workflows/db-backup.yml`
 
-# 2. Run pg_dump
-pg_dump "postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres" \
-  --format=custom \
-  --no-acl \
-  --no-owner \
-  --file="wfm-backup-$(date +%Y%m%d-%H%M%S).dump"
+1. Runs daily at **02:00 UTC** via GitHub Actions `schedule` cron
+2. Installs `postgresql-client` on an Ubuntu runner
+3. Calls `pg_dump` against the **direct Supabase connection** (port 5432) using the
+   `SUPABASE_DIRECT_URL` secret — NOT the pgBouncer pooler URL
+4. Produces a compressed custom-format dump (`.dump`)
+5. Verifies integrity with `pg_restore --list` — fails if object count < 5
+6. Uploads as a named artifact (`wfm-db-backup-YYYYMMDD-HHMMSS`) with **90-day retention**
+7. Writes a summary table to the workflow run page
 
-# 3. Verify the backup file is non-empty
-ls -lh wfm-backup-*.dump
-```
+### What is backed up
 
-**Windows (PowerShell):**
+`pg_dump --no-acl --no-owner` captures all PostgreSQL tables including:
+
+| Table | Contents |
+|---|---|
+| `users` | All admin / scheduling / technician accounts |
+| `customers` | Customer records and addresses |
+| `appointments` | All scheduled and historical appointments |
+| `maintenance_tasks` | Task status, notes, completion data |
+| `task_history` | Full status change history |
+| `postponement_records` | Postponement reasons and new dates |
+| `notifications` | Maintenance reminders per user |
+| `audit_logs` | Full audit trail of all system actions |
+| `event_logs` | Domain event history |
+| `direct_messages` | Inter-department messages |
+| `system_configs` | Department access codes |
+| `user_settings` | Per-user display preferences |
+
+### Failure detection
+
+GitHub Actions **automatically sends an email** to the repository owner when a scheduled
+workflow fails. You will receive a "GitHub Actions: Workflow run failed" email if:
+- `pg_dump` exits non-zero (DB unreachable, bad credentials)
+- The backup file is empty
+- `pg_restore --list` fails (corrupt dump)
+- The artifact upload fails
+
+To also monitor via the GitHub UI: go to
+`https://github.com/Fahd070/wfm-system/actions/workflows/db-backup.yml`
+and verify the last run shows a green checkmark.
+
+### Where to find backup artifacts
+
+1. Go to: `https://github.com/Fahad070/wfm-system/actions/workflows/db-backup.yml`
+2. Click any workflow run
+3. Scroll to the **Artifacts** section
+4. Download `wfm-db-backup-YYYYMMDD-HHMMSS` (a `.zip` containing the `.dump` file)
+
+---
+
+## Required One-Time Setup (Admin Action Required)
+
+The GitHub Actions workflow requires one secret to be added to the repository.
+
+**Steps:**
+1. Go to `https://github.com/Fahad070/wfm-system/settings/secrets/actions`
+2. Click **New repository secret**
+3. Name: `SUPABASE_DIRECT_URL`
+4. Value: the **direct** (non-pooler) connection string from Supabase:
+   - Supabase Dashboard → Project Settings → Database → Connection String → **URI mode**
+   - It looks like: `postgresql://postgres:PASSWORD@db.PROJECTREF.supabase.co:5432/postgres`
+   - Port must be **5432** — NOT 6543 (the pooler port that Render uses)
+5. Click **Add secret**
+
+After adding the secret, trigger a test run:
+- Go to the workflow page → click **Run workflow** → **Run workflow**
+- Verify it completes with a green checkmark and the artifact appears
+
+---
+
+## Manual Backup (On-Demand)
+
+For backups before a major change or deployment:
+
 ```powershell
-$ts = Get-Date -Format "yyyyMMdd-HHmmss"
-& "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe" `
-  "postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres" `
-  --format=custom --no-acl --no-owner `
-  --file="wfm-backup-$ts.dump"
+# From the project root:
+.\scripts\backup-database.ps1 -DirectUrl "postgresql://postgres:PASSWORD@db.REF.supabase.co:5432/postgres"
+
+# Or set the env var once, then run without flags:
+$env:SUPABASE_DIRECT_URL = "postgresql://..."
+.\scripts\backup-database.ps1
 ```
 
-Store the `.dump` file in a safe location (external drive, cloud storage, etc.).
+Backups are saved to `backups/wfm-backup-YYYYMMDD-HHMMSS.dump`. The last 30 are kept automatically.
 
 ---
 
 ## Restore Procedure
 
-### Restore from Supabase Dashboard (automated backup)
+### Step 1 — Obtain the backup file
 
-1. Go to Supabase Dashboard → Your Project → Settings → Backups
-2. Select the backup date you want to restore
-3. Click **Restore** and confirm
-4. Wait for the restore to complete (5–15 minutes for small databases)
-5. The backend on Render will automatically reconnect after restore
+**From GitHub Actions (recommended):**
+1. Go to: `https://github.com/Fahad070/wfm-system/actions/workflows/db-backup.yml`
+2. Click the most recent successful run
+3. Under Artifacts, download `wfm-db-backup-YYYYMMDD-HHMMSS`
+4. Extract the `.zip` to get the `.dump` file
 
-### Restore from pg_dump file
+**From local backups:**
+- Use a file from `backups/wfm-backup-*.dump`
 
-```bash
-# Drop and recreate the database schema (Supabase-specific)
-# WARNING: This permanently destroys all current data.
+**From Supabase built-in backup (dashboard restore only):**
+- Supabase Dashboard → Project Settings → Backups → select date → Restore
+- This method does not use the scripts below
 
-pg_restore \
-  --dbname="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres" \
-  --no-acl \
-  --no-owner \
-  --clean \
-  --if-exists \
-  wfm-backup-YYYYMMDD-HHMMSS.dump
+### Step 2 — Run the restore script
+
+```powershell
+.\scripts\restore-backup.ps1 -BackupFile "wfm-backup-20260608-020000.dump"
 ```
 
-After restore:
-1. Verify the backend health check: `GET https://wfm-system.onrender.com/health`
-2. Check that `database: "connected"` is returned
-3. Log into each department and verify data is present
+The script will:
+1. Verify the dump is readable (`pg_restore --list`)
+2. Show what will be overwritten and ask for confirmation (`YES`)
+3. Run `pg_restore --clean --if-exists` to overwrite all tables
+4. Print next-step verification instructions
+
+### Step 3 — Verify
+
+```
+GET https://wfm-system.onrender.com/health
+Expected: { "status": "ok", "database": "connected", "dbResponseMs": <number> }
+```
+
+Then log into each department and spot-check critical records.
+
+---
+
+## Supabase Built-In Backup (Secondary)
+
+Supabase runs its own daily snapshots independently of this project:
+
+- **Free tier:** Daily snapshots, 7-day retention
+- **Pro tier:** Point-in-Time Recovery (PITR) to any second within retention window
+- **Access:** Supabase Dashboard → Project Settings → Backups (dashboard-only on free tier)
+
+This is a useful last resort when the database is paused or the GitHub Actions secret is not yet
+configured. It requires no action to enable — it exists by default.
+
+> Verify your Supabase plan's backup coverage at:
+> Supabase Dashboard → Project Settings → Backups
+
+---
+
+## Backup Schedule Summary
+
+| Backup | Time | Frequency | Retention | Stored At | Automated |
+|---|---|---|---|---|---|
+| GitHub Actions pg_dump | 02:00 UTC | Daily | 90 days | GitHub artifacts | Yes |
+| Supabase platform snapshot | ~00:00 UTC | Daily | 7 days (free) | Supabase internal | Yes |
+| Manual pg_dump | On demand | — | 30 most recent | Local `backups/` | No |
 
 ---
 
@@ -103,7 +185,7 @@ The backend exposes a health endpoint used by Render for uptime monitoring:
 GET https://wfm-system.onrender.com/health
 ```
 
-**Healthy response:**
+**Healthy:**
 ```json
 {
   "status": "ok",
@@ -114,7 +196,7 @@ GET https://wfm-system.onrender.com/health
 }
 ```
 
-**Degraded response (DB unreachable):**
+**Degraded (DB unreachable):**
 ```json
 {
   "status": "degraded",
@@ -124,70 +206,27 @@ GET https://wfm-system.onrender.com/health
 }
 ```
 
-- `dbResponseMs` — time to execute `SELECT 1`. Alert if consistently > 500 ms.
-- Render monitors `/health` automatically and will redeploy if it returns 5xx.
+Alert if `dbResponseMs` is consistently above 500 ms.
 
-### Optional: External Uptime Monitor
-
-Set up a free monitor at [UptimeRobot](https://uptimerobot.com/) or [BetterStack](https://betterstack.com/):
-- URL: `https://wfm-system.onrender.com/health`
-- Interval: every 5 minutes
-- Alert keyword: `"status":"ok"` (string match)
-- Notify via email/Telegram on failure
-
----
-
-## Backup Schedule Recommendation
-
-| Frequency | Method | Retention | Who |
-|---|---|---|---|
-| Daily (automatic) | Supabase built-in | 7 days | Supabase |
-| Weekly (manual) | pg_dump | Keep last 4 | System admin |
-| Before major changes | pg_dump | Keep permanently | System admin |
-| Before code deployments | Supabase snapshot | Retain 24 h | Supabase |
-
----
-
-## What Is Backed Up
-
-The Supabase backup covers all PostgreSQL tables including:
-
-| Table | Contents |
-|---|---|
-| `users` | Admin/scheduling/technician accounts |
-| `customers` | All customer records and addresses |
-| `appointments` | All scheduled and historical appointments |
-| `maintenance_tasks` | Task status, notes, completion data |
-| `task_history` | Full status change history per task |
-| `postponement_records` | Postponement reasons and new dates |
-| `notifications` | Maintenance reminders per user |
-| `audit_logs` | Full audit trail of all system actions |
-| `event_logs` | Domain event history |
-| `direct_messages` | Inter-department messages |
-| `system_configs` | Access codes (stored hashed in future; currently plaintext) |
-| `user_settings` | Per-user display preferences |
-
-> The `system_configs` table stores department access codes. After a restore, verify codes are correct
-> via Admin → Access Code Management.
-
----
-
-## What Is NOT Backed Up
-
-- The Render backend process itself (it is rebuilt from GitHub on each deploy)
-- Electron installer files (rebuild from source: `npm run build` in `packages/unified-app`)
-- Environment variables on Render (document these separately and store securely)
+Set up an external uptime monitor (UptimeRobot free tier) to ping `/health` every 5 minutes
+and alert on failure. This catches Supabase pauses before users notice.
 
 ---
 
 ## Emergency Recovery Checklist
 
-If the system is down:
-
 - [ ] Check Render dashboard — is the service running?
 - [ ] Check `GET /health` — does it return `database: connected`?
 - [ ] Check Supabase dashboard — is the project paused or over quota?
-- [ ] If DB is corrupted: initiate backup restore from Supabase dashboard
-- [ ] If code is broken: revert last commit on GitHub (`git revert HEAD`) — Render auto-deploys
-- [ ] After restore: log into each department and verify data
-- [ ] Update audit log with recovery action
+- [ ] Download the latest GitHub Actions artifact for the backup file
+- [ ] Run `.\scripts\restore-backup.ps1 -BackupFile <path>`
+- [ ] Verify health endpoint and log into each department
+- [ ] If GitHub Actions backup is unavailable, use Supabase dashboard restore (7-day window)
+
+---
+
+## What Is NOT Backed Up
+
+- The Render backend process — rebuilt from GitHub on each deploy
+- Electron installer — rebuild with `npm run build` in `packages/unified-app`
+- Render environment variables — document and store separately (use `.env.example` as reference)

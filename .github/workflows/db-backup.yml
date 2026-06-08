@@ -1,0 +1,102 @@
+name: Database Backup
+
+# Runs daily at 02:00 UTC.
+# Also supports manual trigger from the GitHub Actions UI (workflow_dispatch).
+# On failure, GitHub automatically emails the repository owner.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual backup (optional)'
+        required: false
+        default: 'Manual backup'
+
+jobs:
+  backup:
+    name: pg_dump → artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # ── Create the backup ────────────────────────────────────────────────────
+      - name: Create pg_dump
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          if [ -z "$SUPABASE_DIRECT_URL" ]; then
+            echo "::error::SUPABASE_DIRECT_URL secret is not set. Add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          FILENAME="wfm-backup-${TIMESTAMP}.dump"
+
+          pg_dump \
+            "$SUPABASE_DIRECT_URL" \
+            --format=custom \
+            --no-acl \
+            --no-owner \
+            --compress=9 \
+            --file="${FILENAME}"
+
+          echo "BACKUP_FILE=${FILENAME}" >> "$GITHUB_ENV"
+          echo "BACKUP_TIMESTAMP=${TIMESTAMP}"  >> "$GITHUB_ENV"
+
+      # ── Verify the dump is readable ─────────────────────────────────────────
+      - name: Verify backup integrity
+        run: |
+          if [ ! -s "${{ env.BACKUP_FILE }}" ]; then
+            echo "::error::Backup file is empty or missing: ${{ env.BACKUP_FILE }}"
+            exit 1
+          fi
+
+          SIZE_BYTES=$(stat -c%s "${{ env.BACKUP_FILE }}")
+          SIZE_KB=$(( SIZE_BYTES / 1024 ))
+
+          # pg_restore --list reads the table of contents without restoring anything.
+          # If the dump is corrupt this command exits non-zero.
+          OBJECT_COUNT=$(pg_restore --list "${{ env.BACKUP_FILE }}" | grep -v '^;' | wc -l)
+
+          echo "Backup file  : ${{ env.BACKUP_FILE }}"
+          echo "Size         : ${SIZE_KB} KB"
+          echo "Object count : ${OBJECT_COUNT}"
+
+          if [ "$OBJECT_COUNT" -lt 5 ]; then
+            echo "::error::Backup contains only ${OBJECT_COUNT} objects — suspiciously low, check database connectivity."
+            exit 1
+          fi
+
+          echo "::notice::Backup integrity OK — ${SIZE_KB} KB, ${OBJECT_COUNT} objects"
+
+      # ── Store as a GitHub Actions artifact (90-day retention) ───────────────
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wfm-db-backup-${{ env.BACKUP_TIMESTAMP }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 90
+          if-no-files-found: error
+
+      # ── Print summary to the workflow log ───────────────────────────────────
+      - name: Summary
+        run: |
+          SIZE_KB=$(( $(stat -c%s "${{ env.BACKUP_FILE }}") / 1024 ))
+          EXPIRES=$(date -u -d '+90 days' +%Y-%m-%d)
+          echo "### Backup complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| File | \`${{ env.BACKUP_FILE }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Size | ${SIZE_KB} KB |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Artifact | \`wfm-db-backup-${{ env.BACKUP_TIMESTAMP }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Retention | 90 days |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Expires | ${EXPIRES} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trigger | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
