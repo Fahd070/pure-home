@@ -16,7 +16,19 @@ const CODE_KEYS = {
   technician: 'ACCESS_CODE_TECHNICIAN',
 } as const;
 
+const ENV_FALLBACKS: Record<string, string> = {
+  ACCESS_CODE_ADMIN:      process.env.ADMIN_CODE      || '9012',
+  ACCESS_CODE_SCHEDULING: process.env.SCHEDULING_CODE || '9013',
+  ACCESS_CODE_TECHNICIAN: process.env.TECHNICIAN_CODE || '9014',
+};
+
 type Dept = keyof typeof CODE_KEYS;
+
+async function getCurrentCode(dept: Dept): Promise<string> {
+  const key = CODE_KEYS[dept];
+  const record = await prisma.systemConfig.findUnique({ where: { key } });
+  return record?.value || ENV_FALLBACKS[key];
+}
 
 router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
@@ -27,9 +39,9 @@ router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, 
     for (const c of configs) m[c.key] = c.value;
 
     const result: Record<Dept, string> = {
-      admin:      m['ACCESS_CODE_ADMIN']      || process.env.ADMIN_CODE      || '9012',
-      scheduling: m['ACCESS_CODE_SCHEDULING'] || process.env.SCHEDULING_CODE || '9013',
-      technician: m['ACCESS_CODE_TECHNICIAN'] || process.env.TECHNICIAN_CODE || '9014',
+      admin:      m['ACCESS_CODE_ADMIN']      || ENV_FALLBACKS['ACCESS_CODE_ADMIN'],
+      scheduling: m['ACCESS_CODE_SCHEDULING'] || ENV_FALLBACKS['ACCESS_CODE_SCHEDULING'],
+      technician: m['ACCESS_CODE_TECHNICIAN'] || ENV_FALLBACKS['ACCESS_CODE_TECHNICIAN'],
     };
     res.json({ success: true, data: result });
   } catch (e) { next(e); }
@@ -38,40 +50,52 @@ router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, 
 router.put('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const body = z.object({
-      admin:      z.string().regex(/^\d{4}$/).optional(),
-      scheduling: z.string().regex(/^\d{4}$/).optional(),
-      technician: z.string().regex(/^\d{4}$/).optional(),
+      dept:        z.enum(['admin', 'scheduling', 'technician']),
+      currentCode: z.string().min(1),
+      newCode:     z.string().regex(/^\d{4}$/, 'New code must be exactly 4 digits'),
+      confirmCode: z.string().regex(/^\d{4}$/, 'Confirm code must be exactly 4 digits'),
     }).parse(req.body);
 
-    const updated: string[] = [];
-    for (const dept of Object.keys(body) as Dept[]) {
-      const code = body[dept];
-      if (!code) continue;
-      const key = CODE_KEYS[dept];
-      await prisma.systemConfig.upsert({
-        where: { key },
-        update: { value: code, updatedBy: req.user!.userId },
-        create: { key, value: code, updatedBy: req.user!.userId },
-      });
-      updated.push(dept);
+    if (body.newCode !== body.confirmCode) {
+      return res.status(400).json({ success: false, error: 'New code and confirmation do not match' });
     }
 
-    if (updated.length > 0) {
-      await writeAudit({
-        action: 'UPDATE', entityType: 'system_config', entityId: 'access_codes',
-        userId: req.user!.userId,
-        label: `Access codes updated for departments: ${updated.join(', ')}`,
-        after: { updatedDepts: updated },
-      });
-      await emitEvent({
-        type: EVENT_TYPES.USER_UPDATED, entityType: 'system_config', entityId: 'access_codes',
-        userId: req.user!.userId, payload: { updatedDepts: updated },
-      });
-      emitToAll(SOCKET_EVENTS.CONFIG_UPDATED, { type: 'access-codes', updatedDepts: updated });
+    const stored = await getCurrentCode(body.dept);
+    if (body.currentCode !== stored) {
+      return res.status(400).json({ success: false, error: 'Current code is incorrect' });
     }
 
-    res.json({ success: true, data: { updated } });
-  } catch (e) { next(e); }
+    const key = CODE_KEYS[body.dept];
+    await prisma.systemConfig.upsert({
+      where:  { key },
+      update: { value: body.newCode, updatedBy: req.user!.userId },
+      create: { key, value: body.newCode, updatedBy: req.user!.userId },
+    });
+
+    await writeAudit({
+      action: 'UPDATE', entityType: 'system_config', entityId: 'access_codes',
+      userId: req.user!.userId,
+      label: `Access code changed for department: ${body.dept}`,
+      after: { dept: body.dept },
+    });
+
+    await emitEvent({
+      type: EVENT_TYPES.ACCESS_CODE_UPDATED,
+      entityType: 'system_config',
+      entityId: 'access_codes',
+      userId: req.user!.userId,
+      payload: { dept: body.dept },
+    });
+
+    emitToAll(SOCKET_EVENTS.CONFIG_UPDATED, { type: 'access-codes', updatedDepts: [body.dept] });
+
+    res.json({ success: true, data: { dept: body.dept } });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ success: false, error: e.errors[0]?.message || 'Validation failed' });
+    }
+    next(e);
+  }
 });
 
 export default router;
