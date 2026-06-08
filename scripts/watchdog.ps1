@@ -1,15 +1,15 @@
-# WFM System - Self-Healing Watchdog
+# Pure Home - Self-Healing Watchdog
 # Runs every 60 seconds via Windows Task Scheduler (registered by install-production.ps1).
 # Monitors backend health, Tailscale connectivity, and database reachability.
 # Automatically repairs any detected failure without requiring manual intervention.
 #
-# Log file:  C:\ProgramData\WFM System\logs\watchdog.log  (auto-rotates at 5 MB)
-# Config:    C:\ProgramData\WFM System\config.json
+# Log file:  C:\ProgramData\Pure Home\logs\watchdog.log  (auto-rotates at 5 MB)
+# Config:    C:\ProgramData\Pure Home\config.json
 
 $ErrorActionPreference = "SilentlyContinue"
 
 # --- Paths ---
-$dataDir    = "C:\ProgramData\WFM System"
+$dataDir    = "C:\ProgramData\Pure Home"
 $configFile = "$dataDir\config.json"
 $logFile    = "$dataDir\logs\watchdog.log"
 $stateFile  = "$dataDir\watchdog-state.json"

@@ -1,6 +1,6 @@
-# WFM System — Troubleshooting Guide
+# Pure Home — Troubleshooting Guide
 
-Version 1.4.0
+Version 1.0.0
 
 ---
 
@@ -10,7 +10,7 @@ Start here before reading the sections below.
 
 ```
 1. Is the Render service running?   → https://dashboard.render.com
-2. Does /health respond?            → GET https://wfm-system.onrender.com/health
+2. Does /health respond?            → GET https://pure-home.onrender.com/health
 3. Is Supabase reachable?           → https://app.supabase.com → your project → home
 ```
 
@@ -52,7 +52,7 @@ If all three are green, the problem is almost always on the client side.
 
 **Fix:**
 1. Close the app completely (right-click taskbar → Quit)
-2. Delete `C:\ProgramData\WFM System\` (or `%APPDATA%\WFM System\`)
+2. Delete `C:\ProgramData\Pure Home\` (or `%APPDATA%\Pure Home\`)
 3. Relaunch — re-enter the server URL when prompted
 
 ---
@@ -105,7 +105,7 @@ If all three are green, the problem is almost always on the client side.
 **Fix:**
 1. Make sure the server is reachable (the PDF renderer fetches live data)
 2. Restart the app
-3. If it persists, check `C:\ProgramData\WFM System\logs\` for renderer errors
+3. If it persists, check `C:\ProgramData\Pure Home\logs\` for renderer errors
 
 ---
 
@@ -265,11 +265,11 @@ UPDATE system_configs SET value = 'XXXX' WHERE key = 'ADMIN_CODE';
 
 **Logs:**
 - Render logs: Dashboard → Your Service → Logs tab (live + historical)
-- Client logs: `C:\ProgramData\WFM System\logs\`
+- Client logs: `C:\ProgramData\Pure Home\logs\`
 
 **Health check:**
 ```
-GET https://wfm-system.onrender.com/health
+GET https://pure-home.onrender.com/health
 ```
 
 **Report a bug:**

@@ -36,8 +36,8 @@
                             "vite":  "^5.0.11"
                         },
     "build":  {
-                  "appId":  "com.wfm.technician",
-                  "productName":  "WFM Technician",
+                  "appId":  "com.purehome.technician",
+                  "productName":  "Pure Home Technician",
                   "directories":  {
                                       "output":  "dist-installer"
                                   },
@@ -53,7 +53,7 @@
                                "oneClick":  false,
                                "allowToChangeInstallationDirectory":  true,
                                "installerIcon":  "assets/icon.ico",
-                               "shortcutName":  "WFM Technician"
+                               "shortcutName":  "Pure Home Technician"
                            },
                   "electronVersion":  "28.2.0"
               }

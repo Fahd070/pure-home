@@ -1,6 +1,6 @@
-# WFM System — Render + Supabase Deployment Guide
+# Pure Home — Render + Supabase Deployment Guide
 
-Version 1.4.0 | Backend: Render (Node.js) | Database: Supabase (PostgreSQL)
+Version 1.0.0 | Backend: Render (Node.js) | Database: Supabase (PostgreSQL)
 
 ---
 
@@ -11,7 +11,7 @@ Employee PCs  →  Electron Desktop App (v1.4.0)
                         │  HTTPS + Socket.IO
                         ▼
                Render Web Service (Node.js)
-               https://wfm-system.onrender.com
+               https://pure-home.onrender.com
                         │  Prisma ORM
                         ▼
                Supabase (PostgreSQL)
@@ -27,7 +27,7 @@ connect to the same backend service. No local server required.
 
 - A **Render** account (https://render.com) — free tier or paid
 - A **Supabase** account (https://supabase.com) — free tier sufficient
-- A **GitHub** account with the `wfm-system` repository pushed
+- A **GitHub** account with the `pure-home` repository pushed
 
 ---
 
@@ -51,12 +51,12 @@ connect to the same backend service. No local server required.
 ## Step 2 — Render Setup
 
 1. Go to Render Dashboard → **New → Web Service**
-2. Connect your GitHub repository (`wfm-system` or your fork)
+2. Connect your GitHub repository (`pure-home` or your fork)
 3. Configure the service:
 
 | Setting | Value |
 |---|---|
-| **Name** | `wfm-system` |
+| **Name** | `pure-home` |
 | **Runtime** | Node |
 | **Root Directory** | `packages/backend` |
 | **Build Command** | `npm install && npx prisma generate && npm run build` |
@@ -122,11 +122,11 @@ VALUES (
 
 ```bash
 # Health check
-curl https://wfm-system.onrender.com/health
+curl https://pure-home.onrender.com/health
 # Expected: {"status":"ok","database":"connected","dbResponseMs":...}
 
 # Auth check
-curl -X POST https://wfm-system.onrender.com/api/auth/code-login \
+curl -X POST https://pure-home.onrender.com/api/auth/code-login \
   -H "Content-Type: application/json" \
   -d '{"code":"9012","dept":"admin"}'
 # Expected: {"success":true,"data":{"token":"...","user":{...}}}

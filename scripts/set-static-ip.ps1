@@ -1,4 +1,4 @@
-# WFM System - Set Static LAN IP on the Server PC
+# Pure Home - Set Static LAN IP on the Server PC
 #
 # NOTE: With Tailscale networking, this script is OPTIONAL.
 # Tailscale assigns each machine a stable 100.x.x.x address that does not
@@ -29,7 +29,7 @@ $dnsServers = @("8.8.8.8", "8.8.4.4")   # Google DNS - change if your ISP requir
 # ---------------------
 
 Write-Host ""
-Write-Host "=== WFM System - Static IP Configuration ==="
+Write-Host "=== Pure Home - Static IP Configuration ==="
 Write-Host ""
 
 # Find the active network adapter (first connected, non-loopback, IPv4)

@@ -2,7 +2,7 @@
 setlocal
 
 echo =====================================================================
-echo  WFM System - Build Release Installer
+echo  Pure Home - Build Release Installer
 echo  Source: Desktop\WFM-System-Updated
 echo  Output: packages\unified-app\dist-installer\
 echo =====================================================================
@@ -70,13 +70,13 @@ echo  BUILD COMPLETE
 echo =====================================================================
 echo.
 echo  Client installer (for employee PCs):
-echo    packages\unified-app\dist-installer\WFM System Setup 1.0.0.exe
+echo    packages\unified-app\dist-installer\Pure Home Setup 1.0.0.exe
 echo.
-echo  Installs to: C:\Program Files\WFM System\
+echo  Installs to: C:\Program Files\Pure Home\
 echo  Requires:    Administrator rights (perMachine install)
 echo.
 echo  GitHub Release assets to upload:
-echo    1. WFM System Setup 1.0.0.exe   (from dist-installer\)
+echo    1. Pure Home Setup 1.0.0.exe   (from dist-installer\)
 echo    2. latest.yml                   (from dist-installer\)
 echo    3. DEPLOYMENT.md                (deployment guide)
 echo.

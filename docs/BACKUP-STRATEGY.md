@@ -1,4 +1,4 @@
-# WFM System — Backup & Recovery Strategy
+# Pure Home — Backup & Recovery Strategy
 
 Version 1.4.0 | Database: Supabase (PostgreSQL) | Backup runner: GitHub Actions
 

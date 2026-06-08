@@ -1,4 +1,4 @@
-# WFM System - Tailscale Installation Guide for the Server PC
+# Pure Home - Tailscale Installation Guide for the Server PC
 # Run once on the designated SERVER PC (as Administrator).
 #
 # This script:
@@ -15,7 +15,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "=== WFM System - Tailscale Setup (Server PC) ==="
+Write-Host "=== Pure Home - Tailscale Setup (Server PC) ==="
 Write-Host ""
 
 # --- Helper: detect Tailscale IP ---

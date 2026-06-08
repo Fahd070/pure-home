@@ -17,7 +17,7 @@ export default function Layout() {
   const key = Object.keys(titles).find(k => pathname.startsWith(k)) || '/dashboard';
   return (
     <div className="h-screen flex flex-col bg-slate-100">
-      <TitleBar title="WFM Admin — نظام صيانة فلاتر المياه" />
+      <TitleBar title="Pure Home — Admin" />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">

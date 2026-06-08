@@ -69,7 +69,7 @@ server.listen(PORT, BIND_HOST, () => {
   const onRender = !!process.env.RENDER;
 
   console.log('');
-  console.log('  WFM Backend started');
+  console.log('  Pure Home Backend started');
 
   if (onRender) {
     const serviceUrl = process.env.RENDER_EXTERNAL_URL || `https://wfm-system.onrender.com`;
