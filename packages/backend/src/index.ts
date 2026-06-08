@@ -4,6 +4,29 @@ import os from 'os';
 import app from './app';
 import { initSocket } from './socket';
 import { startNotificationCron } from './services/notification.service';
+import prisma from './prisma';
+
+async function ensureSystemConfigTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "system_configs" (
+        "id"        TEXT        NOT NULL,
+        "key"       TEXT        NOT NULL,
+        "value"     TEXT        NOT NULL,
+        "updatedBy" TEXT,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "system_configs_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "system_configs_key_key" ON "system_configs"("key")`
+    );
+    console.log('  system_configs: ready');
+  } catch (e: any) {
+    console.error('  system_configs: setup warning —', e?.message || e);
+  }
+}
 
 const PORT = parseInt(process.env.PORT || '3001');
 const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
@@ -11,6 +34,7 @@ const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 const server = http.createServer(app);
 initSocket(server);
 startNotificationCron();
+ensureSystemConfigTable();
 server.listen(PORT, BIND_HOST, () => {
   const onRender = !!process.env.RENDER;
 
