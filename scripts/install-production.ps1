@@ -1,4 +1,4 @@
-# WFM System - Production Installation Script
+# Pure Home - Production Installation Script
 # Run ONCE on the SERVER PC as Administrator after initial setup.
 # Sets up all scheduled tasks, firewall rules, Tailscale auth, and config.
 #
@@ -33,7 +33,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $repoRoot   = Resolve-Path (Join-Path $scriptRoot "..") | Select-Object -ExpandProperty Path
 
 # --- Paths ---
-$dataDir       = "C:\ProgramData\WFM System"
+$dataDir       = "C:\ProgramData\Pure Home"
 $configFile    = "$dataDir\config.json"
 $logDir        = "$dataDir\logs"
 $stagingDir    = "$dataDir\updates\staging"
@@ -44,7 +44,7 @@ $updateScript   = Join-Path $scriptRoot "update-manager.ps1"
 
 Write-Host ""
 Write-Host "============================================================"
-Write-Host " WFM System - Production Installation"
+Write-Host " Pure Home - Production Installation"
 Write-Host "============================================================"
 Write-Host ""
 
@@ -126,10 +126,10 @@ if ($UpdateKeyOnly) {
 
 $config = [PSCustomObject]@{
     tailscaleAuthKey    = $TailscaleAuthKey
-    githubRepo          = "Fahd070/wfm-system"
+    githubRepo          = "Fahd070/pure-home"
     backendPort         = 3001
     backendDir          = $backendDir
-    installDir          = "C:\Program Files\WFM System"
+    installDir          = "C:\Program Files\Pure Home"
     installedVersion    = $CurrentVersion
     watchdogEnabled     = $true
     autoUpdateEnabled   = $true

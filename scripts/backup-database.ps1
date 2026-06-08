@@ -1,4 +1,4 @@
-# WFM System - Manual Database Backup Script
+# Pure Home - Manual Database Backup Script
 # Usage: .\backup-database.ps1 [-DirectUrl "postgresql://..."]
 #
 # Requires: pg_dump in PATH (installed with PostgreSQL client tools)

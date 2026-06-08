@@ -6,7 +6,7 @@ import Sidebar from './Sidebar';
 export default function Layout() {
   return (
     <div className="h-screen flex flex-col bg-slate-100">
-      <TitleBar title="WFM Scheduling — جدولة المواعيد" />
+      <TitleBar title="Pure Home — Scheduling" />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-4"><Outlet /></main>

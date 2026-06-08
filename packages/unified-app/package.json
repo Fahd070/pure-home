@@ -1,6 +1,6 @@
 {
   "name": "@wfm/unified-app",
-  "version": "1.4.0",
+  "version": "1.0.0",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -38,8 +38,8 @@
     "vite": "^5.0.11"
   },
   "build": {
-    "appId": "com.wfm.system",
-    "productName": "WFM System",
+    "appId": "com.purehome.app",
+    "productName": "Pure Home",
     "electronVersion": "28.2.0",
     "directories": {
       "output": "dist-installer"
@@ -58,14 +58,14 @@
       "perMachine": true,
       "allowToChangeInstallationDirectory": false,
       "installerIcon": "assets/icon.ico",
-      "shortcutName": "WFM System",
+      "shortcutName": "Pure Home",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
     "publish": {
       "provider": "github",
       "owner": "Fahd070",
-      "repo": "wfm-system"
+      "repo": "pure-home"
     }
   }
 }

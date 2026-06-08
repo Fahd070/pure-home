@@ -1,4 +1,4 @@
-# WFM System - Backend Startup Script
+# Pure Home - Backend Startup Script
 # Run on the SERVER PC. PostgreSQL must already be running as a Windows service.
 #
 # Usage:  Double-click, or run in PowerShell:
@@ -13,7 +13,7 @@ $backendDir = Join-Path $PSScriptRoot "..\packages\backend"
 $envFile    = Join-Path $backendDir ".env"
 
 Write-Host ""
-Write-Host "=== WFM System - Starting Backend Server ==="
+Write-Host "=== Pure Home - Starting Backend Server ==="
 Write-Host ""
 
 # Verify .env exists
@@ -72,7 +72,7 @@ Write-Host ""
 if ($tailscaleIP) {
     Write-Host "Employee PC setup:"
     Write-Host "  1. Install Tailscale on the employee PC and join the same tailnet"
-    Write-Host "  2. Open WFM System -> Server Setup -> enter: http://${tailscaleIP}:3001"
+    Write-Host "  2. Open Pure Home -> Server Setup -> enter: http://${tailscaleIP}:3001"
     Write-Host "  3. Click Test and Save"
 }
 Write-Host ""

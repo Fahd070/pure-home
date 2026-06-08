@@ -1,10 +1,10 @@
-# WFM System - Database Restore Script
+# Pure Home - Database Restore Script
 # Usage: .\restore-backup.ps1 -BackupFile "path\to\wfm-backup-YYYYMMDD-HHMMSS.dump"
 #                             [-DirectUrl "postgresql://..."]
 #
 # Restore source options:
 #   A. Automated backups: download the artifact from GitHub Actions
-#      → https://github.com/Fahd070/wfm-system/actions/workflows/db-backup.yml
+#      → https://github.com/Fahd070/pure-home/actions/workflows/db-backup.yml
 #      → Click a workflow run → Artifacts section → download the .zip → extract .dump
 #   B. Manual backups: use a .dump file from the backups\ directory
 #
@@ -100,7 +100,7 @@ Write-Host "Restore complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Verify the backend health check:"
-Write-Host "     GET https://wfm-system.onrender.com/health"
+Write-Host "     GET https://pure-home.onrender.com/health"
 Write-Host "     Expect: { status: 'ok', database: 'connected' }"
 Write-Host "  2. Log into each department and verify data is present."
 Write-Host "  3. Record this restore in the audit log."

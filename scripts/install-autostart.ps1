@@ -1,4 +1,4 @@
-# WFM System - Register Backend as a Windows Scheduled Task (auto-start)
+# Pure Home - Register Backend as a Windows Scheduled Task (auto-start)
 # Run once on the SERVER PC (as Administrator) after the backend has been built.
 #
 # After this script runs:
@@ -29,7 +29,7 @@ $distIndex  = Join-Path $backendDir "dist\index.js"
 $envFile    = Join-Path $backendDir ".env"
 
 Write-Host ""
-Write-Host "=== WFM System - Auto-Start Installation ==="
+Write-Host "=== Pure Home - Auto-Start Installation ==="
 Write-Host ""
 
 # Validate prerequisites
@@ -132,7 +132,7 @@ if ($tailscaleIP) {
     Write-Host "  Tell employees to:"
     Write-Host "    1. Install Tailscale from https://tailscale.com/download"
     Write-Host "    2. Sign in to Tailscale with the company account"
-    Write-Host "    3. Open WFM System -> Server Setup"
+    Write-Host "    3. Open Pure Home -> Server Setup"
     Write-Host "    4. Enter: http://${tailscaleIP}:3001"
     Write-Host "    5. Click Test and Save"
 } else {

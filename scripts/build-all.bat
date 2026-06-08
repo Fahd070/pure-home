@@ -28,6 +28,6 @@ echo.
 echo =============================================
 echo  Build complete!
 echo  Installer: packages\unified-app\dist-installer\
-echo  Installs to: C:\Program Files\WFM System\
+echo  Installs to: C:\Program Files\Pure Home\
 echo =============================================
 pause

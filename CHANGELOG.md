@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to WFM System are documented here.
+All notable changes to Pure Home are documented here.
 
 ---
 

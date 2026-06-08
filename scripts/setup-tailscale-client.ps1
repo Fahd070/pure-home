@@ -1,4 +1,4 @@
-# WFM System - Tailscale Setup for Employee PCs
+# Pure Home - Tailscale Setup for Employee PCs
 # Run once on each employee PC (as Administrator).
 #
 # HOW TO USE
@@ -26,7 +26,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "=== WFM System - Tailscale Setup (Employee PC) ==="
+Write-Host "=== Pure Home - Tailscale Setup (Employee PC) ==="
 Write-Host ""
 
 # --- Helper: get current Tailscale IP from network adapter ---
@@ -253,8 +253,8 @@ Write-Host "  WFM Server URL         : $serverUrl"
 if ($connected) {
     Write-Host "  Backend connectivity   : OK"
     Write-Host ""
-    Write-Host "  NEXT STEP - Configure WFM System app:"
-    Write-Host "    1. Open WFM System"
+    Write-Host "  NEXT STEP - Configure Pure Home app:"
+    Write-Host "    1. Open Pure Home"
     Write-Host "    2. Click 'Server Setup' on the department selection screen"
     Write-Host "    3. Enter: $serverUrl"
     Write-Host "    4. Click 'Test and Save'"

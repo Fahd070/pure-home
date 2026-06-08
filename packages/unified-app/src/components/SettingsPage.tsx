@@ -136,7 +136,7 @@ export default function SettingsPage({ api, socket }: Props) {
       {/* Font Size */}
       <Section icon="🔤" title={t("settings.fontSize")} desc={t("settings.fontSizeDesc")}>
         <SegControl options={fontOpts as any} value={settings.fontSize} onChange={(v) => change("fontSize", v)} />
-        <p className="mt-3 text-slate-500 text-sm">{t("settings.fontPreview")}: <span className="font-medium text-slate-700">Pure Home WFM System</span></p>
+        <p className="mt-3 text-slate-500 text-sm">{t("settings.fontPreview")}: <span className="font-medium text-slate-700">Pure Home</span></p>
       </Section>
 
       {/* Interface Scale */}

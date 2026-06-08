@@ -1,4 +1,4 @@
-# WFM System - Windows Firewall Configuration for Tailscale
+# Pure Home - Windows Firewall Configuration for Tailscale
 # Run once on the SERVER PC (as Administrator).
 # Opens port 3001 for employee machines connecting via Tailscale.
 # Client PCs do NOT need this script.
@@ -13,7 +13,7 @@ $ruleNameLAN       = "WFM Backend - LAN fallback (port 3001)"
 $port              = 3001
 
 Write-Host ""
-Write-Host "=== WFM System - Firewall Configuration (Tailscale) ==="
+Write-Host "=== Pure Home - Firewall Configuration (Tailscale) ==="
 Write-Host ""
 
 # --- Rule 1: Tailscale CGNAT range (100.64.0.0/10) ---

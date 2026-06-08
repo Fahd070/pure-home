@@ -1,4 +1,4 @@
-# WFM System - Automatic Update Manager
+# Pure Home - Automatic Update Manager
 # Checks GitHub Releases for a newer version, downloads the installer,
 # stops the backend, applies the update, restarts the backend, and verifies.
 # Runs every 6 hours via Windows Task Scheduler (registered by install-production.ps1).
@@ -6,13 +6,13 @@
 # Rollback: the previous installer is kept in the backup folder.
 # A failed update (backend still down after install) triggers automatic rollback.
 #
-# Log file:  C:\ProgramData\WFM System\logs\updates.log
-# Config:    C:\ProgramData\WFM System\config.json
+# Log file:  C:\ProgramData\Pure Home\logs\updates.log
+# Config:    C:\ProgramData\Pure Home\config.json
 
 $ErrorActionPreference = "SilentlyContinue"
 
 # --- Paths ---
-$dataDir     = "C:\ProgramData\WFM System"
+$dataDir     = "C:\ProgramData\Pure Home"
 $configFile  = "$dataDir\config.json"
 $logFile     = "$dataDir\logs\updates.log"
 $stagingDir  = "$dataDir\updates\staging"
