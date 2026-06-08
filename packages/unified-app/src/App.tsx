@@ -20,6 +20,7 @@ import AdminMessages from "./admin/pages/Messages";
 import AdminNotifications from "./admin/pages/Notifications";
 import AdminDirectMessages from "./admin/pages/DirectMessages";
 import AdminReports from "./admin/pages/Reports";
+import AccessCodes from "./admin/pages/AccessCodes";
 
 import SchedulingLayout from "./scheduling/components/Layout";
 import CustomerList from "./scheduling/pages/CustomerList";
@@ -76,6 +77,7 @@ function AppShell() {
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="messaging" element={<AdminDirectMessages />} />
             <Route path="reports" element={<AdminReports />} />
+            <Route path="access-codes" element={<AccessCodes />} />
           </Route>
 
           <Route path="/scheduling" element={<SchedulingGuard><SchedulingLayout /></SchedulingGuard>}>

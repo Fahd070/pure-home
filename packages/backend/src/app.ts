@@ -12,6 +12,7 @@ import messageRoutes from './routes/messages';
 import dashboardRoutes from './routes/dashboard';
 import directMessageRoutes from './routes/direct-messages';
 import reportRoutes from './routes/reports';
+import configRoutes from './routes/config';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './prisma';
 
@@ -58,6 +59,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/direct-messages', directMessageRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/config', configRoutes);
 
 app.use(errorHandler);
 export default app;

@@ -13,15 +13,16 @@ const BORDER = "#00006e";
 const BADGE = "bg-red-500";
 
 const links = [
-  { to: "/admin/dashboard",     label: "nav.dashboard",     icon: "⊞" },
-  { to: "/admin/customers",     label: "nav.customers",     icon: "👥", badgeKey: "customers" },
-  { to: "/admin/reports",       label: "nav.reports",       icon: "📊", badgeKey: "reports" },
-  { to: "/admin/appointments",  label: "nav.appointments",  icon: "📅" },
-  { to: "/admin/tasks",         label: "nav.tasks",         icon: "✓" },
-  { to: "/admin/technicians",   label: "nav.technicians",   icon: "🔧" },
-  { to: "/admin/messages",      label: "nav.messages",      icon: "📋", badgeKey: "messages" },
-  { to: "/admin/notifications", label: "nav.notifications", icon: "🔔", badgeKey: "notifications" },
-  { to: "/admin/messaging",     label: "nav.messaging",     icon: "💬", badgeKey: "messaging" },
+  { to: "/admin/dashboard",      label: "nav.dashboard",     icon: "⊞" },
+  { to: "/admin/customers",      label: "nav.customers",     icon: "👥", badgeKey: "customers" },
+  { to: "/admin/reports",        label: "nav.reports",       icon: "📊", badgeKey: "reports" },
+  { to: "/admin/appointments",   label: "nav.appointments",  icon: "📅" },
+  { to: "/admin/tasks",          label: "nav.tasks",         icon: "✓",  badgeKey: "tasks" },
+  { to: "/admin/technicians",    label: "nav.technicians",   icon: "🔧" },
+  { to: "/admin/messages",       label: "nav.messages",      icon: "📋", badgeKey: "messages" },
+  { to: "/admin/notifications",  label: "nav.notifications", icon: "🔔", badgeKey: "notifications" },
+  { to: "/admin/messaging",      label: "nav.messaging",     icon: "💬", badgeKey: "messaging" },
+  { to: "/admin/access-codes",   label: "nav.accessCodes",   icon: "🔑" },
 ];
 
 export default function Sidebar() {
@@ -31,6 +32,13 @@ export default function Sidebar() {
   const socket = useSocket();
   const [custBadge, setCustBadge] = useState(() => Number(localStorage.getItem("badge-cust-admin") || 0));
   const [reportsBadge, setReportsBadge] = useState(() => Number(localStorage.getItem("badge-reports-admin") || 0));
+
+  const { data: pendingTaskCount, refetch: refetchPendingTasks } = useQuery({
+    queryKey: ["tasks-pending-count"],
+    queryFn: () => api.get("/tasks/pending-count").then(r => Number(r.data.data.count) || 0),
+    refetchInterval: 30000,
+    initialData: 0,
+  });
 
   useEffect(() => {
     if (!socket) return;
@@ -52,13 +60,19 @@ export default function Sidebar() {
     socket.on("customer:updated", incCust);
     socket.on("customer:created", incReports);
     socket.on("customer:updated", incReports);
+    const onApptCreated = () => refetchPendingTasks();
+    const onTaskApproved = () => refetchPendingTasks();
+    socket.on("appointment:created", onApptCreated);
+    socket.on("task:approved", onTaskApproved);
     return () => {
       socket.off("customer:created", incCust);
       socket.off("customer:updated", incCust);
       socket.off("customer:created", incReports);
       socket.off("customer:updated", incReports);
+      socket.off("appointment:created", onApptCreated);
+      socket.off("task:approved", onTaskApproved);
     };
-  }, [socket]);
+  }, [socket, refetchPendingTasks]);
 
   useEffect(() => {
     const clear = () => { localStorage.removeItem("badge-cust-admin"); setCustBadge(0); };
@@ -72,6 +86,12 @@ export default function Sidebar() {
     return () => window.removeEventListener("clear-badge-reports-admin", clear);
   }, []);
 
+  useEffect(() => {
+    const clear = () => { refetchPendingTasks(); };
+    window.addEventListener("clear-badge-tasks-admin", clear);
+    return () => window.removeEventListener("clear-badge-tasks-admin", clear);
+  }, [refetchPendingTasks]);
+
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-admin"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
   const { data: dmCount } = useQuery({ queryKey: ["dm-unread-admin"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
   const { data: activityData } = useQuery({ queryKey: ["activity-feed"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
@@ -83,7 +103,8 @@ export default function Sidebar() {
     messaging: dmCount as number,
     messages: newMessages,
     customers: custBadge,
-    reports: reportsBadge
+    reports: reportsBadge,
+    tasks: pendingTaskCount as number,
   };
 
   return (

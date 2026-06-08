@@ -15,6 +15,27 @@ const DEPT_ROLE: Record<string, string> = {
   admin: 'ADMIN', scheduling: 'SCHEDULING', technician: 'TECHNICIAN',
 };
 
+async function getAccessCodes(): Promise<{ admin: string; scheduling: string; technician: string }> {
+  try {
+    const configs = await prisma.systemConfig.findMany({
+      where: { key: { in: ['ACCESS_CODE_ADMIN', 'ACCESS_CODE_SCHEDULING', 'ACCESS_CODE_TECHNICIAN'] } }
+    });
+    const m: Record<string, string> = {};
+    for (const c of configs) m[c.key] = c.value;
+    return {
+      admin:      m['ACCESS_CODE_ADMIN']      || process.env.ADMIN_CODE      || '9012',
+      scheduling: m['ACCESS_CODE_SCHEDULING'] || process.env.SCHEDULING_CODE || '9013',
+      technician: m['ACCESS_CODE_TECHNICIAN'] || process.env.TECHNICIAN_CODE || '9014',
+    };
+  } catch {
+    return {
+      admin:      process.env.ADMIN_CODE      || '9012',
+      scheduling: process.env.SCHEDULING_CODE || '9013',
+      technician: process.env.TECHNICIAN_CODE || '9014',
+    };
+  }
+}
+
 router.post('/login', async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
@@ -31,10 +52,11 @@ router.post('/code-login', async (req, res, next) => {
   try {
     const { code, dept } = codeLoginSchema.parse(req.body);
 
+    const codes = await getAccessCodes();
     const codeMap: Record<string, string> = {
-      [process.env.ADMIN_CODE || '9012']:      'ADMIN',
-      [process.env.SCHEDULING_CODE || '9013']: 'SCHEDULING',
-      [process.env.TECHNICIAN_CODE || '9014']: 'TECHNICIAN',
+      [codes.admin]:      'ADMIN',
+      [codes.scheduling]: 'SCHEDULING',
+      [codes.technician]: 'TECHNICIAN',
     };
 
     const codeRole = codeMap[code];

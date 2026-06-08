@@ -213,3 +213,13 @@ model DirectMessage {
   createdAt     DateTime @default(now())
   @@map("direct_messages")
 }
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@map("system_configs")
+}
