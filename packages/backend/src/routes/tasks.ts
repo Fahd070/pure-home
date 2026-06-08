@@ -24,6 +24,13 @@ function taskFields(t: any) {
   return { id: t.id, status: t.status, technicianId: t.technicianId, notes: t.notes, version: t.version, startedAt: t.startedAt, completedAt: t.completedAt };
 }
 
+router.get('/pending-count', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const count = await prisma.maintenanceTask.count({ where: { status: 'PENDING_APPROVAL' } });
+    res.json({ success: true, data: { count } });
+  } catch (e) { next(e); }
+});
+
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
     const where: any = {};
@@ -72,6 +79,7 @@ router.patch('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res,
     await emitEvent({ type: EVENT_TYPES.TASK_APPROVED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
     emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.TASK_APPROVED, task);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.TASK_APPROVED, task);
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.TASK_APPROVED, task);
     res.json({ success: true, data: task });
   } catch (e) { next(e); }
 });

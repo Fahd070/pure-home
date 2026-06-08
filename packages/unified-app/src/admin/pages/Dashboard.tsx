@@ -22,7 +22,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const items = data?.data || [];
   const total = data?.meta?.total || 0;
   const pages = Math.ceil(total / 15) || 1;
-  const isAppointmentList = ["this-month","next-month","overdue"].includes(endpoint);
+  const isAppointmentList = ["this-month","next-month","overdue","today"].includes(endpoint);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -44,16 +44,36 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                 <th className="text-start px-4 py-2 font-medium text-slate-600">{t("appointments.customer")}</th>
                 <th className="text-start px-4 py-2 font-medium text-slate-600">{t("common.phone")}</th>
                 <th className="text-start px-4 py-2 font-medium text-slate-600">{t("common.date")}</th>
+                <th className="text-start px-4 py-2 font-medium text-slate-600">{t("appointments.type")}</th>
                 <th className="text-start px-4 py-2 font-medium text-slate-600">{t("common.status")}</th>
               </tr></thead>
-              <tbody>{items.map((a: any) => (
-                <tr key={a.id} className="border-b hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-medium">{a.customer?.name}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{a.customer?.phone}</td>
-                  <td className="px-4 py-2.5">{new Date(a.scheduledDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{a.status}</span></td>
-                </tr>
-              ))}</tbody>
+              <tbody>{items.map((a: any) => {
+                const taskStatus: string | undefined = a.task?.status;
+                const taskColors: Record<string, string> = {
+                  PENDING_APPROVAL: "bg-yellow-100 text-yellow-700",
+                  APPROVED: "bg-blue-100 text-blue-700",
+                  IN_PROGRESS: "bg-indigo-100 text-indigo-700",
+                  COMPLETED: "bg-green-100 text-green-700",
+                  POSTPONED: "bg-orange-100 text-orange-700",
+                };
+                return (
+                  <tr key={a.id} className="border-b hover:bg-slate-50">
+                    <td className="px-4 py-2.5 font-medium">{a.customer?.name}</td>
+                    <td className="px-4 py-2.5 text-slate-500">{a.customer?.phone}</td>
+                    <td className="px-4 py-2.5">{new Date(a.scheduledDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-2.5 text-xs font-medium text-slate-600">{a.type}</td>
+                    <td className="px-4 py-2.5">
+                      {taskStatus ? (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskColors[taskStatus] || "bg-slate-100 text-slate-600"}`}>
+                          {taskStatus.replace(/_/g, " ")}
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{a.status}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
             </table>
           ) : (
             <table className="w-full text-sm">
@@ -115,8 +135,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (!socket) return;
     const refresh = () => { qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); qc.invalidateQueries({ queryKey: ["dashboard-activity"] }); };
-    socket.on("task:completed", refresh); socket.on("appointment:created", refresh); socket.on("customer:created", refresh);
-    return () => { socket.off("task:completed", refresh); socket.off("appointment:created", refresh); socket.off("customer:created", refresh); };
+    socket.on("task:completed", refresh); socket.on("task:approved", refresh); socket.on("task:postponed", refresh);
+    socket.on("appointment:created", refresh); socket.on("customer:created", refresh); socket.on("customers:bulk-deleted", refresh);
+    return () => {
+      socket.off("task:completed", refresh); socket.off("task:approved", refresh); socket.off("task:postponed", refresh);
+      socket.off("appointment:created", refresh); socket.off("customer:created", refresh); socket.off("customers:bulk-deleted", refresh);
+    };
   }, [socket, qc]);
 
   const deleteActivity = useMutation({

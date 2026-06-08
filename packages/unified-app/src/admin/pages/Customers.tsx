@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 function formatCycle(cycle: string, freq: number, t: any) {
@@ -86,13 +87,30 @@ export default function Customers() {
   const isAr = i18n.language === "ar";
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const socket = useSocket();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-customers-admin"));
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => {
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    };
+    socket.on("customers:bulk-deleted", refresh);
+    socket.on("customer:deleted", refresh);
+    return () => {
+      socket.off("customers:bulk-deleted", refresh);
+      socket.off("customer:deleted", refresh);
+    };
+  }, [socket, qc]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["customers", search, page],
@@ -116,6 +134,20 @@ export default function Customers() {
     onError: () => toast.error(t("common.error"))
   });
 
+  const deleteAllCustomers = useMutation({
+    mutationFn: () => api.delete("/customers"),
+    onSuccess: (res) => {
+      const count = res.data.data.count;
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-activity"] });
+      toast.success(`${count} ${t("customers.allDeleted")}`);
+      setShowDeleteAll(false);
+      setDeleteAllConfirmText("");
+    },
+    onError: () => toast.error(t("common.error"))
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex gap-3 items-center">
@@ -124,6 +156,12 @@ export default function Customers() {
         <button onClick={() => navigate("/admin/customers/add")} style={{ backgroundColor: "#000080" }} className="text-white px-4 py-2 rounded-lg hover:opacity-90 text-sm font-medium">
           + {t("customers.add")}
         </button>
+        {(data?.meta?.total ?? 0) > 0 && (
+          <button onClick={() => { setShowDeleteAll(true); setDeleteAllConfirmText(""); }}
+            className="text-xs text-red-600 border border-red-300 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors font-medium">
+            🗑 {t("customers.deleteAll")}
+          </button>
+        )}
       </div>
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {isLoading ? <p className="text-center py-8 text-slate-400">{t("common.loading")}</p> : (
@@ -198,6 +236,37 @@ export default function Customers() {
                 {deleteCustomer.isPending ? t("customers.deleting") : t("customers.yesDelete")}
               </button>
               <button onClick={() => setDeleteTarget(null)} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAll && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-96 shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-lg">⚠️</div>
+              <div>
+                <h3 className="font-bold text-red-700">{t("customers.deleteAllTitle")}</h3>
+                <p className="text-xs text-slate-500">{data?.meta?.total ?? 0} {t("customers.willBeDeleted")}</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">{t("customers.deleteAllWarning")}</p>
+            <p className="text-sm font-medium text-slate-700 mb-2">{t("customers.typeDeleteToConfirm")}</p>
+            <input
+              value={deleteAllConfirmText}
+              onChange={e => setDeleteAllConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="w-full border-2 border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 mb-4 font-mono"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => deleteAllCustomers.mutate()}
+                disabled={deleteAllConfirmText !== "DELETE" || deleteAllCustomers.isPending}
+                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium">
+                {deleteAllCustomers.isPending ? t("customers.deleting") : t("customers.deleteAllConfirmBtn")}
+              </button>
+              <button onClick={() => { setShowDeleteAll(false); setDeleteAllConfirmText(""); }} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
             </div>
           </div>
         </div>

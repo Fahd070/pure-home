@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -12,8 +13,31 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Tasks() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const socket = useSocket();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [techId, setTechId] = useState("");
+
+  useEffect(() => {
+    window.dispatchEvent(new Event("clear-badge-tasks-admin"));
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      window.dispatchEvent(new Event("clear-badge-tasks-admin"));
+    };
+    socket.on("task:approved", refresh);
+    socket.on("task:completed", refresh);
+    socket.on("task:postponed", refresh);
+    socket.on("appointment:created", refresh);
+    return () => {
+      socket.off("task:approved", refresh);
+      socket.off("task:completed", refresh);
+      socket.off("task:postponed", refresh);
+      socket.off("appointment:created", refresh);
+    };
+  }, [socket, qc]);
 
   const { data } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks").then(r => r.data.data) });
   const { data: techs } = useQuery({ queryKey: ["technicians"], queryFn: () => api.get("/technicians").then(r => r.data.data) });
