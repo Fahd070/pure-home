@@ -42,11 +42,25 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { su
 
 // Health check — no auth required, used by monitoring and client connectivity tests
 app.get('/health', async (_req, res) => {
+  const t0 = Date.now();
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
-  } catch {
-    res.status(503).json({ status: 'degraded', database: 'disconnected', timestamp: new Date().toISOString() });
+    const dbMs = Date.now() - t0;
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      dbResponseMs: dbMs,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    res.status(503).json({
+      status: 'degraded',
+      database: 'disconnected',
+      error: process.env.NODE_ENV === 'production' ? 'DB unreachable' : e?.message,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    });
   }
 });
 
