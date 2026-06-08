@@ -4,8 +4,23 @@ import { useTranslation } from "react-i18next";
 import { useSocket } from "../hooks/useSocket";
 import { api } from "../api/client";
 
+function cleanBody(body: string): string {
+  return body.replace(/\s*\[[\w:.\\-]+\]\s*$/, "").trim();
+}
+function formatTime(d: string, lang: string): string {
+  const date = new Date(d);
+  const diff = Date.now() - date.getTime();
+  const isAr = lang === "ar";
+  if (diff < 60000) return isAr ? "الآن" : "Just now";
+  const mins = Math.floor(diff / 60000);
+  if (diff < 3600000) return isAr ? `${mins} د` : `${mins}m ago`;
+  const hrs = Math.floor(diff / 3600000);
+  if (diff < 86400000) return isAr ? `${hrs} س` : `${hrs}h ago`;
+  return date.toLocaleDateString(isAr ? "ar-SA" : undefined);
+}
+
 export default function Notifications() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const socket = useSocket();
   const { data, isLoading } = useQuery({ queryKey: ["notifications-sched"], queryFn: () => api.get("/notifications").then(r => r.data.data) });
@@ -45,8 +60,8 @@ export default function Notifications() {
           <div className={"w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 " + (n.isRead ? "bg-slate-100" : "bg-green-100")}>🔔</div>
           <div className="flex-1">
             <p className={"text-sm font-medium " + (n.isRead ? "text-slate-600" : "text-slate-900")}>{n.title}</p>
-            <p className="text-sm text-slate-500 mt-0.5">{n.body}</p>
-            <p className="text-xs text-slate-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+            <p className="text-sm text-slate-500 mt-0.5">{cleanBody(n.body)}</p>
+            <p className="text-xs text-slate-400 mt-1">{formatTime(n.createdAt, i18n.language)}</p>
           </div>
           {!n.isRead && <span className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />}
         </div>
