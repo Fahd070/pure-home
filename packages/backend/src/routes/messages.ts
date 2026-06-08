@@ -7,7 +7,7 @@ import { SOCKET_EVENTS } from '../constants';
 const router = Router();
 router.use(authenticate);
 
-router.get('/', requireRole('ADMIN'), async (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
     const logs = await prisma.auditLog.findMany({
       include: { user: { select: { id: true, name: true, role: true } } },

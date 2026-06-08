@@ -10,7 +10,9 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (/^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
   if (/^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
   if (/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
-  if (/^https:\/\//.test(origin)) return true;    // HTTPS tunnel (Cloudflare, ngrok, etc.)
+  // Render cloud URL — allow only the specific deployed URL, not all HTTPS origins
+  const renderUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderUrl && origin === renderUrl) return true;
   return false;
 };
 

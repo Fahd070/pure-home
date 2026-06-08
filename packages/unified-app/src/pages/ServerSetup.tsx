@@ -77,7 +77,16 @@ export default function ServerSetup() {
           </button>
 
           <button
-            onClick={() => { setServerUrl(url.trim().replace(/\/$/, "")); navigate("/"); }}
+            onClick={() => {
+              const trimmed = url.trim().replace(/\/$/, "");
+              if (!/^https?:\/\/.+/.test(trimmed)) {
+                setStatus("error");
+                setError("URL must start with http:// or https://");
+                return;
+              }
+              setServerUrl(trimmed);
+              navigate("/");
+            }}
             className="w-full text-slate-500 text-sm hover:text-slate-700 transition-colors"
           >
             Save without testing

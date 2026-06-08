@@ -51,9 +51,13 @@ router.get('/', async (req: AuthRequest, res, next) => {
 router.patch('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const { technicianId, version } = z.object({
-      technicianId: z.string(),
+      technicianId: z.string().uuid(),
       version: z.number().int().optional(),
     }).parse(req.body);
+
+    // Validate technician exists and has TECHNICIAN role
+    const technician = await prisma.user.findFirst({ where: { id: technicianId, role: 'TECHNICIAN' } });
+    if (!technician) return res.status(400).json({ success: false, message: 'Invalid technician' });
 
     const before = await prisma.maintenanceTask.findUnique({
       where: { id: req.params.id },
@@ -61,6 +65,9 @@ router.patch('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res,
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+    if (before.status !== 'PENDING_APPROVAL') {
+      return res.status(409).json({ success: false, message: 'Task is not pending approval' });
+    }
 
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
@@ -94,6 +101,14 @@ router.patch('/:id/start', requireRole('TECHNICIAN'), async (req: AuthRequest, r
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+    // Ownership: technician may only act on their own assigned tasks
+    if (before.technicianId !== req.user!.userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    // State machine: task must be APPROVED to start
+    if (before.status !== 'APPROVED') {
+      return res.status(409).json({ success: false, message: 'Task must be APPROVED before it can be started' });
+    }
 
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
@@ -129,6 +144,14 @@ router.patch('/:id/complete', requireRole('TECHNICIAN'), async (req: AuthRequest
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+    // Ownership
+    if (before.technicianId !== req.user!.userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    // State machine: task must be IN_PROGRESS to complete
+    if (before.status !== 'IN_PROGRESS') {
+      return res.status(409).json({ success: false, message: 'Task must be IN_PROGRESS before it can be completed' });
+    }
 
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },
@@ -165,6 +188,14 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN'), async (req: AuthRequest
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+    // Ownership
+    if (before.technicianId !== req.user!.userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    // State machine: task must be APPROVED or IN_PROGRESS to postpone
+    if (before.status !== 'APPROVED' && before.status !== 'IN_PROGRESS') {
+      return res.status(409).json({ success: false, message: 'Task cannot be postponed in its current state' });
+    }
 
     const task = await prisma.maintenanceTask.update({
       where: { id: req.params.id },

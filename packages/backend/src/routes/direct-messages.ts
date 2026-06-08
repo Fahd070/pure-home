@@ -97,10 +97,15 @@ router.patch('/:id/read', async (req: AuthRequest, res, next) => {
   } catch (e) { next(e); }
 });
 
+const VALID_ROLES = ['ADMIN', 'SCHEDULING', 'TECHNICIAN'] as const;
+
 router.delete('/conversation/:otherRole', async (req: AuthRequest, res, next) => {
   try {
     const myRole = req.user!.role;
     const otherRole = req.params.otherRole;
+    if (!(VALID_ROLES as readonly string[]).includes(otherRole)) {
+      return res.status(400).json({ success: false, message: 'Invalid role' });
+    }
 
     await prisma.directMessage.deleteMany({
       where: { senderId: req.user!.userId, recipientRole: otherRole }
