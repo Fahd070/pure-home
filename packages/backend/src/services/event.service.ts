@@ -18,6 +18,7 @@ export const EVENT_TYPES = {
   SCHEDULE_CHANGED:     'SCHEDULE_CHANGED',
   USER_UPDATED:         'USER_UPDATED',
   ACCESS_CODE_UPDATED:  'ACCESS_CODE_UPDATED',
+  SETTINGS_UPDATED:     'SETTINGS_UPDATED',
 } as const;
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];

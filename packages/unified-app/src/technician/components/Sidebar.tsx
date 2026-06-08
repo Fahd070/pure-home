@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
+import { useNotificationSound } from "../../hooks/useNotificationSound";
 
 const BG = "#8B4513";
 const BG_HOVER = "#7a3c10";
@@ -17,6 +18,7 @@ const links = [
   { to: "/technician/messages",      label: "nav.messages",     icon: "🗒️",  badgeKey: "messages" },
   { to: "/technician/notifications", label: "nav.notifications",icon: "🔔", badgeKey: "notifications" },
   { to: "/technician/messaging",     label: "nav.messaging",    icon: "💬", badgeKey: "messaging" },
+  { to: "/technician/settings",     label: "nav.settings",     icon: "⚙️" },
 ];
 
 export default function Sidebar() {
@@ -24,6 +26,7 @@ export default function Sidebar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const socket = useSocket();
+  useNotificationSound(socket);
   const [queueBadge, setQueueBadge] = useState(() => Number(localStorage.getItem("badge-queue-tech") || 0));
 
   useEffect(() => {

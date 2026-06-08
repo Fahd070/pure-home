@@ -14,7 +14,8 @@ export const SOCKET_EVENTS = {
   DM_NEW: 'dm:new',
   DM_DELETED: 'dm:deleted',
   AUDIT_DELETED: 'audit:deleted',
-  CONFIG_UPDATED: 'config:updated',
+  CONFIG_UPDATED:    'config:updated',
+  SETTINGS_UPDATED:  'settings:updated',
 };
 export const SOCKET_ROOMS = {
   ALL: 'all',

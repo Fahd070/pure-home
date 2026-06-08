@@ -6,6 +6,35 @@ import { initSocket } from './socket';
 import { startNotificationCron } from './services/notification.service';
 import prisma from './prisma';
 
+async function ensureUserSettingsTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "user_settings" (
+        "id"                   TEXT         NOT NULL,
+        "userId"               TEXT         NOT NULL,
+        "theme"                TEXT         NOT NULL DEFAULT 'light',
+        "fontSize"             TEXT         NOT NULL DEFAULT 'medium',
+        "interfaceScale"       TEXT         NOT NULL DEFAULT 'normal',
+        "background"           TEXT         NOT NULL DEFAULT 'day',
+        "highContrast"         BOOLEAN      NOT NULL DEFAULT false,
+        "improvedReadability"  BOOLEAN      NOT NULL DEFAULT false,
+        "notificationsEnabled" BOOLEAN      NOT NULL DEFAULT true,
+        "soundEnabled"         BOOLEAN      NOT NULL DEFAULT true,
+        "soundVolume"          INTEGER      NOT NULL DEFAULT 70,
+        "updatedAt"            TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "createdAt"            TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "user_settings_pkey" PRIMARY KEY ("id")
+      )
+    `);
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "user_settings_userId_key" ON "user_settings"("userId")`
+    );
+    console.log('  user_settings:   ready');
+  } catch (e: any) {
+    console.error('  user_settings:   setup warning —', e?.message || e);
+  }
+}
+
 async function ensureSystemConfigTable() {
   try {
     await prisma.$executeRawUnsafe(`
@@ -35,6 +64,7 @@ const server = http.createServer(app);
 initSocket(server);
 startNotificationCron();
 ensureSystemConfigTable();
+ensureUserSettingsTable();
 server.listen(PORT, BIND_HOST, () => {
   const onRender = !!process.env.RENDER;
 

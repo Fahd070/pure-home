@@ -21,12 +21,14 @@ import AdminNotifications from "./admin/pages/Notifications";
 import AdminDirectMessages from "./admin/pages/DirectMessages";
 import AdminReports from "./admin/pages/Reports";
 import AccessCodes from "./admin/pages/AccessCodes";
+import AdminSettings from "./admin/pages/Settings";
 
 import SchedulingLayout from "./scheduling/components/Layout";
 import CustomerList from "./scheduling/pages/CustomerList";
 import SchedMessages from "./scheduling/pages/Messages";
 import SchedNotifications from "./scheduling/pages/Notifications";
 import SchedDirectMessages from "./scheduling/pages/DirectMessages";
+import SchedSettings from "./scheduling/pages/Settings";
 
 import TechnicianLayout from "./technician/components/Layout";
 import WorkQueue from "./technician/pages/WorkQueue";
@@ -34,6 +36,7 @@ import TaskDetail from "./technician/pages/TaskDetail";
 import TechMessages from "./technician/pages/Messages";
 import TechNotifications from "./technician/pages/Notifications";
 import TechDirectMessages from "./technician/pages/DirectMessages";
+import TechSettings from "./technician/pages/Settings";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { adminAuth } = useAppStore();
@@ -78,6 +81,7 @@ function AppShell() {
             <Route path="messaging" element={<AdminDirectMessages />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="access-codes" element={<AccessCodes />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           <Route path="/scheduling" element={<SchedulingGuard><SchedulingLayout /></SchedulingGuard>}>
@@ -86,6 +90,7 @@ function AppShell() {
             <Route path="messages" element={<SchedMessages />} />
             <Route path="notifications" element={<SchedNotifications />} />
             <Route path="messaging" element={<SchedDirectMessages />} />
+            <Route path="settings" element={<SchedSettings />} />
           </Route>
 
           <Route path="/technician" element={<TechnicianGuard><TechnicianLayout /></TechnicianGuard>}>
@@ -95,6 +100,7 @@ function AppShell() {
             <Route path="messages" element={<TechMessages />} />
             <Route path="notifications" element={<TechNotifications />} />
             <Route path="messaging" element={<TechDirectMessages />} />
+            <Route path="settings" element={<TechSettings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

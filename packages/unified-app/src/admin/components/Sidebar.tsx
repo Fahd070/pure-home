@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
+import { useNotificationSound } from "../../hooks/useNotificationSound";
 
 const BG = "#000080";
 const BG_HOVER = "#00006e";
@@ -23,6 +24,7 @@ const links = [
   { to: "/admin/notifications",  label: "nav.notifications", icon: "🔔", badgeKey: "notifications" },
   { to: "/admin/messaging",      label: "nav.messaging",     icon: "💬", badgeKey: "messaging" },
   { to: "/admin/access-codes",   label: "nav.accessCodes",   icon: "🔑" },
+  { to: "/admin/settings",       label: "nav.settings",      icon: "⚙️" },
 ];
 
 export default function Sidebar() {
@@ -30,6 +32,7 @@ export default function Sidebar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const socket = useSocket();
+  useNotificationSound(socket);
   const [custBadge, setCustBadge] = useState(() => Number(localStorage.getItem("badge-cust-admin") || 0));
   const [reportsBadge, setReportsBadge] = useState(() => Number(localStorage.getItem("badge-reports-admin") || 0));
 

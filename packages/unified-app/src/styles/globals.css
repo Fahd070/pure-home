@@ -10,12 +10,97 @@
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 }
+
 @layer utilities {
-  .titlebar-drag { -webkit-app-region: drag; }
+  .titlebar-drag    { -webkit-app-region: drag; }
   .titlebar-no-drag { -webkit-app-region: no-drag; }
   .fade-in { animation: fadeIn 0.2s ease-in-out; }
 }
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   THEME — Dark mode via CSS filter invert
+   ═══════════════════════════════════════════════════════════ */
+html[data-theme="dark"] #root {
+  filter: invert(1) hue-rotate(180deg);
+}
+html[data-theme="dark"] #root img,
+html[data-theme="dark"] #root video,
+html[data-theme="dark"] #root [data-no-invert] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] #root {
+    filter: invert(1) hue-rotate(180deg);
+  }
+  html[data-theme="system"] #root img,
+  html[data-theme="system"] #root video {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FONT SIZE — applied to html so rem units scale globally
+   ═══════════════════════════════════════════════════════════ */
+html[data-font="small"]  { font-size: 13px; }
+html[data-font="medium"] { font-size: 15px; }
+html[data-font="large"]  { font-size: 17px; }
+html[data-font="xlarge"] { font-size: 20px; }
+
+/* ═══════════════════════════════════════════════════════════
+   INTERFACE SCALE — compact / normal / comfortable
+   ═══════════════════════════════════════════════════════════ */
+html[data-scale="compact"] main,
+html[data-scale="compact"] aside {
+  zoom: 0.92;
+}
+html[data-scale="comfortable"] main,
+html[data-scale="comfortable"] aside {
+  zoom: 1.06;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BACKGROUND — day (default) / night
+   ═══════════════════════════════════════════════════════════ */
+html[data-bg="night"] body {
+  background-color: #111827 !important;
+}
+html[data-bg="night"] .bg-slate-50,
+html[data-bg="night"] .bg-slate-100 {
+  background-color: #1a2535 !important;
+}
+html[data-bg="night"] .bg-white {
+  background-color: #1e2d40 !important;
+  color: #e2e8f0;
+}
+html[data-bg="night"] main {
+  background-color: #1a2535 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ACCESSIBILITY — High Contrast
+   ═══════════════════════════════════════════════════════════ */
+html[data-contrast="high"] #root {
+  filter: contrast(1.45) saturate(1.3);
+}
+html[data-theme="dark"][data-contrast="high"] #root {
+  filter: invert(1) hue-rotate(180deg) contrast(1.45) saturate(1.3);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ACCESSIBILITY — Improved Readability
+   ═══════════════════════════════════════════════════════════ */
+html[data-readability="on"] p,
+html[data-readability="on"] td,
+html[data-readability="on"] li,
+html[data-readability="on"] span,
+html[data-readability="on"] label {
+  line-height: 1.85 !important;
+  letter-spacing: 0.03em !important;
+  word-spacing: 0.06em !important;
 }
