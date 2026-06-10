@@ -27,7 +27,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   notificationsEnabled: true,
   soundEnabled:         true,
   soundVolume:          70,
-  primaryColor:         "#000080",
+  primaryColor:         undefined,
   secondaryColor:       "#f8fafc",
   buttonColor:          "#000080",
   cardColor:            "#ffffff",

@@ -35,6 +35,53 @@ async function ensureUserSettingsTable() {
   }
 }
 
+async function ensureSchemaUpdates() {
+  const run = async (sql: string) => {
+    try { await prisma.$executeRawUnsafe(sql); } catch {}
+  };
+  try {
+    // appointments: new columns & nullable customerId
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "isUrgent" BOOLEAN NOT NULL DEFAULT false`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "adminApproved" BOOLEAN NOT NULL DEFAULT false`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "visibleToScheduling" BOOLEAN NOT NULL DEFAULT true`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "createdByRole" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "createdById" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "urgentLocation" TEXT`);
+    await run(`ALTER TABLE "appointments" ALTER COLUMN "customerId" DROP NOT NULL`);
+    await run(`ALTER TABLE "appointments" DROP CONSTRAINT IF EXISTS "appointments_customerId_fkey"`);
+    await run(`ALTER TABLE "appointments" ADD CONSTRAINT "appointments_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE SET NULL ON UPDATE CASCADE`);
+    // maintenance_tasks: completion fields
+    await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "serviceDetails" TEXT`);
+    await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "completionAmount" DOUBLE PRECISION`);
+    await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "completionPaymentMethod" TEXT`);
+    // call_reports table
+    await run(`CREATE TABLE IF NOT EXISTS "call_reports" ("id" TEXT NOT NULL,"customerId" TEXT NOT NULL,"employeeName" TEXT NOT NULL,"callDate" TIMESTAMP(3) NOT NULL,"notes" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"createdById" TEXT,CONSTRAINT "call_reports_pkey" PRIMARY KEY ("id"))`);
+    await run(`ALTER TABLE "call_reports" ADD CONSTRAINT "call_reports_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    await run(`ALTER TABLE "call_reports" ADD CONSTRAINT "call_reports_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE`);
+    // expenses table
+    await run(`CREATE TABLE IF NOT EXISTS "expenses" ("id" TEXT NOT NULL,"amount" DOUBLE PRECISION NOT NULL,"category" TEXT NOT NULL,"description" TEXT,"date" TIMESTAMP(3) NOT NULL,"receiptImage" TEXT,"status" TEXT NOT NULL DEFAULT 'PENDING',"technicianId" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "expenses_pkey" PRIMARY KEY ("id"))`);
+    await run(`ALTER TABLE "expenses" ADD CONSTRAINT "expenses_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE`);
+    // urgent_visit_records table
+    await run(`CREATE TABLE IF NOT EXISTS "urgent_visit_records" ("id" TEXT NOT NULL,"appointmentId" TEXT NOT NULL,"customerInfo" TEXT,"serviceDetails" TEXT,"notes" TEXT,"paymentMethod" TEXT NOT NULL,"submittedById" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "urgent_visit_records_pkey" PRIMARY KEY ("id"),CONSTRAINT "urgent_visit_records_appointmentId_key" UNIQUE ("appointmentId"))`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD CONSTRAINT "urgent_visit_records_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "appointments"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD CONSTRAINT "urgent_visit_records_submittedById_fkey" FOREIGN KEY ("submittedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "customerName" TEXT`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "customerPhone" TEXT`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "customerDetails" TEXT`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "serviceNotes" TEXT`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "serviceType" TEXT`);
+    await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "amount" DOUBLE PRECISION`);
+    // user_settings color columns
+    await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "primaryColor" TEXT`);
+    await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "secondaryColor" TEXT`);
+    await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "buttonColor" TEXT`);
+    await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "cardColor" TEXT`);
+    console.log('  schema updates:  applied');
+  } catch (e: any) {
+    console.error('  schema updates:  warning —', e?.message || e);
+  }
+}
+
 async function ensureSystemConfigTable() {
   try {
     await prisma.$executeRawUnsafe(`
@@ -63,6 +110,7 @@ const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 const server = http.createServer(app);
 initSocket(server);
 startNotificationCron();
+ensureSchemaUpdates();
 ensureSystemConfigTable();
 ensureUserSettingsTable();
 server.listen(PORT, BIND_HOST, () => {

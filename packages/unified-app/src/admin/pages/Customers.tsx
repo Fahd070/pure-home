@@ -105,9 +105,13 @@ export default function Customers() {
       qc.invalidateQueries({ queryKey: ["customers"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     };
+    socket.on("customer:created", refresh);
+    socket.on("customer:updated", refresh);
     socket.on("customers:bulk-deleted", refresh);
     socket.on("customer:deleted", refresh);
     return () => {
+      socket.off("customer:created", refresh);
+      socket.off("customer:updated", refresh);
       socket.off("customers:bulk-deleted", refresh);
       socket.off("customer:deleted", refresh);
     };

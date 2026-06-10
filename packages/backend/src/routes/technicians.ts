@@ -16,8 +16,23 @@ router.get('/', async (req, res, next) => {
     });
     const result = await Promise.all(techs.map(async (t: any) => {
       const completed = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'COMPLETED' } });
+      const postponed = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'POSTPONED' } });
       const pending = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: { in: ['PENDING_APPROVAL','APPROVED','IN_PROGRESS'] } } });
-      return { ...t, completedTasks: completed, pendingTasks: pending };
+      const completedTasksList = await prisma.maintenanceTask.findMany({
+        where: { technicianId: t.id, status: 'COMPLETED' },
+        include: { appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } } },
+        orderBy: { completedAt: 'desc' },
+        take: 20,
+      });
+      const postponedTasksList = await prisma.maintenanceTask.findMany({
+        where: { technicianId: t.id, status: 'POSTPONED' },
+        include: {
+          appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } },
+          postponements: { orderBy: { createdAt: 'desc' }, take: 1 },
+        },
+        take: 20,
+      });
+      return { ...t, completedTasks: completed, postponedTasks: postponed, pendingTasks: pending, completedTasksList, postponedTasksList };
     }));
     res.json({ success: true, data: result });
   } catch (e) { next(e); }

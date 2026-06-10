@@ -6,11 +6,16 @@ import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
+import { useSettingsStore } from "../../store/settingsStore";
 
-const BG = "#8B4513";
-const BG_HOVER = "#7a3c10";
-const BG_ACTIVE = "#a05020";
-const BORDER = "#7a3c10";
+function colorAdjust(hex: string, offset: number): string {
+  const n = parseInt((hex || '#8B4513').replace('#', ''), 16);
+  const r = Math.min(255, Math.max(0, (n >> 16) + offset));
+  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
+  const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
 const BADGE = "bg-red-500";
 
 const links = [
@@ -29,6 +34,11 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
+  const { settings } = useSettingsStore();
+  const BG = settings.primaryColor || "#8B4513";
+  const BG_HOVER = colorAdjust(BG, -14);
+  const BG_ACTIVE = colorAdjust(BG, 50);
+  const BORDER = BG_HOVER;
   const [queueBadge, setQueueBadge] = useState(() => Number(localStorage.getItem("badge-queue-tech") || 0));
   const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-tech") || 0));
 

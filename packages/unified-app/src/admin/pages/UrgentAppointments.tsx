@@ -25,7 +25,8 @@ export default function UrgentAppointments() {
 
   const { data: apptData, isLoading: apptLoading } = useQuery({
     queryKey: ["urgent-appointments"],
-    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } }).then(r => r.data.data || []),
+    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } })
+      .then(r => (r.data.data || []).filter((a: any) => a.createdByRole === 'ADMIN' || !a.createdByRole)),
   });
 
   const { data: visitData, isLoading: visitLoading } = useQuery({

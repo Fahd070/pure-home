@@ -6,11 +6,16 @@ import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
+import { useSettingsStore } from "../../store/settingsStore";
 
-const BG = "#008000";
-const BG_HOVER = "#006600";
-const BG_ACTIVE = "#009a00";
-const BORDER = "#006600";
+function colorAdjust(hex: string, offset: number): string {
+  const n = parseInt((hex || '#008000').replace('#', ''), 16);
+  const r = Math.min(255, Math.max(0, (n >> 16) + offset));
+  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
+  const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
 const BADGE = "bg-red-500";
 
 const links = [
@@ -30,6 +35,11 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
+  const { settings } = useSettingsStore();
+  const BG = settings.primaryColor || "#008000";
+  const BG_HOVER = colorAdjust(BG, -14);
+  const BG_ACTIVE = colorAdjust(BG, 50);
+  const BORDER = BG_HOVER;
   const [custBadge, setCustBadge] = useState(() => Number(localStorage.getItem("badge-cust-sched") || 0));
 
   useEffect(() => {
