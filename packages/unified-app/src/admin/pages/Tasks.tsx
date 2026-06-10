@@ -126,7 +126,6 @@ export default function Tasks() {
               <th className="text-start px-4 py-3">{t("appointments.technician")}</th>
               <th className="text-start px-4 py-3">{t("common.date")}</th>
               <th className="text-start px-4 py-3">{t("common.status")}</th>
-              <th className="text-start px-4 py-3">{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -143,34 +142,16 @@ export default function Tasks() {
                     </td>
                     <td className="px-4 py-3">{task.technician?.name || "—"}</td>
                     <td className="px-4 py-3">{new Date(task.appointment?.scheduledDate).toLocaleDateString()}</td>
-                    <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[task.status] || ""}`}>{statusLabel[task.status] || task.status}</span></td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        {task.status === "APPROVED" && (
-                          <button onClick={e => { e.stopPropagation(); startTask.mutate(task.id); }} disabled={startTask.isPending}
-                            className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 disabled:opacity-50">
-                            {t("tasks.start")}
-                          </button>
-                        )}
-                        {task.status === "IN_PROGRESS" && (
-                          <>
-                            <button onClick={e => { e.stopPropagation(); completeTask.mutate(task.id); }} disabled={completeTask.isPending}
-                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50">
-                              {t("tasks.complete")}
-                            </button>
-                            <button onClick={e => { e.stopPropagation(); setPostponeModal({ task }); setPostponeReason(""); setPostponeDate(""); }}
-                              className="text-xs bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600">
-                              {t("tasks.postpone")}
-                            </button>
-                          </>
-                        )}
-                        <span className="text-xs text-slate-400 px-1">{isExpanded ? "▲" : "▼"}</span>
-                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[task.status] || ""}`}>
+                        {statusLabel[task.status] || task.status}
+                      </span>
+                      <span className="text-xs text-slate-300 ms-2">{isExpanded ? "▲" : "▼"}</span>
                     </td>
                   </tr>
                   {isExpanded && (
                     <tr className="bg-slate-50 border-b">
-                      <td colSpan={5} className="px-6 py-4">
+                      <td colSpan={4} className="px-6 py-4">
                         <div className="space-y-3">
                           {customer && (
                             <div className="space-y-1">

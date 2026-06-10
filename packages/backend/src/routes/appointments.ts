@@ -115,7 +115,7 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
         adminApproved,
         createdByRole: req.user!.role,
         createdById: req.user!.userId,
-        task: { create: { technicianId: body.technicianId } },
+        task: { create: { technicianId: body.technicianId ?? null } },
       },
       include: { customer: { include: { address: true } }, task: true },
     });

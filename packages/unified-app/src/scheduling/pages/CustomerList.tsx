@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 function formatCycle(cycle: string, freq: number, t: any) {
@@ -228,6 +229,7 @@ export default function CustomerList() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
+  const socket = useSocket();
   const [search, setSearch] = useState("");
   const [scheduleModal, setScheduleModal] = useState<any>(null);
   const [historyModal, setHistoryModal] = useState<any>(null);
@@ -235,6 +237,19 @@ export default function CustomerList() {
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-customers-sched"));
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => qc.invalidateQueries({ queryKey: ["customers-sched"] });
+    socket.on("customer:created", refresh);
+    socket.on("customer:updated", refresh);
+    socket.on("customer:deleted", refresh);
+    return () => {
+      socket.off("customer:created", refresh);
+      socket.off("customer:updated", refresh);
+      socket.off("customer:deleted", refresh);
+    };
+  }, [socket, qc]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["customers-sched", search],

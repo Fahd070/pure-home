@@ -42,9 +42,10 @@ export default function CallReports() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.customerId || !form.callDate || !form.employeeName) return;
+    const callDate = form.callDate.length === 16 ? form.callDate + ":00" : form.callDate;
     createMutation.mutate({
       customerId: form.customerId,
-      callDate: form.callDate,
+      callDate,
       notes: form.notes || undefined,
       employeeName: form.employeeName,
     });

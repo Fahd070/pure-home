@@ -6,11 +6,16 @@ import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
+import { useSettingsStore } from "../../store/settingsStore";
 
-const BG = "#000080";
-const BG_HOVER = "#00006e";
-const BG_ACTIVE = "#0000b0";
-const BORDER = "#00006e";
+function colorAdjust(hex: string, offset: number): string {
+  const n = parseInt((hex || '#000080').replace('#', ''), 16);
+  const r = Math.min(255, Math.max(0, (n >> 16) + offset));
+  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
+  const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
 const BADGE = "bg-red-500";
 
 const links = [
@@ -35,6 +40,11 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
+  const { settings } = useSettingsStore();
+  const BG = settings.primaryColor || "#000080";
+  const BG_HOVER = colorAdjust(BG, -14);
+  const BG_ACTIVE = colorAdjust(BG, 50);
+  const BORDER = BG_HOVER;
   const [custBadge, setCustBadge] = useState(() => Number(localStorage.getItem("badge-cust-admin") || 0));
   const [reportsBadge, setReportsBadge] = useState(() => Number(localStorage.getItem("badge-reports-admin") || 0));
   const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-admin") || 0));
