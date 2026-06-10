@@ -14,17 +14,19 @@ const BORDER = "#00006e";
 const BADGE = "bg-red-500";
 
 const links = [
-  { to: "/admin/dashboard",      label: "nav.dashboard",     icon: "⊞" },
-  { to: "/admin/customers",      label: "nav.customers",     icon: "👥", badgeKey: "customers" },
-  { to: "/admin/reports",        label: "nav.reports",       icon: "📊", badgeKey: "reports" },
-  { to: "/admin/appointments",   label: "nav.appointments",  icon: "📅" },
-  { to: "/admin/tasks",          label: "nav.tasks",         icon: "✓",  badgeKey: "tasks" },
-  { to: "/admin/technicians",    label: "nav.technicians",   icon: "🔧" },
-  { to: "/admin/messages",       label: "nav.messages",      icon: "📋", badgeKey: "messages" },
-  { to: "/admin/notifications",  label: "nav.notifications", icon: "🔔", badgeKey: "notifications" },
-  { to: "/admin/messaging",      label: "nav.messaging",     icon: "💬", badgeKey: "messaging" },
-  { to: "/admin/access-codes",   label: "nav.accessCodes",   icon: "🔑" },
-  { to: "/admin/settings",       label: "nav.settings",      icon: "⚙️" },
+  { to: "/admin/dashboard",             label: "nav.dashboard",            icon: "⊞" },
+  { to: "/admin/customers",             label: "nav.customers",            icon: "👥", badgeKey: "customers" },
+  { to: "/admin/reports",               label: "nav.reports",              icon: "📊", badgeKey: "reports" },
+  { to: "/admin/appointments",          label: "nav.appointments",         icon: "📅" },
+  { to: "/admin/urgent-appointments",   label: "nav.urgentAppointments",   icon: "🚨", badgeKey: "urgentAppts" },
+  { to: "/admin/tasks",                 label: "nav.tasks",                icon: "✓",  badgeKey: "tasks" },
+  { to: "/admin/technicians",           label: "nav.technicians",          icon: "🔧" },
+  { to: "/admin/expenses",              label: "nav.expenses",             icon: "💰", badgeKey: "expenses" },
+  { to: "/admin/messages",              label: "nav.messages",             icon: "📋", badgeKey: "messages" },
+  { to: "/admin/notifications",         label: "nav.notifications",        icon: "🔔", badgeKey: "notifications" },
+  { to: "/admin/messaging",             label: "nav.messaging",            icon: "💬", badgeKey: "messaging" },
+  { to: "/admin/access-codes",          label: "nav.accessCodes",          icon: "🔑" },
+  { to: "/admin/settings",              label: "nav.settings",             icon: "⚙️" },
 ];
 
 export default function Sidebar() {
@@ -35,6 +37,8 @@ export default function Sidebar() {
   useNotificationSound(socket);
   const [custBadge, setCustBadge] = useState(() => Number(localStorage.getItem("badge-cust-admin") || 0));
   const [reportsBadge, setReportsBadge] = useState(() => Number(localStorage.getItem("badge-reports-admin") || 0));
+  const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-admin") || 0));
+  const [expenseBadge, setExpenseBadge] = useState(() => Number(localStorage.getItem("badge-expenses-admin") || 0));
 
   const { data: pendingTaskCount, refetch: refetchPendingTasks } = useQuery({
     queryKey: ["tasks-pending-count"],
@@ -63,10 +67,14 @@ export default function Sidebar() {
     socket.on("customer:updated", incCust);
     socket.on("customer:created", incReports);
     socket.on("customer:updated", incReports);
+    const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-admin", String(v)); return v; });
+    const incExpense = () => setExpenseBadge(c => { const v = c + 1; localStorage.setItem("badge-expenses-admin", String(v)); return v; });
     const onApptCreated = () => refetchPendingTasks();
     const onTaskApproved = () => refetchPendingTasks();
     socket.on("appointment:created", onApptCreated);
     socket.on("task:approved", onTaskApproved);
+    socket.on("urgent_visit:submitted", incUrgent);
+    socket.on("expense:new", incExpense);
     return () => {
       socket.off("customer:created", incCust);
       socket.off("customer:updated", incCust);
@@ -74,6 +82,8 @@ export default function Sidebar() {
       socket.off("customer:updated", incReports);
       socket.off("appointment:created", onApptCreated);
       socket.off("task:approved", onTaskApproved);
+      socket.off("urgent_visit:submitted", incUrgent);
+      socket.off("expense:new", incExpense);
     };
   }, [socket, refetchPendingTasks]);
 
@@ -95,6 +105,18 @@ export default function Sidebar() {
     return () => window.removeEventListener("clear-badge-tasks-admin", clear);
   }, [refetchPendingTasks]);
 
+  useEffect(() => {
+    const clear = () => { localStorage.removeItem("badge-urgent-admin"); setUrgentBadge(0); };
+    window.addEventListener("clear-badge-urgent-admin", clear);
+    return () => window.removeEventListener("clear-badge-urgent-admin", clear);
+  }, []);
+
+  useEffect(() => {
+    const clear = () => { localStorage.removeItem("badge-expenses-admin"); setExpenseBadge(0); };
+    window.addEventListener("clear-badge-expenses-admin", clear);
+    return () => window.removeEventListener("clear-badge-expenses-admin", clear);
+  }, []);
+
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-admin"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
   const { data: dmCount } = useQuery({ queryKey: ["dm-unread-admin"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
   const { data: activityData } = useQuery({ queryKey: ["activity-feed"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
@@ -108,6 +130,8 @@ export default function Sidebar() {
     customers: custBadge,
     reports: reportsBadge,
     tasks: pendingTaskCount as number,
+    urgentAppts: urgentBadge,
+    expenses: expenseBadge,
   };
 
   return (

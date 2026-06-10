@@ -14,7 +14,7 @@ router.get('/stats', async (req, res, next) => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart.getTime() + 86400000);
 
-    const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount] = await Promise.all([
+    const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
       prisma.customer.count(),
       prisma.maintenanceTask.count({ where: { status: 'COMPLETED' } }),
       prisma.appointment.count({ where: { scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
@@ -34,9 +34,10 @@ router.get('/stats', async (req, res, next) => {
           NOT: { task: { status: 'COMPLETED' } }
         }
       }),
+      prisma.appointment.count({ where: { isUrgent: true } }),
     ]);
 
-    res.json({ success: true, data: { total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount } });
+    res.json({ success: true, data: { total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
   } catch (e) { next(e); }
 });
 

@@ -93,6 +93,7 @@ export default function Customers() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
+  const [exportingXlsx, setExportingXlsx] = useState(false);
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-customers-admin"));
@@ -134,6 +135,41 @@ export default function Customers() {
     onError: () => toast.error(t("common.error"))
   });
 
+  async function exportAllToExcel() {
+    setExportingXlsx(true);
+    try {
+      const { data: resp } = await api.get("/customers", { params: { limit: 2000, includeSchedule: true } });
+      const all: any[] = resp.data || [];
+      const XLSX = await import("xlsx");
+      const rows = all.map((c: any) => ({
+        [isAr ? "الاسم" : "Name"]: c.name,
+        [isAr ? "الجوال" : "Phone"]: c.phone,
+        [isAr ? "المدينة" : "City"]: c.address?.city || "",
+        [isAr ? "الحي" : "District"]: c.address?.district || "",
+        [isAr ? "الشارع" : "Street"]: c.address?.street || "",
+        [isAr ? "تاريخ التسجيل" : "Reg. Date"]: new Date(c.createdAt).toLocaleDateString(),
+        [isAr ? "تاريخ التركيب" : "Install Date"]: c.installationDate ? new Date(c.installationDate).toLocaleDateString() : "",
+        [isAr ? "دورة الصيانة" : "Cycle"]: formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t),
+        [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString() : "",
+        [isAr ? "الصيانة القادمة" : "Next Maint."]: c.nextMaintenance ? new Date(c.nextMaintenance).toLocaleDateString() : "",
+        [isAr ? "الحالة" : "Status"]: c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive"),
+        [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, isAr ? "العملاء" : "Customers");
+      const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `customers-${new Date().toISOString().slice(0,10)}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("reports.savedTo"));
+    } catch {
+      toast.error(t("common.error"));
+    } finally { setExportingXlsx(false); }
+  }
+
   const deleteAllCustomers = useMutation({
     mutationFn: () => api.delete("/customers"),
     onSuccess: (res) => {
@@ -157,10 +193,16 @@ export default function Customers() {
           + {t("customers.add")}
         </button>
         {(data?.meta?.total ?? 0) > 0 && (
-          <button onClick={() => { setShowDeleteAll(true); setDeleteAllConfirmText(""); }}
-            className="text-xs text-red-600 border border-red-300 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors font-medium">
-            🗑 {t("customers.deleteAll")}
-          </button>
+          <>
+            <button onClick={exportAllToExcel} disabled={exportingXlsx}
+              className="text-sm bg-green-700 text-white px-3 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 font-medium">
+              📊 {exportingXlsx ? t("reports.generating") : t("reports.exportCustomers")}
+            </button>
+            <button onClick={() => { setShowDeleteAll(true); setDeleteAllConfirmText(""); }}
+              className="text-xs text-red-600 border border-red-300 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors font-medium">
+              🗑 {t("customers.deleteAll")}
+            </button>
+          </>
         )}
       </div>
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -171,6 +213,8 @@ export default function Customers() {
                 <th className="text-start px-4 py-3">{t("common.name")}</th>
                 <th className="text-start px-4 py-3">{t("common.phone")}</th>
                 <th className="text-start px-4 py-3">{t("customers.maintenanceCycle")}</th>
+                <th className="text-start px-4 py-3">{t("reports.installationDate")}</th>
+                <th className="text-start px-4 py-3">{t("reports.lastMaintenance")}</th>
                 <th className="text-start px-4 py-3">{t("reports.nextMaintenance")}</th>
                 <th className="text-start px-4 py-3">{t("common.status")}</th>
                 <th className="text-start px-4 py-3">{t("common.actions")}</th>
@@ -182,6 +226,12 @@ export default function Customers() {
                   <td className="px-4 py-3 font-medium cursor-pointer text-blue-700 hover:underline" onClick={() => navigate(`/admin/customers/${c.id}`)}>{c.name}</td>
                   <td className="px-4 py-3">{c.phone}</td>
                   <td className="px-4 py-3 text-xs font-medium text-slate-600">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                    {c.installationDate ? new Date(c.installationDate).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                    {c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="space-y-1">
                       <MaintenanceBadge c={c} t={t} />

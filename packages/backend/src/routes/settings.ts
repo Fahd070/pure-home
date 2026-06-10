@@ -21,6 +21,10 @@ const DEFAULT_SETTINGS = {
   notificationsEnabled: true,
   soundEnabled: true,
   soundVolume: 70,
+  primaryColor: '#1E6FFF',
+  secondaryColor: '#0F1B2D',
+  buttonColor: '#1E6FFF',
+  cardColor: '#FFFFFF',
 };
 
 function rowToSettings(row: any) {
@@ -34,6 +38,10 @@ function rowToSettings(row: any) {
     notificationsEnabled: row?.notificationsEnabled ?? true,
     soundEnabled:         row?.soundEnabled         ?? true,
     soundVolume:          typeof row?.soundVolume === 'number' ? row.soundVolume : 70,
+    primaryColor:         row?.primaryColor         ?? '#1E6FFF',
+    secondaryColor:       row?.secondaryColor       ?? '#0F1B2D',
+    buttonColor:          row?.buttonColor          ?? '#1E6FFF',
+    cardColor:            row?.cardColor            ?? '#FFFFFF',
   };
 }
 
@@ -59,6 +67,10 @@ const updateSchema = z.object({
   notificationsEnabled: z.boolean().optional(),
   soundEnabled:         z.boolean().optional(),
   soundVolume:          z.number().int().min(0).max(100).optional(),
+  primaryColor:         z.string().max(20).optional(),
+  secondaryColor:       z.string().max(20).optional(),
+  buttonColor:          z.string().max(20).optional(),
+  cardColor:            z.string().max(20).optional(),
 });
 
 router.put('/', async (req: AuthRequest, res, next) => {
@@ -71,6 +83,7 @@ router.put('/', async (req: AuthRequest, res, next) => {
       `INSERT INTO "user_settings" (
         "id","userId","theme","fontSize","interfaceScale","background",
         "highContrast","improvedReadability","notificationsEnabled","soundEnabled","soundVolume",
+        "primaryColor","secondaryColor","buttonColor","cardColor",
         "updatedAt","createdAt"
        ) VALUES (
         $1,$2,
@@ -78,6 +91,8 @@ router.put('/', async (req: AuthRequest, res, next) => {
         COALESCE($7::boolean,false),COALESCE($8::boolean,false),
         COALESCE($9::boolean,true),COALESCE($10::boolean,true),
         COALESCE($11::integer,70),
+        COALESCE($12,'#1E6FFF'),COALESCE($13,'#0F1B2D'),
+        COALESCE($14,'#1E6FFF'),COALESCE($15,'#FFFFFF'),
         CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
        )
        ON CONFLICT ("userId") DO UPDATE SET
@@ -90,6 +105,10 @@ router.put('/', async (req: AuthRequest, res, next) => {
         "notificationsEnabled" = COALESCE($9::boolean,"user_settings"."notificationsEnabled"),
         "soundEnabled"         = COALESCE($10::boolean,"user_settings"."soundEnabled"),
         "soundVolume"          = COALESCE($11::integer,"user_settings"."soundVolume"),
+        "primaryColor"         = COALESCE($12,"user_settings"."primaryColor"),
+        "secondaryColor"       = COALESCE($13,"user_settings"."secondaryColor"),
+        "buttonColor"          = COALESCE($14,"user_settings"."buttonColor"),
+        "cardColor"            = COALESCE($15,"user_settings"."cardColor"),
         "updatedAt"            = CURRENT_TIMESTAMP`,
       id, userId,
       body.theme             ?? null,
@@ -101,6 +120,10 @@ router.put('/', async (req: AuthRequest, res, next) => {
       body.notificationsEnabled   ?? null,
       body.soundEnabled           ?? null,
       body.soundVolume            ?? null,
+      body.primaryColor           ?? null,
+      body.secondaryColor         ?? null,
+      body.buttonColor            ?? null,
+      body.cardColor              ?? null,
     );
 
     const rows = await prisma.$queryRawUnsafe<any[]>(

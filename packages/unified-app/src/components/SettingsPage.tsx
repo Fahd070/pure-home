@@ -61,6 +61,81 @@ function Toggle({ value, onChange, label, desc }: { value: boolean; onChange: (v
   );
 }
 
+// ── Theme Color Section ───────────────────────────────────────────────────────
+function ThemeColorSection({ t, settings, change }: { t: any; settings: any; change: any }) {
+  const defaults = { primaryColor: "#000080", secondaryColor: "#f8fafc", buttonColor: "#000080", cardColor: "#ffffff" };
+  const [draft, setDraft] = React.useState({
+    primaryColor: settings.primaryColor || defaults.primaryColor,
+    secondaryColor: settings.secondaryColor || defaults.secondaryColor,
+    buttonColor: settings.buttonColor || defaults.buttonColor,
+    cardColor: settings.cardColor || defaults.cardColor,
+  });
+
+  const labelMap: Record<string, string> = {
+    primaryColor:   t("settings.primaryColor"),
+    secondaryColor: t("settings.secondaryColor"),
+    buttonColor:    t("settings.buttonColor"),
+    cardColor:      t("settings.cardColor"),
+  };
+
+  function handleApplyAndSave() {
+    const h = document.documentElement;
+    h.style.setProperty("--color-primary", draft.primaryColor);
+    h.style.setProperty("--color-secondary", draft.secondaryColor);
+    h.style.setProperty("--color-button", draft.buttonColor);
+    h.style.setProperty("--color-card", draft.cardColor);
+    Object.entries(draft).forEach(([k, v]) => change(k as any, v));
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-2xl">🖌️</span>
+        <div>
+          <h3 className="font-semibold text-slate-800 text-sm">{t("settings.themeColors")}</h3>
+          <p className="text-xs text-slate-400">{t("settings.themeColorsDesc")}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        {(["primaryColor","secondaryColor","buttonColor","cardColor"] as const).map(key => (
+          <div key={key} className="flex items-center gap-3">
+            <input type="color" value={draft[key]} onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
+              className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200 p-0.5" />
+            <div>
+              <p className="text-xs font-medium text-slate-700">{labelMap[key]}</p>
+              <p className="text-xs text-slate-400 font-mono">{draft[key]}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Live Preview */}
+      <div className="border rounded-xl p-4 mb-4 space-y-2" style={{ backgroundColor: draft.cardColor }}>
+        <p className="text-xs font-semibold text-slate-500 mb-2">
+          {t("settings.livePreview") || "Live Preview"}
+        </p>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: draft.primaryColor }}>PH</div>
+          <span className="text-sm font-semibold" style={{ color: draft.primaryColor }}>Pure Home</span>
+        </div>
+        <button className="text-xs text-white px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: draft.buttonColor }}>
+          {t("common.save")}
+        </button>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={handleApplyAndSave}
+          className="flex-1 text-white text-sm py-2 rounded-lg font-medium hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: draft.primaryColor }}>
+          ✓ {t("settings.applyColors") || "Apply & Save"}
+        </button>
+        <button onClick={() => setDraft({ ...defaults })}
+          className="text-xs text-slate-500 hover:text-slate-700 border px-3 py-2 rounded-lg hover:bg-slate-50">
+          ↺ {t("settings.resetColors")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function SettingsPage({ api, socket }: Props) {
   const { t } = useTranslation();
@@ -179,6 +254,9 @@ export default function SettingsPage({ api, socket }: Props) {
           </button>
         </div>
       </Section>
+
+      {/* Theme Colors */}
+      <ThemeColorSection t={t} settings={settings} change={change} />
     </div>
   );
 }

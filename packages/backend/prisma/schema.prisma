@@ -57,6 +57,9 @@ model User {
   auditLogs           AuditLog[]
   messages            Message[]
   sentDirectMessages  DirectMessage[]      @relation("DMSender")
+  callReports         CallReport[]         @relation("CallReportCreatedBy")
+  expenses            Expense[]            @relation("ExpenseByTechnician")
+  urgentVisits        UrgentVisitRecord[]  @relation("UrgentVisitBy")
   @@map("users")
 }
 
@@ -69,6 +72,7 @@ model Customer {
   isActive             Boolean          @default(true)
   activityDismissed    Boolean          @default(false)
   notes                String?
+  installationDate     DateTime?
   version              Int              @default(1)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
@@ -76,6 +80,7 @@ model Customer {
   createdBy            User?            @relation("CustomerCreatedBy", fields: [createdById], references: [id])
   address              Address?
   appointments         Appointment[]
+  callReports          CallReport[]
   @@map("customers")
 }
 
@@ -94,37 +99,46 @@ model Address {
 }
 
 model Appointment {
-  id            String            @id @default(uuid())
-  type          AppointmentType
-  status        AppointmentStatus @default(SCHEDULED)
-  scheduledDate DateTime
-  notes         String?
-  version       Int               @default(1)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  customerId    String
-  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  createdById   String?
-  createdBy     User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
-  task          MaintenanceTask?
+  id                  String            @id @default(uuid())
+  type                AppointmentType
+  status              AppointmentStatus @default(SCHEDULED)
+  scheduledDate       DateTime
+  notes               String?
+  urgentLocation      String?
+  isUrgent            Boolean           @default(false)
+  adminApproved       Boolean           @default(false)
+  visibleToScheduling Boolean           @default(true)
+  createdByRole       String?
+  version             Int               @default(1)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  customerId          String?
+  customer            Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdById         String?
+  createdBy           User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  task                MaintenanceTask?
+  urgentVisitRecord   UrgentVisitRecord?
   @@map("appointments")
 }
 
 model MaintenanceTask {
-  id            String       @id @default(uuid())
-  status        TaskStatus   @default(PENDING_APPROVAL)
-  notes         String?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  version       Int          @default(1)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  appointmentId String       @unique
-  appointment   Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  technicianId  String?
-  technician    User?        @relation("TaskAssignedTo", fields: [technicianId], references: [id])
-  history       TaskHistory[]
-  postponements PostponementRecord[]
+  id                    String       @id @default(uuid())
+  status                TaskStatus   @default(PENDING_APPROVAL)
+  notes                 String?
+  serviceDetails        String?
+  completionAmount      Float?
+  completionPaymentMethod String?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  version               Int          @default(1)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  appointmentId         String       @unique
+  appointment           Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  technicianId          String?
+  technician            User?        @relation("TaskAssignedTo", fields: [technicianId], references: [id])
+  history               TaskHistory[]
+  postponements         PostponementRecord[]
   @@map("maintenance_tasks")
 }
 
@@ -222,4 +236,51 @@ model SystemConfig {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   @@map("system_configs")
+}
+
+model CallReport {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  employeeName String
+  callDate     DateTime
+  notes        String?
+  createdAt    DateTime @default(now())
+  createdById  String?
+  createdBy    User?    @relation("CallReportCreatedBy", fields: [createdById], references: [id])
+  @@map("call_reports")
+}
+
+model Expense {
+  id           String   @id @default(uuid())
+  amount       Float
+  category     String
+  description  String?
+  date         DateTime
+  receiptImage String?
+  status       String   @default("PENDING")
+  technicianId String
+  technician   User     @relation("ExpenseByTechnician", fields: [technicianId], references: [id])
+  createdAt    DateTime @default(now())
+  @@map("expenses")
+}
+
+model UrgentVisitRecord {
+  id              String      @id @default(uuid())
+  appointmentId   String      @unique
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  customerName    String?
+  customerPhone   String?
+  customerDetails String?
+  serviceNotes    String?
+  serviceType     String?
+  customerInfo    String?
+  serviceDetails  String?
+  notes           String?
+  paymentMethod   String
+  amount          Float?
+  submittedById   String?
+  submittedBy     User?       @relation("UrgentVisitBy", fields: [submittedById], references: [id])
+  createdAt       DateTime    @default(now())
+  @@map("urgent_visit_records")
 }

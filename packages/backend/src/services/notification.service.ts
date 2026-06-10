@@ -35,10 +35,11 @@ async function generateReminders() {
         });
         if (existing) continue;
 
+        const customerName = appt.customer?.name || 'زيارة عاجلة';
         const titleAr = days === 1
-          ? `تذكير: صيانة "${appt.customer.name}" غداً`
-          : `تذكير: صيانة "${appt.customer.name}" بعد ${days} أيام`;
-        const bodyAr = `العميل ${appt.customer.name} لديه موعد صيانة بعد ${days === 1 ? 'يوم' : days + ' أيام'}. [${key}]`;
+          ? `تذكير: صيانة "${customerName}" غداً`
+          : `تذكير: صيانة "${customerName}" بعد ${days} أيام`;
+        const bodyAr = `العميل ${customerName} لديه موعد صيانة بعد ${days === 1 ? 'يوم' : days + ' أيام'}. [${key}]`;
 
         await prisma.notification.createMany({
           data: users.map((u: { id: string }) => ({
@@ -66,8 +67,8 @@ async function generateReminders() {
       await prisma.notification.createMany({
         data: users.map((u: { id: string }) => ({
           userId: u.id,
-          title: `الصيانة اليوم: "${appt.customer.name}"`,
-          body: `موعد صيانة العميل ${appt.customer.name} اليوم. [${key}]`,
+          title: `الصيانة اليوم: "${appt.customer?.name || 'زيارة عاجلة'}"`,
+          body: `موعد صيانة العميل ${appt.customer?.name || 'زيارة عاجلة'} اليوم. [${key}]`,
           type: 'APPOINTMENT_REMINDER'
         }))
       });
@@ -94,8 +95,8 @@ async function generateReminders() {
       await prisma.notification.createMany({
         data: users.map((u: { id: string }) => ({
           userId: u.id,
-          title: `⚠️ صيانة متأخرة: "${appt.customer.name}"`,
-          body: `صيانة العميل ${appt.customer.name} متأخرة منذ ${daysLate === 1 ? 'يوم' : daysLate + ' أيام'}. [${key}]`,
+          title: `⚠️ صيانة متأخرة: "${appt.customer?.name || 'زيارة عاجلة'}"`,
+          body: `صيانة العميل ${appt.customer?.name || 'زيارة عاجلة'} متأخرة منذ ${daysLate === 1 ? 'يوم' : daysLate + ' أيام'}. [${key}]`,
           type: 'APPOINTMENT_REMINDER'
         }))
       });

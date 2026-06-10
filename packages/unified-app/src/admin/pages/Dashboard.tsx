@@ -173,6 +173,7 @@ export default function Dashboard() {
     { label: t("dashboard.dueToday"),              key: "todayCount",     endpoint: "today",                   color: "border-orange-500" },
     { label: t("dashboard.suspendedPostponed"),    key: "pending",        endpoint: "postponed",               color: "border-yellow-500" },
     { label: t("dashboard.overdueMaintenance"),    key: "pendingApproval",endpoint: "overdue",                 color: "border-red-500" },
+    { label: t("dashboard.urgentAppointments"),    key: "urgentCount",    endpoint: "today",                   color: "border-rose-500" },
   ];
 
   return (

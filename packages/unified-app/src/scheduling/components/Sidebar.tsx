@@ -14,11 +14,14 @@ const BORDER = "#006600";
 const BADGE = "bg-red-500";
 
 const links = [
-  { to: "/scheduling/customers",    label: "nav.customers",    icon: "👥", badgeKey: "customers" },
-  { to: "/scheduling/messages",     label: "nav.messages",     icon: "📋", badgeKey: "messages" },
-  { to: "/scheduling/notifications",label: "nav.notifications",icon: "🔔", badgeKey: "notifications" },
-  { to: "/scheduling/messaging",    label: "nav.messaging",    icon: "💬", badgeKey: "messaging" },
-  { to: "/scheduling/settings",    label: "nav.settings",     icon: "⚙️" },
+  { to: "/scheduling/dashboard",     label: "nav.dashboard",     icon: "⊞" },
+  { to: "/scheduling/customers",     label: "nav.customers",     icon: "👥", badgeKey: "customers" },
+  { to: "/scheduling/customers/add", label: "customers.add",     icon: "➕" },
+  { to: "/scheduling/call-reports",  label: "nav.callReports",   icon: "📞" },
+  { to: "/scheduling/messages",      label: "nav.messages",      icon: "📋", badgeKey: "messages" },
+  { to: "/scheduling/notifications", label: "nav.notifications", icon: "🔔", badgeKey: "notifications" },
+  { to: "/scheduling/messaging",     label: "nav.messaging",     icon: "💬", badgeKey: "messaging" },
+  { to: "/scheduling/settings",      label: "nav.settings",      icon: "⚙️" },
 ];
 
 export default function Sidebar() {
