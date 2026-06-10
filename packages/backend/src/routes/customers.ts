@@ -19,7 +19,9 @@ const customerSchema = z.object({
   name: z.string().min(1).max(200), phone: z.string().regex(/^05\d{8}$/),
   maintenanceCycle: z.enum(['DAILY','WEEKLY','MONTHLY']),
   maintenanceFrequency: z.number().int().positive().max(365).default(1),
-  notes: z.string().max(2000).optional(), address: addressSchema,
+  notes: z.string().max(2000).optional(),
+  installationDate: z.string().optional(),
+  address: addressSchema,
 });
 
 function conflict(res: any, current: number, yours: number) {
@@ -96,12 +98,17 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
-    const { address, ...rest } = body;
+    const { address, installationDate, ...rest } = body as any;
     const customer = await prisma.customer.create({
-      data: { ...rest, createdById: req.user!.userId, address: { create: address } },
+      data: {
+        ...rest,
+        installationDate: installationDate ? new Date(installationDate) : undefined,
+        createdById: req.user!.userId,
+        address: { create: address },
+      },
       include: { address: true },
     });
     await writeAudit({
@@ -115,10 +122,10 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.partial().parse(req.body);
-    const { address, version, ...rest } = body as any;
+    const { address, version, installationDate, ...rest } = body as any;
 
     const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
@@ -126,7 +133,12 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => 
 
     const customer = await prisma.customer.update({
       where: { id: req.params.id },
-      data: { ...rest, version: { increment: 1 }, ...(address ? { address: { update: address } } : {}) },
+      data: {
+        ...rest,
+        ...(installationDate !== undefined ? { installationDate: installationDate ? new Date(installationDate) : null } : {}),
+        version: { increment: 1 },
+        ...(address ? { address: { update: address } } : {}),
+      },
       include: { address: true },
     });
     await writeAudit({

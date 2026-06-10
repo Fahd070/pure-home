@@ -20,11 +20,16 @@ import AdminMessages from "./admin/pages/Messages";
 import AdminNotifications from "./admin/pages/Notifications";
 import AdminDirectMessages from "./admin/pages/DirectMessages";
 import AdminReports from "./admin/pages/Reports";
+import AdminUrgentAppointments from "./admin/pages/UrgentAppointments";
+import AdminExpenses from "./admin/pages/Expenses";
 import AccessCodes from "./admin/pages/AccessCodes";
 import AdminSettings from "./admin/pages/Settings";
 
 import SchedulingLayout from "./scheduling/components/Layout";
 import CustomerList from "./scheduling/pages/CustomerList";
+import SchedDashboard from "./scheduling/pages/Dashboard";
+import SchedAddCustomer from "./scheduling/pages/AddCustomer";
+import SchedCallReports from "./scheduling/pages/CallReports";
 import SchedMessages from "./scheduling/pages/Messages";
 import SchedNotifications from "./scheduling/pages/Notifications";
 import SchedDirectMessages from "./scheduling/pages/DirectMessages";
@@ -33,6 +38,8 @@ import SchedSettings from "./scheduling/pages/Settings";
 import TechnicianLayout from "./technician/components/Layout";
 import WorkQueue from "./technician/pages/WorkQueue";
 import TaskDetail from "./technician/pages/TaskDetail";
+import TechUrgentAppointments from "./technician/pages/UrgentAppointments";
+import TechExpenses from "./technician/pages/Expenses";
 import TechMessages from "./technician/pages/Messages";
 import TechNotifications from "./technician/pages/Notifications";
 import TechDirectMessages from "./technician/pages/DirectMessages";
@@ -74,8 +81,10 @@ function AppShell() {
             <Route path="customers/add" element={<AddCustomer />} />
             <Route path="customers/:id" element={<CustomerDetail />} />
             <Route path="appointments" element={<AdminAppointments />} />
+            <Route path="urgent-appointments" element={<AdminUrgentAppointments />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="technicians" element={<Technicians />} />
+            <Route path="expenses" element={<AdminExpenses />} />
             <Route path="messages" element={<AdminMessages />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="messaging" element={<AdminDirectMessages />} />
@@ -85,8 +94,11 @@ function AppShell() {
           </Route>
 
           <Route path="/scheduling" element={<SchedulingGuard><SchedulingLayout /></SchedulingGuard>}>
-            <Route index element={<Navigate to="/scheduling/customers" replace />} />
+            <Route index element={<Navigate to="/scheduling/dashboard" replace />} />
+            <Route path="dashboard" element={<SchedDashboard />} />
             <Route path="customers" element={<CustomerList />} />
+            <Route path="customers/add" element={<SchedAddCustomer />} />
+            <Route path="call-reports" element={<SchedCallReports />} />
             <Route path="messages" element={<SchedMessages />} />
             <Route path="notifications" element={<SchedNotifications />} />
             <Route path="messaging" element={<SchedDirectMessages />} />
@@ -97,6 +109,8 @@ function AppShell() {
             <Route index element={<Navigate to="/technician/queue" replace />} />
             <Route path="queue" element={<WorkQueue />} />
             <Route path="queue/:id" element={<TaskDetail />} />
+            <Route path="urgent-appointments" element={<TechUrgentAppointments />} />
+            <Route path="expenses" element={<TechExpenses />} />
             <Route path="messages" element={<TechMessages />} />
             <Route path="notifications" element={<TechNotifications />} />
             <Route path="messaging" element={<TechDirectMessages />} />

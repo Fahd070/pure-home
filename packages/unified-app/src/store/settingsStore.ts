@@ -11,6 +11,10 @@ export interface UserSettings {
   notificationsEnabled: boolean;
   soundEnabled:         boolean;
   soundVolume:          number;
+  primaryColor?:        string;
+  secondaryColor?:      string;
+  buttonColor?:         string;
+  cardColor?:           string;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -23,6 +27,10 @@ export const DEFAULT_SETTINGS: UserSettings = {
   notificationsEnabled: true,
   soundEnabled:         true,
   soundVolume:          70,
+  primaryColor:         "#000080",
+  secondaryColor:       "#f8fafc",
+  buttonColor:          "#000080",
+  cardColor:            "#ffffff",
 };
 
 export function applySettings(s: UserSettings) {
@@ -33,6 +41,10 @@ export function applySettings(s: UserSettings) {
   h.setAttribute("data-bg",          s.background);
   h.setAttribute("data-contrast",    s.highContrast        ? "high" : "normal");
   h.setAttribute("data-readability", s.improvedReadability ? "on"   : "off");
+  if (s.primaryColor)   h.style.setProperty("--color-primary",   s.primaryColor);
+  if (s.secondaryColor) h.style.setProperty("--color-secondary", s.secondaryColor);
+  if (s.buttonColor)    h.style.setProperty("--color-button",    s.buttonColor);
+  if (s.cardColor)      h.style.setProperty("--color-card",      s.cardColor);
 }
 
 interface SettingsStore {

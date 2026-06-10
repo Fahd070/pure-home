@@ -14,6 +14,9 @@ import directMessageRoutes from './routes/direct-messages';
 import reportRoutes from './routes/reports';
 import configRoutes from './routes/config';
 import settingsRoutes from './routes/settings';
+import callReportRoutes from './routes/call-reports';
+import expenseRoutes from './routes/expenses';
+import urgentVisitRoutes from './routes/urgent-visits';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './prisma';
 
@@ -35,7 +38,7 @@ app.use(helmet());
 app.use(cors({
   origin: (origin, cb) => isAllowedOrigin(origin) ? cb(null, true) : cb(new Error('CORS: origin not allowed')),
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { success: false, message: 'Too many attempts, try again later' } });
@@ -76,6 +79,9 @@ app.use('/api/direct-messages', directMessageRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/call-reports', callReportRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/urgent-visits', urgentVisitRoutes);
 
 app.use(errorHandler);
 export default app;

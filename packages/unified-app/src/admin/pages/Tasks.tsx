@@ -10,12 +10,27 @@ const STATUS_COLORS: Record<string, string> = {
   IN_PROGRESS: "bg-indigo-100 text-indigo-700", COMPLETED: "bg-green-100 text-green-700", POSTPONED: "bg-orange-100 text-orange-700"
 };
 
+const PAYMENT_LABELS_AR: Record<string, string> = { CASH: "نقداً", BANK_TRANSFER: "تحويل بنكي" };
+const PAYMENT_LABELS_EN: Record<string, string> = { CASH: "Cash", BANK_TRANSFER: "Bank Transfer" };
+
+function DetailRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-2 text-xs">
+      <span className="text-slate-400 min-w-[100px] shrink-0">{label}:</span>
+      <span className="text-slate-700 break-all">{value}</span>
+    </div>
+  );
+}
+
 export default function Tasks() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isAr = i18n.language === "ar";
   const qc = useQueryClient();
   const socket = useSocket();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [techId, setTechId] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-tasks-admin"));
@@ -42,10 +57,37 @@ export default function Tasks() {
   const { data } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks").then(r => r.data.data) });
   const { data: techs } = useQuery({ queryKey: ["technicians"], queryFn: () => api.get("/technicians").then(r => r.data.data) });
 
+  const [postponeModal, setPostponeModal] = useState<{ task: any } | null>(null);
+  const [postponeReason, setPostponeReason] = useState("");
+  const [postponeDate, setPostponeDate] = useState("");
+
   const approve = useMutation({
     mutationFn: ({ id, technicianId }: { id: string; technicianId: string }) => api.patch(`/tasks/${id}/approve`, { technicianId }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); toast.success(t("common.success")); setSelectedTask(null); setTechId(""); }
   });
+
+  const startTask = useMutation({
+    mutationFn: (id: string) => api.patch(`/tasks/${id}/start`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); toast.success(t("common.success")); }
+  });
+
+  const completeTask = useMutation({
+    mutationFn: (id: string) => api.patch(`/tasks/${id}/complete`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); toast.success(t("common.success")); }
+  });
+
+  const postponeTask = useMutation({
+    mutationFn: ({ id, reason, newDate }: { id: string; reason: string; newDate: string }) =>
+      api.patch(`/tasks/${id}/postpone`, { reason, newDate }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(t("common.success"));
+      setPostponeModal(null);
+      setPostponeReason(""); setPostponeDate("");
+    }
+  });
+
+  const PAYMENT_LABELS = isAr ? PAYMENT_LABELS_AR : PAYMENT_LABELS_EN;
 
   const statusLabel: Record<string, string> = {
     PENDING_APPROVAL: t("tasks.pendingApproval"), APPROVED: t("tasks.approved"),
@@ -64,7 +106,7 @@ export default function Tasks() {
             {pending.map((task: any) => (
               <div key={task.id} className="bg-white rounded-lg p-3 flex justify-between items-center">
                 <div>
-                  <p className="font-medium text-sm">{task.appointment?.customer?.name}</p>
+                  <p className="font-medium text-sm">{task.appointment?.customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</p>
                   <p className="text-xs text-slate-400">{new Date(task.appointment?.scheduledDate).toLocaleDateString()} — {task.appointment?.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</p>
                 </div>
                 <button onClick={() => { setSelectedTask(task); setTechId(techs?.[0]?.id || ""); }}
@@ -84,25 +126,104 @@ export default function Tasks() {
               <th className="text-start px-4 py-3">{t("appointments.technician")}</th>
               <th className="text-start px-4 py-3">{t("common.date")}</th>
               <th className="text-start px-4 py-3">{t("common.status")}</th>
+              <th className="text-start px-4 py-3">{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {others.map((task: any) => (
-              <tr key={task.id} className="border-b hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium">{task.appointment?.customer?.name}</td>
-                <td className="px-4 py-3">{task.technician?.name || "—"}</td>
-                <td className="px-4 py-3">{new Date(task.appointment?.scheduledDate).toLocaleDateString()}</td>
-                <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[task.status] || ""}`}>{statusLabel[task.status] || task.status}</span></td>
-              </tr>
-            ))}
+            {others.map((task: any) => {
+              const isExpanded = expandedId === task.id;
+              const customer = task.appointment?.customer;
+              const postponement = task.postponements?.[0];
+              return (
+                <React.Fragment key={task.id}>
+                  <tr className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : task.id)}>
+                    <td className="px-4 py-3 font-medium">
+                      {customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}
+                      {task.appointment?.isUrgent && <span className="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">🚨</span>}
+                    </td>
+                    <td className="px-4 py-3">{task.technician?.name || "—"}</td>
+                    <td className="px-4 py-3">{new Date(task.appointment?.scheduledDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[task.status] || ""}`}>{statusLabel[task.status] || task.status}</span></td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        {task.status === "APPROVED" && (
+                          <button onClick={e => { e.stopPropagation(); startTask.mutate(task.id); }} disabled={startTask.isPending}
+                            className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 disabled:opacity-50">
+                            {t("tasks.start")}
+                          </button>
+                        )}
+                        {task.status === "IN_PROGRESS" && (
+                          <>
+                            <button onClick={e => { e.stopPropagation(); completeTask.mutate(task.id); }} disabled={completeTask.isPending}
+                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50">
+                              {t("tasks.complete")}
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); setPostponeModal({ task }); setPostponeReason(""); setPostponeDate(""); }}
+                              className="text-xs bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600">
+                              {t("tasks.postpone")}
+                            </button>
+                          </>
+                        )}
+                        <span className="text-xs text-slate-400 px-1">{isExpanded ? "▲" : "▼"}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="bg-slate-50 border-b">
+                      <td colSpan={5} className="px-6 py-4">
+                        <div className="space-y-3">
+                          {customer && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{isAr ? "معلومات العميل" : "Customer Info"}</p>
+                              <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                <DetailRow label={isAr ? "الاسم" : "Name"} value={customer.name} />
+                                <DetailRow label={isAr ? "الجوال" : "Phone"} value={customer.phone} />
+                                {customer.address && <>
+                                  <DetailRow label={isAr ? "المدينة" : "City"} value={customer.address.city} />
+                                  <DetailRow label={isAr ? "الحي" : "District"} value={customer.address.district} />
+                                </>}
+                              </div>
+                            </div>
+                          )}
+                          {task.status === "POSTPONED" && postponement && (
+                            <div className="space-y-1 border-t pt-3">
+                              <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">{isAr ? "تفاصيل التأجيل" : "Postponement Details"}</p>
+                              <DetailRow label={t("tasks.postponementReason")} value={postponement.reason} />
+                              {postponement.newDate && <DetailRow label={t("tasks.newDate")} value={new Date(postponement.newDate).toLocaleDateString(isAr ? "ar-SA" : undefined)} />}
+                              <DetailRow label={isAr ? "ملاحظات الفني" : "Technician Notes"} value={task.notes} />
+                            </div>
+                          )}
+                          {task.status === "COMPLETED" && (
+                            <div className="space-y-1 border-t pt-3">
+                              <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">{isAr ? "تفاصيل الإتمام" : "Completion Details"}</p>
+                              <DetailRow label={t("tasks.completionNotes")} value={task.notes} />
+                              <DetailRow label={t("tasks.serviceDetails")} value={task.serviceDetails} />
+                              <DetailRow label={t("tasks.paymentMethod")} value={task.completionPaymentMethod ? (PAYMENT_LABELS[task.completionPaymentMethod] || task.completionPaymentMethod) : null} />
+                              {task.completionAmount != null && (
+                                <div className="flex gap-2 text-xs">
+                                  <span className="text-slate-400 min-w-[100px]">{t("tasks.amount")}:</span>
+                                  <span className="font-semibold text-slate-800">{task.completionAmount.toFixed(2)} SAR</span>
+                                </div>
+                              )}
+                              {task.completedAt && <DetailRow label={t("tasks.completionDate")} value={new Date(task.completedAt).toLocaleString(isAr ? "ar-SA" : undefined)} />}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
       {selectedTask && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-80 shadow-xl">
             <h3 className="font-semibold mb-4">{t("tasks.approve")}</h3>
-            <p className="text-sm text-slate-600 mb-3">{selectedTask.appointment?.customer?.name}</p>
+            <p className="text-sm text-slate-600 mb-3">{selectedTask.appointment?.customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</p>
             <div className="mb-4">
               <label className="block text-sm font-medium mb-1">{t("tasks.selectTechnician")}</label>
               <select value={techId} onChange={e => setTechId(e.target.value)} className="w-full border rounded-lg px-3 py-2">
@@ -115,6 +236,33 @@ export default function Tasks() {
                 {approve.isPending ? t("common.loading") : t("common.save")}
               </button>
               <button onClick={() => setSelectedTask(null)} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {postponeModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-96 shadow-xl space-y-4">
+            <h3 className="font-semibold">{t("tasks.confirmPostpone")}</h3>
+            <p className="text-sm text-slate-600">{postponeModal.task.appointment?.customer?.name}</p>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.reason")}</label>
+              <input value={postponeReason} onChange={e => setPostponeReason(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.newDate")}</label>
+              <input type="date" value={postponeDate} onChange={e => setPostponeDate(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => postponeTask.mutate({ id: postponeModal.task.id, reason: postponeReason, newDate: postponeDate })}
+                disabled={!postponeReason || !postponeDate || postponeTask.isPending}
+                className="flex-1 bg-orange-500 text-white py-2 rounded-lg text-sm hover:bg-orange-600 disabled:opacity-50">
+                {postponeTask.isPending ? t("common.loading") : t("tasks.postpone")}
+              </button>
+              <button onClick={() => setPostponeModal(null)} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
             </div>
           </div>
         </div>

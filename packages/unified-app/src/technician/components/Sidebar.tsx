@@ -14,11 +14,13 @@ const BORDER = "#7a3c10";
 const BADGE = "bg-red-500";
 
 const links = [
-  { to: "/technician/queue",         label: "nav.workQueue",    icon: "📋", badgeKey: "queue" },
-  { to: "/technician/messages",      label: "nav.messages",     icon: "🗒️",  badgeKey: "messages" },
-  { to: "/technician/notifications", label: "nav.notifications",icon: "🔔", badgeKey: "notifications" },
-  { to: "/technician/messaging",     label: "nav.messaging",    icon: "💬", badgeKey: "messaging" },
-  { to: "/technician/settings",     label: "nav.settings",     icon: "⚙️" },
+  { to: "/technician/queue",              label: "nav.workQueue",          icon: "📋", badgeKey: "queue" },
+  { to: "/technician/urgent-appointments",label: "nav.urgentAppointments", icon: "🚨", badgeKey: "urgentAppts" },
+  { to: "/technician/expenses",           label: "nav.expenses",           icon: "💰" },
+  { to: "/technician/messages",           label: "nav.messages",           icon: "🗒️",  badgeKey: "messages" },
+  { to: "/technician/notifications",      label: "nav.notifications",      icon: "🔔", badgeKey: "notifications" },
+  { to: "/technician/messaging",          label: "nav.messaging",          icon: "💬", badgeKey: "messaging" },
+  { to: "/technician/settings",           label: "nav.settings",           icon: "⚙️" },
 ];
 
 export default function Sidebar() {
@@ -28,24 +30,30 @@ export default function Sidebar() {
   const socket = useSocket();
   useNotificationSound(socket);
   const [queueBadge, setQueueBadge] = useState(() => Number(localStorage.getItem("badge-queue-tech") || 0));
+  const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-tech") || 0));
 
   useEffect(() => {
     if (!socket) return;
-    const inc = () => {
-      setQueueBadge(c => {
-        const v = c + 1;
-        localStorage.setItem("badge-queue-tech", String(v));
-        return v;
-      });
+    const incQueue = () => setQueueBadge(c => { const v = c + 1; localStorage.setItem("badge-queue-tech", String(v)); return v; });
+    const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-tech", String(v)); return v; });
+    socket.on("task:approved", incQueue);
+    socket.on("appointment:created", (a: any) => { if (a?.isUrgent) incUrgent(); });
+    return () => {
+      socket.off("task:approved", incQueue);
+      socket.off("appointment:created", incUrgent);
     };
-    socket.on("task:approved", inc);
-    return () => { socket.off("task:approved", inc); };
   }, [socket]);
 
   useEffect(() => {
     const clear = () => { localStorage.removeItem("badge-queue-tech"); setQueueBadge(0); };
     window.addEventListener("clear-badge-queue-tech", clear);
     return () => window.removeEventListener("clear-badge-queue-tech", clear);
+  }, []);
+
+  useEffect(() => {
+    const clear = () => { localStorage.removeItem("badge-urgent-tech"); setUrgentBadge(0); };
+    window.addEventListener("clear-badge-urgent-tech", clear);
+    return () => window.removeEventListener("clear-badge-urgent-tech", clear);
   }, []);
 
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-tech"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
@@ -58,7 +66,8 @@ export default function Sidebar() {
     notifications: notifData as number,
     messaging: dmCount as number,
     messages: newMessages,
-    queue: queueBadge
+    queue: queueBadge,
+    urgentAppts: urgentBadge,
   };
 
   return (
