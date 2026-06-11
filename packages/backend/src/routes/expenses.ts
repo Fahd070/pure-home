@@ -88,4 +88,15 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
   } catch (e) { next(e); }
 });
 
+router.patch('/:id/mark-invoice', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const expense = await prisma.expense.update({
+      where: { id: req.params.id },
+      data: { invoiceGenerated: true },
+      include: { technician: { select: { id: true, name: true } } },
+    });
+    res.json({ success: true, data: expense });
+  } catch (e) { next(e); }
+});
+
 export default router;

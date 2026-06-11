@@ -193,14 +193,6 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
       data: { visibleToScheduling: true, adminApproved: true, version: { increment: 1 } },
       include: { customer: { include: { address: true } }, task: true },
     });
-    const custNameVis = appt.customer?.name || 'Urgent Visit';
-    const custNameVisAr = appt.customer?.name || 'زيارة عاجلة';
-    await writeAudit({
-      action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
-      label: `Appointment for '${custNameVis}' approved for Scheduling visibility`,
-      labelAr: `تمت الموافقة على رؤية موعد '${custNameVisAr}' لقسم الجدولة`,
-      after: apptFields(updated),
-    });
     emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }

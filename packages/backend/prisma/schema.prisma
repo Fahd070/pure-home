@@ -252,16 +252,17 @@ model CallReport {
 }
 
 model Expense {
-  id           String   @id @default(uuid())
-  amount       Float
-  category     String
-  description  String?
-  date         DateTime
-  receiptImage String?
-  status       String   @default("PENDING")
-  technicianId String
-  technician   User     @relation("ExpenseByTechnician", fields: [technicianId], references: [id])
-  createdAt    DateTime @default(now())
+  id               String   @id @default(uuid())
+  amount           Float
+  category         String
+  description      String?
+  date             DateTime
+  receiptImage     String?
+  status           String   @default("PENDING")
+  invoiceGenerated Boolean  @default(false)
+  technicianId     String
+  technician       User     @relation("ExpenseByTechnician", fields: [technicianId], references: [id])
+  createdAt        DateTime @default(now())
   @@map("expenses")
 }
 

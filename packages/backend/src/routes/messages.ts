@@ -9,7 +9,7 @@ router.use(authenticate);
 
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const where: any = {};
+    const where: any = { NOT: { action: { contains: 'Scheduling visibility' } } };
     if (req.user!.role === 'SCHEDULING') {
       // Scheduling only sees customer logs and appointment logs for visible appointments
       const visibleAppts = await prisma.appointment.findMany({
