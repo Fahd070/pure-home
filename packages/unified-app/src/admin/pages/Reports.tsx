@@ -41,8 +41,8 @@ function buildPdfHtml(customers: any[], filters: any, isAr: boolean, t: any, tot
   ].filter(Boolean).join(" | ") || (isAr ? "جميع العملاء" : "All Customers");
 
   const headers = isAr
-    ? ["#", "الاسم", "الجوال", "المدينة", "تاريخ التسجيل", "تاريخ التركيب", "دورة الصيانة", "آخر صيانة", "الصيانة القادمة", "صيانة قادمة", "حالة الصيانة"]
-    : ["#", "Name", "Phone", "City", "Reg. Date", "Install Date", "Cycle", "Last Maint.", "Next Maint.", "Upcoming", "Maint. Status"];
+    ? ["#", "الاسم", "الجوال", "المدينة", "تاريخ التسجيل", "تاريخ التركيب", "دورة الصيانة", "آخر صيانة", "الصيانة القادمة", "صيانة قادمة", "حالة الصيانة", "المبلغ الإجمالي (ريال)"]
+    : ["#", "Name", "Phone", "City", "Reg. Date", "Install Date", "Cycle", "Last Maint.", "Next Maint.", "Upcoming", "Maint. Status", "Total Amount (SAR)"];
 
   function statusText(c: any) {
     const ms = c.maintenanceStatus;
@@ -77,8 +77,10 @@ function buildPdfHtml(customers: any[], filters: any, isAr: boolean, t: any, tot
         : "—"
   }</span></td>
       <td>${statusText(c)}</td>
+      <td style="text-align:center;font-weight:600;font-family:monospace">${c.totalAmount != null && c.totalAmount > 0 ? Number(c.totalAmount).toFixed(2) : "—"}</td>
     </tr>`).join("");
 
+  const grandTotal = customers.reduce((s: number, c: any) => s + (Number(c.totalAmount) || 0), 0);
   return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
 <style>
 body{font-family:Tahoma,Arial,sans-serif;margin:20px;font-size:11px;direction:${dir};color:#333}
@@ -94,6 +96,7 @@ tr:nth-child(even){background:#f9f9f9}
 .badge-ok{background:#dcfce7;color:#166534}
 .badge-soon{background:#fef3c7;color:#92400e}
 .badge-overdue{background:#fee2e2;color:#991b1b}
+.grand-total{margin-top:16px;background:linear-gradient(135deg,#000080,#1a1ab0);color:#fff;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:bold}
 .ftr{margin-top:14px;border-top:1px solid #eee;padding-top:6px;color:#999;font-size:9px;text-align:center}
 </style></head><body>
 <div class="hdr">
@@ -102,6 +105,7 @@ tr:nth-child(even){background:#f9f9f9}
   <div class="meta">${isAr ? "تاريخ التقرير" : "Date"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)} &nbsp;|&nbsp; ${isAr ? "الفلاتر" : "Filters"}: ${filterSummary} &nbsp;|&nbsp; ${isAr ? "الإجمالي" : "Total"}: ${total}</div>
 </div>
 <table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+<div class="grand-total"><span>${isAr ? "إجمالي المبالغ" : "Total Amount"}</span><span>${grandTotal.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span></div>
 <div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
 </body></html>`;
 }
@@ -209,13 +213,21 @@ export default function Reports() {
     return role || "—";
   }
 
+  function apptAmount(a: any): number | null {
+    if (a.task?.completionAmount != null) return Number(a.task.completionAmount);
+    if (a.urgentVisitRecord?.amount != null) return Number(a.urgentVisitRecord.amount);
+    return null;
+  }
+
   async function exportApptPdf() {
     if (!allAppts.length) return;
     setGeneratingAppts("pdf");
     try {
       const dir = isAr ? "rtl" : "ltr";
       function apptRows(list: any[]) {
-        return list.map((a: any, i: number) => `<tr>
+        return list.map((a: any, i: number) => {
+          const amt = apptAmount(a);
+          return `<tr>
           <td>${i + 1}</td>
           <td>${a.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit")}</td>
           <td>${a.customer?.phone || "—"}</td>
@@ -223,12 +235,20 @@ export default function Reports() {
           <td>${a.type === "INSTALLATION" ? (isAr ? "تركيب" : "Installation") : (isAr ? "صيانة" : "Maintenance")}</td>
           <td>${a.status}</td>
           <td>${apptSourceLabel(a.createdByRole)}</td>
-        </tr>`).join("");
+          <td style="text-align:center;font-weight:600;font-family:monospace">${amt != null ? amt.toFixed(2) : "—"}</td>
+        </tr>`;
+        }).join("");
+      }
+      function apptTotal(list: any[]) {
+        return list.reduce((s: number, a: any) => s + (apptAmount(a) ?? 0), 0);
       }
       const headers = isAr
-        ? ["#","العميل","الجوال","التاريخ","النوع","الحالة","المصدر"]
-        : ["#","Customer","Phone","Date","Type","Status","Source"];
+        ? ["#","العميل","الجوال","التاريخ","النوع","الحالة","المصدر","المبلغ (ريال)"]
+        : ["#","Customer","Phone","Date","Type","Status","Source","Amount (SAR)"];
       const headHtml = headers.map(h => `<th>${h}</th>`).join("");
+      const totalRegular = apptTotal(regularAppts);
+      const totalUrgent = apptTotal(urgentAppts);
+      const grandTotal = totalRegular + totalUrgent;
       const html = `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
 <style>
 body{font-family:Tahoma,Arial,sans-serif;margin:20px;font-size:11px;direction:${dir};color:#333}
@@ -239,6 +259,8 @@ table{width:100%;border-collapse:collapse;margin-top:8px;font-size:10px}
 th{background:#000080;color:#fff;padding:6px 8px;text-align:${dir === "rtl" ? "right" : "left"}}
 td{padding:5px 8px;border-bottom:1px solid #eee}
 tr:nth-child(even){background:#f9f9f9}
+.total-row{background:#e8eeff;font-weight:bold;font-size:11px}
+.grand-total{margin-top:16px;background:linear-gradient(135deg,#000080,#1a1ab0);color:#fff;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:bold}
 .ftr{margin-top:14px;border-top:1px solid #eee;padding-top:6px;color:#999;font-size:9px;text-align:center}
 </style></head><body>
 <div class="hdr">
@@ -247,9 +269,14 @@ tr:nth-child(even){background:#f9f9f9}
   <div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
 </div>
 <h2>${isAr ? "المواعيد العادية" : "Regular Appointments"} (${regularAppts.length})</h2>
-<table><thead><tr>${headHtml}</tr></thead><tbody>${apptRows(regularAppts)}</tbody></table>
+<table><thead><tr>${headHtml}</tr></thead><tbody>${apptRows(regularAppts)}
+<tr class="total-row"><td colspan="7" style="text-align:${dir==="rtl"?"left":"right"}">${isAr?"إجمالي المواعيد العادية":"Regular Total"}</td><td style="text-align:center;font-family:monospace">${totalRegular.toFixed(2)}</td></tr>
+</tbody></table>
 <h2>${isAr ? "المواعيد العاجلة" : "Urgent Appointments"} (${urgentAppts.length})</h2>
-<table><thead><tr>${headHtml}</tr></thead><tbody>${apptRows(urgentAppts)}</tbody></table>
+<table><thead><tr>${headHtml}</tr></thead><tbody>${apptRows(urgentAppts)}
+<tr class="total-row"><td colspan="7" style="text-align:${dir==="rtl"?"left":"right"}">${isAr?"إجمالي المواعيد العاجلة":"Urgent Total"}</td><td style="text-align:center;font-family:monospace">${totalUrgent.toFixed(2)}</td></tr>
+</tbody></table>
+<div class="grand-total"><span>${isAr?"الإجمالي الكلي":"Grand Total"}</span><span>${grandTotal.toFixed(2)} ${isAr?"ريال":"SAR"}</span></div>
 <div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
 </body></html>`;
       const filePath = await (window as any).electron.printToPDF(html, `appointments-report-${Date.now()}.pdf`);
@@ -265,6 +292,7 @@ tr:nth-child(even){background:#f9f9f9}
     try {
       const XLSX = await import("xlsx");
       function apptRow(a: any) {
+        const amt = apptAmount(a);
         return {
           [isAr ? "النوع" : "Kind"]: a.isUrgent ? (isAr ? "عاجل" : "Urgent") : (isAr ? "عادي" : "Regular"),
           [isAr ? "المصدر" : "Source"]: apptSourceLabel(a.createdByRole),
@@ -273,11 +301,16 @@ tr:nth-child(even){background:#f9f9f9}
           [isAr ? "التاريخ" : "Date"]: new Date(a.scheduledDate).toLocaleDateString(),
           [isAr ? "نوع الخدمة" : "Service Type"]: a.type,
           [isAr ? "الحالة" : "Status"]: a.status,
+          [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: amt != null ? amt : "",
         };
       }
-      const apptCols = [{ wch: 10 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
-      const regularRows = regularAppts.map(apptRow);
-      const urgentRows  = urgentAppts.map(apptRow);
+      function totalRow(label: string, list: any[]) {
+        const total = list.reduce((s: number, a: any) => s + (apptAmount(a) ?? 0), 0);
+        return { [isAr ? "النوع" : "Kind"]: label, [isAr ? "المصدر" : "Source"]: "", [isAr ? "العميل" : "Customer"]: "", [isAr ? "الجوال" : "Phone"]: "", [isAr ? "التاريخ" : "Date"]: "", [isAr ? "نوع الخدمة" : "Service Type"]: "", [isAr ? "الحالة" : "Status"]: isAr ? "الإجمالي" : "TOTAL", [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: total };
+      }
+      const apptCols = [{ wch: 10 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }];
+      const regularRows = [...regularAppts.map(apptRow), totalRow(isAr ? "الإجمالي - العادية" : "Total - Regular", regularAppts)];
+      const urgentRows  = [...urgentAppts.map(apptRow), totalRow(isAr ? "الإجمالي - العاجلة" : "Total - Urgent", urgentAppts)];
       const wsRegular = XLSX.utils.json_to_sheet(regularRows);
       wsRegular['!cols'] = apptCols;
       const wsUrgent = XLSX.utils.json_to_sheet(urgentRows);
@@ -314,21 +347,35 @@ tr:nth-child(even){background:#f9f9f9}
     setGenerating("excel");
     try {
       const XLSX = await import("xlsx");
-      const rows = customers.map((c: any) => ({
-        [isAr ? "الاسم" : "Name"]: c.name,
-        [isAr ? "الجوال" : "Phone"]: c.phone,
-        [isAr ? "المدينة" : "City"]: c.address?.city || "",
-        [isAr ? "الحي" : "District"]: c.address?.district || "",
-        [isAr ? "تاريخ التسجيل" : "Reg. Date"]: new Date(c.createdAt).toLocaleDateString(),
-        [isAr ? "تاريخ التركيب" : "Installation Date"]: c.installationDate ? new Date(c.installationDate).toLocaleDateString() : "",
-        [isAr ? "دورة الصيانة" : "Cycle"]: formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t),
-        [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString() : "",
-        [isAr ? "الصيانة القادمة" : "Next Maint."]: (c.nextMaintenanceDate || c.nextMaintenance) ? new Date(c.nextMaintenanceDate || c.nextMaintenance).toLocaleDateString() : "",
-        [isAr ? "أيام متبقية" : "Days Until"]: c.daysUntil ?? "",
-        [isAr ? "حالة الصيانة" : "Maintenance Status"]: c.maintenanceStatus ? maintenanceStatusLabel(c.maintenanceStatus) : "",
-        [isAr ? "الحالة" : "Alert"]: c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قريب" : "Soon") : (isAr ? "طبيعي" : "OK"),
-        [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
-      }));
+      const customerExcelTotal = customers.reduce((s: number, c: any) => s + (Number(c.totalAmount) || 0), 0);
+      const rows = [
+        ...customers.map((c: any) => ({
+          [isAr ? "الاسم" : "Name"]: c.name,
+          [isAr ? "الجوال" : "Phone"]: c.phone,
+          [isAr ? "المدينة" : "City"]: c.address?.city || "",
+          [isAr ? "الحي" : "District"]: c.address?.district || "",
+          [isAr ? "تاريخ التسجيل" : "Reg. Date"]: new Date(c.createdAt).toLocaleDateString(),
+          [isAr ? "تاريخ التركيب" : "Installation Date"]: c.installationDate ? new Date(c.installationDate).toLocaleDateString() : "",
+          [isAr ? "دورة الصيانة" : "Cycle"]: formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t),
+          [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString() : "",
+          [isAr ? "الصيانة القادمة" : "Next Maint."]: (c.nextMaintenanceDate || c.nextMaintenance) ? new Date(c.nextMaintenanceDate || c.nextMaintenance).toLocaleDateString() : "",
+          [isAr ? "أيام متبقية" : "Days Until"]: c.daysUntil ?? "",
+          [isAr ? "حالة الصيانة" : "Maintenance Status"]: c.maintenanceStatus ? maintenanceStatusLabel(c.maintenanceStatus) : "",
+          [isAr ? "الحالة" : "Alert"]: c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قريب" : "Soon") : (isAr ? "طبيعي" : "OK"),
+          [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
+          [isAr ? "المبلغ الإجمالي (ريال)" : "Total Amount (SAR)"]: c.totalAmount != null && c.totalAmount > 0 ? Number(c.totalAmount) : "",
+        })),
+        {
+          [isAr ? "الاسم" : "Name"]: isAr ? "الإجمالي الكلي" : "GRAND TOTAL",
+          [isAr ? "الجوال" : "Phone"]: "", [isAr ? "المدينة" : "City"]: "", [isAr ? "الحي" : "District"]: "",
+          [isAr ? "تاريخ التسجيل" : "Reg. Date"]: "", [isAr ? "تاريخ التركيب" : "Installation Date"]: "",
+          [isAr ? "دورة الصيانة" : "Cycle"]: "", [isAr ? "آخر صيانة" : "Last Maint."]: "",
+          [isAr ? "الصيانة القادمة" : "Next Maint."]: "", [isAr ? "أيام متبقية" : "Days Until"]: "",
+          [isAr ? "حالة الصيانة" : "Maintenance Status"]: "", [isAr ? "الحالة" : "Alert"]: "",
+          [isAr ? "ملاحظات" : "Notes"]: "",
+          [isAr ? "المبلغ الإجمالي (ريال)" : "Total Amount (SAR)"]: customerExcelTotal,
+        },
+      ];
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = [
         { wch: 28 }, // Name
@@ -344,6 +391,7 @@ tr:nth-child(even){background:#f9f9f9}
         { wch: 18 }, // Maintenance Status
         { wch: 10 }, // Alert
         { wch: 30 }, // Notes
+        { wch: 18 }, // Total Amount
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, isAr ? "العملاء" : "Customers");
