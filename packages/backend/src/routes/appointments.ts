@@ -139,8 +139,14 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
       after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_CREATED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-    // If task was auto-approved, notify technician department so their work queue updates
+    // Urgent appointments hidden from Scheduling must not trigger their socket listeners
+    if (isUrgent && !visibleToScheduling) {
+      emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    } else {
+      emitToAll(SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    }
+    // Notify technician work queue when task is auto-approved
     if (taskStatus === 'APPROVED') {
       emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.TASK_APPROVED, appt.task);
     }
@@ -193,7 +199,10 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
       data: { visibleToScheduling: true, adminApproved: true, version: { increment: 1 } },
       include: { customer: { include: { address: true } }, task: true },
     });
+    // Notify everyone about the status change, then specifically push appointment:created
+    // to Scheduling so their dashboard urgentCount refreshes to include this appointment
     emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, updated);
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }
 });

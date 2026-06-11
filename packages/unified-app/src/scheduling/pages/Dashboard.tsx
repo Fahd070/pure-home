@@ -124,9 +124,11 @@ export default function SchedDashboard() {
       qc.invalidateQueries({ queryKey: ["sched-dashboard-activity"] });
     };
     socket.on("task:completed", refresh); socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh);
+    socket.on("appointment:status", refresh);
     socket.on("customer:created", refresh); socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
     return () => {
       socket.off("task:completed", refresh); socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh);
+      socket.off("appointment:status", refresh);
       socket.off("customer:created", refresh); socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
     };
   }, [socket, qc]);
