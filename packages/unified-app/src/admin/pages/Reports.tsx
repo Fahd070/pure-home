@@ -153,7 +153,7 @@ ${c.notes ? `<div class="section"><div class="sec-title">${isAr ? "ملاحظا�
 export default function Reports() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
-  const [tab, setTab] = useState<"customers" | "appointments">("customers");
+  const [tab, setTab] = useState<null | "customers" | "appointments">(null);
   const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "ALL", search: "" });
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [generating, setGenerating] = useState<"pdf" | "excel" | null>(null);
@@ -204,8 +204,8 @@ export default function Reports() {
   const urgentAppts  = allAppts.filter((a: any) => a.isUrgent);
 
   function apptSourceLabel(role: string) {
-    if (role === "ADMIN") return isAr ? "الإدارة" : "Administration";
-    if (role === "SCHEDULING") return isAr ? "الجدولة والصيانة" : "Scheduling & Maintenance";
+    if (role === "ADMIN") return isAr ? "قسم الإدارة" : "Administration";
+    if (role === "SCHEDULING") return isAr ? "قسم المواعيد والصيانة" : "Scheduling & Maintenance";
     return role || "—";
   }
 
@@ -275,11 +275,16 @@ tr:nth-child(even){background:#f9f9f9}
           [isAr ? "الحالة" : "Status"]: a.status,
         };
       }
+      const apptCols = [{ wch: 10 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
       const regularRows = regularAppts.map(apptRow);
       const urgentRows  = urgentAppts.map(apptRow);
+      const wsRegular = XLSX.utils.json_to_sheet(regularRows);
+      wsRegular['!cols'] = apptCols;
+      const wsUrgent = XLSX.utils.json_to_sheet(urgentRows);
+      wsUrgent['!cols'] = apptCols;
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(regularRows), isAr ? "العادية" : "Regular");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(urgentRows),  isAr ? "العاجلة" : "Urgent");
+      XLSX.utils.book_append_sheet(wb, wsRegular, isAr ? "المواعيد العادية" : "Regular");
+      XLSX.utils.book_append_sheet(wb, wsUrgent,  isAr ? "المواعيد العاجلة" : "Urgent");
       const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
       const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
@@ -325,6 +330,21 @@ tr:nth-child(even){background:#f9f9f9}
         [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 28 }, // Name
+        { wch: 14 }, // Phone
+        { wch: 16 }, // City
+        { wch: 18 }, // District
+        { wch: 14 }, // Reg Date
+        { wch: 16 }, // Install Date
+        { wch: 20 }, // Cycle
+        { wch: 14 }, // Last Maint
+        { wch: 14 }, // Next Maint
+        { wch: 10 }, // Days Until
+        { wch: 18 }, // Maintenance Status
+        { wch: 10 }, // Alert
+        { wch: 30 }, // Notes
+      ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, isAr ? "العملاء" : "Customers");
       const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
@@ -390,17 +410,49 @@ tr:nth-child(even){background:#f9f9f9}
 
   return (
     <div className="space-y-4">
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-        <button onClick={() => setTab("customers")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === "customers" ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
-          {isAr ? "تقارير العملاء" : "Customer Reports"}
-        </button>
-        <button onClick={() => setTab("appointments")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === "appointments" ? "bg-white shadow text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
-          {isAr ? "تقارير المواعيد" : "Appointment Reports"}
-        </button>
+      {/* Report type selector */}
+      <div className="bg-white rounded-xl shadow-sm p-5">
+        <p className="text-sm font-semibold text-slate-700 mb-3">
+          {isAr ? "اختر نوع التقرير" : "Select Report Type"}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={() => setTab("customers")}
+            className={`flex-1 flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-start ${tab === "customers" ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}
+          >
+            <span className="text-2xl">👥</span>
+            <div>
+              <p className={`font-semibold text-sm ${tab === "customers" ? "text-blue-700" : "text-slate-700"}`}>
+                {isAr ? "تقارير العملاء" : "Customer Reports"}
+              </p>
+              <p className="text-xs text-slate-400">{isAr ? "بيانات العملاء ودورات الصيانة" : "Customer data and maintenance cycles"}</p>
+            </div>
+            {tab === "customers" && <span className="ms-auto text-blue-600 text-lg">✓</span>}
+          </button>
+          <button
+            onClick={() => setTab("appointments")}
+            className={`flex-1 flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-start ${tab === "appointments" ? "border-purple-600 bg-purple-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}
+          >
+            <span className="text-2xl">📅</span>
+            <div>
+              <p className={`font-semibold text-sm ${tab === "appointments" ? "text-purple-700" : "text-slate-700"}`}>
+                {isAr ? "تقارير المواعيد" : "Appointment Reports"}
+              </p>
+              <p className="text-xs text-slate-400">{isAr ? "المواعيد العادية والعاجلة" : "Regular and urgent appointments"}</p>
+            </div>
+            {tab === "appointments" && <span className="ms-auto text-purple-600 text-lg">✓</span>}
+          </button>
+        </div>
       </div>
+
+      {/* No selection state */}
+      {!tab && (
+        <div className="bg-white rounded-xl shadow-sm p-16 text-center text-slate-400">
+          <p className="text-4xl mb-3">📊</p>
+          <p className="text-base font-medium text-slate-600">{isAr ? "اختر نوع التقرير أعلاه للبدء" : "Select a report type above to get started"}</p>
+          <p className="text-xs mt-1">{isAr ? "تقارير العملاء أو تقارير المواعيد" : "Customer Reports or Appointment Reports"}</p>
+        </div>
+      )}
 
       {/* ── Customer Reports ── */}
       {tab === "customers" && <>

@@ -17,7 +17,7 @@ router.get('/', async (req, res, next) => {
     const result = await Promise.all(techs.map(async (t: any) => {
       const completed = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'COMPLETED' } });
       const postponed = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'POSTPONED' } });
-      const pending = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: { in: ['PENDING_APPROVAL','APPROVED','IN_PROGRESS'] } } });
+      const pending = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'POSTPONED' } });
       const completedTasksList = await prisma.maintenanceTask.findMany({
         where: { technicianId: t.id, status: 'COMPLETED' },
         include: { appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } } },

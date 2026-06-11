@@ -30,7 +30,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const items = data?.data || [];
   const total = data?.meta?.total || 0;
   const pages = Math.ceil(total / 15) || 1;
-  const isApptList = ["this-month","next-month","overdue","today"].includes(endpoint);
+  const isApptList = ["this-month","next-month","overdue","today","urgent"].includes(endpoint);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -54,14 +54,20 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                   <th className="text-start px-4 py-2">{t("common.date")}</th>
                   <th className="text-start px-4 py-2">{t("common.status")}</th>
                 </tr></thead>
-                <tbody>{items.map((a: any) => (
-                  <tr key={a.id} className="border-b hover:bg-slate-50">
-                    <td className="px-4 py-2">{a.customer?.name}</td>
-                    <td className="px-4 py-2 text-slate-500">{a.customer?.phone}</td>
-                    <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
-                    <td className="px-4 py-2 text-xs">{a.status}</td>
-                  </tr>
-                ))}</tbody>
+                <tbody>{items.map((a: any) => {
+                  let loc: any = {};
+                  try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
+                  const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "زيارة عاجلة";
+                  const displayPhone = a.customer?.phone || "—";
+                  return (
+                    <tr key={a.id} className="border-b hover:bg-slate-50">
+                      <td className="px-4 py-2">{displayName}</td>
+                      <td className="px-4 py-2 text-slate-500">{displayPhone}</td>
+                      <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-xs">{a.task?.status || a.status}</td>
+                    </tr>
+                  );
+                })}</tbody>
               </table>
             ) : (
               <table className="w-full text-sm">
@@ -141,7 +147,8 @@ export default function SchedDashboard() {
     { label: t("dashboard.nextMonth"),            key: "nextMonth",      endpoint: "next-month",            color: "border-purple-500" },
     { label: t("dashboard.dueToday"),             key: "todayCount",     endpoint: "today",                 color: "border-orange-500" },
     { label: t("dashboard.overdueMaintenance"),   key: "pendingApproval",endpoint: "overdue",               color: "border-red-500" },
-    { label: t("dashboard.urgentAppointments"),   key: "urgentCount",    endpoint: "today",                 color: "border-rose-500" },
+    { label: t("dashboard.suspendedPostponed"),   key: "pending",        endpoint: "postponed",             color: "border-yellow-500" },
+    { label: t("dashboard.urgentAppointments"),   key: "urgentCount",    endpoint: "urgent",                color: "border-rose-500" },
   ];
 
   return (

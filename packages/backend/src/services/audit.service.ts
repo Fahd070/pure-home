@@ -11,14 +11,18 @@ export interface AuditOptions {
   entityId: string;
   userId: string;
   label: string;
+  labelAr?: string;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
 }
 
 export async function writeAudit(opts: AuditOptions) {
+  const storedLabel = opts.labelAr
+    ? `${opts.label}|||${opts.labelAr}`
+    : opts.label;
   const log = await prisma.auditLog.create({
     data: {
-      action: opts.label,
+      action: storedLabel,
       entityType: opts.entityType,
       entityId: opts.entityId,
       userId: opts.userId,

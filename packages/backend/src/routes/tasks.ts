@@ -84,9 +84,13 @@ router.patch('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res,
       include: { technician: true, appointment: { include: { customer: true } } },
     });
 
+    const custNameAppr = task.appointment.customer?.name || 'Urgent Visit';
+    const custNameApprAr = task.appointment.customer?.name || 'زيارة عاجلة';
+    const techNameAppr = task.technician?.name || 'technician';
     await writeAudit({
       action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
-      label: `Maintenance for '${task.appointment.customer?.name || 'Urgent Visit'}' approved and assigned to ${task.technician?.name || 'technician'}`,
+      label: `Maintenance for '${custNameAppr}' approved and assigned to ${techNameAppr}`,
+      labelAr: `تمت الموافقة على صيانة '${custNameApprAr}' وتعيينها للفني ${techNameAppr}`,
       before: taskFields(before), after: taskFields(task),
     });
     await emitEvent({ type: EVENT_TYPES.TASK_APPROVED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
@@ -130,9 +134,15 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
     const actorLabel = isAdmin
       ? `Administration (on behalf of technician ${task.technician?.name || ''})`
       : `Technician ${task.technician?.name || ''}`;
+    const actorLabelAr = isAdmin
+      ? `الإدارة (نيابةً عن الفني ${task.technician?.name || ''})`
+      : `الفني ${task.technician?.name || ''}`;
+    const custNameStart = task.appointment.customer?.name || 'Urgent Visit';
+    const custNameStartAr = task.appointment.customer?.name || 'زيارة عاجلة';
     await writeAudit({
       action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
-      label: `${actorLabel} started maintenance for '${task.appointment.customer?.name || 'Urgent Visit'}'`,
+      label: `${actorLabel} started maintenance for '${custNameStart}'`,
+      labelAr: `بدأ ${actorLabelAr} صيانة '${custNameStartAr}'`,
       before: taskFields(before), after: taskFields(task),
     });
     await emitEvent({ type: EVENT_TYPES.TASK_STARTED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
@@ -190,12 +200,18 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       await prisma.customer.update({ where: { id: task.appointment.customerId }, data: { activityDismissed: false } });
     }
 
-    const actorLabel = isAdmin
+    const actorLabelComp = isAdmin
       ? `Administration (on behalf of technician ${task.technician?.name || ''})`
       : `Technician ${task.technician?.name || ''}`;
+    const actorLabelCompAr = isAdmin
+      ? `الإدارة (نيابةً عن الفني ${task.technician?.name || ''})`
+      : `الفني ${task.technician?.name || ''}`;
+    const custNameComp = task.appointment.customer?.name || 'Urgent Visit';
+    const custNameCompAr = task.appointment.customer?.name || 'زيارة عاجلة';
     await writeAudit({
       action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
-      label: `Maintenance for '${task.appointment.customer?.name || 'Urgent Visit'}' was completed by ${actorLabel}`,
+      label: `Maintenance for '${custNameComp}' was completed by ${actorLabelComp}`,
+      labelAr: `تم إكمال صيانة '${custNameCompAr}' بواسطة ${actorLabelCompAr}`,
       before: taskFields(before), after: taskFields(task),
     });
     await emitEvent({ type: EVENT_TYPES.TASK_COMPLETED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
@@ -239,12 +255,18 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       await prisma.customer.update({ where: { id: task.appointment.customerId }, data: { activityDismissed: false } });
     }
 
-    const actorLabel = isAdmin
+    const actorLabelPost = isAdmin
       ? `Administration (on behalf of technician ${task.technician?.name || ''})`
       : task.technician?.name || 'technician';
+    const actorLabelPostAr = isAdmin
+      ? `الإدارة (نيابةً عن الفني ${task.technician?.name || ''})`
+      : (task.technician?.name || 'الفني');
+    const custNamePost = task.appointment.customer?.name || 'Urgent Visit';
+    const custNamePostAr = task.appointment.customer?.name || 'زيارة عاجلة';
     await writeAudit({
       action: 'UPDATE', entityType: 'task', entityId: task.id, userId: req.user!.userId,
-      label: `Maintenance for '${task.appointment.customer?.name || 'Urgent Visit'}' was postponed by ${actorLabel}: ${reason}`,
+      label: `Maintenance for '${custNamePost}' was postponed by ${actorLabelPost}: ${reason}`,
+      labelAr: `تم تأجيل صيانة '${custNamePostAr}' بواسطة ${actorLabelPostAr}: ${reason}`,
       before: taskFields(before), after: taskFields(task),
     });
     await emitEvent({ type: EVENT_TYPES.TASK_POSTPONED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });

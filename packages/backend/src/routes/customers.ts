@@ -114,6 +114,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
     await writeAudit({
       action: 'CREATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
       label: `Customer '${customer.name}' was created`,
+      labelAr: `تم إنشاء العميل '${customer.name}'`,
       after: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_CREATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
@@ -144,6 +145,7 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
     await writeAudit({
       action: 'UPDATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
       label: `Customer '${customer.name}' was updated`,
+      labelAr: `تم تحديث بيانات العميل '${customer.name}'`,
       before: customerFields(before), after: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_UPDATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
@@ -164,6 +166,7 @@ router.patch('/:id/toggle-active', requireRole('ADMIN'), async (req: AuthRequest
     await writeAudit({
       action: 'UPDATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
       label: `Customer '${customer.name}' ${customer.isActive ? 'activated' : 'deactivated'}`,
+      labelAr: `تم ${customer.isActive ? 'تفعيل' : 'تعطيل'} العميل '${customer.name}'`,
       before: customerFields(existing), after: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_UPDATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
@@ -180,6 +183,7 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
     await writeAudit({
       action: 'DELETE', entityType: 'customer', entityId: req.params.id, userId: req.user!.userId,
       label: `Customer '${customer.name}' was deleted`,
+      labelAr: `تم حذف العميل '${customer.name}'`,
       before: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: req.params.id, userId: req.user!.userId, payload: { id: req.params.id, name: customer.name } });
@@ -197,6 +201,7 @@ router.delete('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => 
       action: 'DELETE', entityType: 'customer', entityId: 'bulk',
       userId: req.user!.userId,
       label: `Bulk delete: ${result.count} customers permanently deleted`,
+      labelAr: `حذف جماعي: تم حذف ${result.count} عميل بشكل نهائي`,
       before: { count: result.count, customers: customers.map(c => ({ id: c.id, name: c.name })) },
     });
     await emitEvent({
