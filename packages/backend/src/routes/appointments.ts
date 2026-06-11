@@ -241,4 +241,25 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
   } catch (e) { next(e); }
 });
 
+router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const appt = await prisma.appointment.findUnique({
+      where: { id: req.params.id },
+      include: { customer: true },
+    });
+    if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
+    await prisma.appointment.delete({ where: { id: req.params.id } });
+    const custName = appt.customer?.name || 'Urgent Visit';
+    const custNameAr = appt.customer?.name || 'زيارة عاجلة';
+    await writeAudit({
+      action: 'DELETE', entityType: 'appointment', entityId: req.params.id, userId: req.user!.userId,
+      label: `Appointment for '${custName}' was deleted by Admin`,
+      labelAr: `تم حذف موعد العميل '${custNameAr}' بواسطة الإدارة`,
+      before: apptFields(appt),
+    });
+    emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { id: req.params.id });
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
 export default router;

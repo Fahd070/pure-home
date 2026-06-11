@@ -51,7 +51,8 @@ async function ensureSchemaUpdates() {
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "urgentLocation" TEXT`);
     await run(`ALTER TABLE "appointments" ALTER COLUMN "customerId" DROP NOT NULL`);
     await run(`ALTER TABLE "appointments" DROP CONSTRAINT IF EXISTS "appointments_customerId_fkey"`);
-    await run(`ALTER TABLE "appointments" ADD CONSTRAINT "appointments_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE SET NULL ON UPDATE CASCADE`);
+    await run(`ALTER TABLE "appointments" ADD CONSTRAINT "appointments_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    await run(`DELETE FROM "appointments" WHERE "isUrgent" = false AND "customerId" IS NULL`);
     // maintenance_tasks: completion fields
     await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "serviceDetails" TEXT`);
     await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "completionAmount" DOUBLE PRECISION`);

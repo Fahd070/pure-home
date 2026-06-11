@@ -140,12 +140,12 @@ export default function Dashboard() {
     if (!socket) return;
     const refresh = () => { qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); qc.invalidateQueries({ queryKey: ["dashboard-activity"] }); };
     socket.on("task:completed", refresh); socket.on("task:approved", refresh); socket.on("task:postponed", refresh);
-    socket.on("appointment:created", refresh); socket.on("customer:created", refresh);
-    socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
+    socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh);
+    socket.on("customer:created", refresh); socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
     return () => {
       socket.off("task:completed", refresh); socket.off("task:approved", refresh); socket.off("task:postponed", refresh);
-      socket.off("appointment:created", refresh); socket.off("customer:created", refresh);
-      socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
+      socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh);
+      socket.off("customer:created", refresh); socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
     };
   }, [socket, qc]);
 

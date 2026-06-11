@@ -17,8 +17,17 @@ export default function WorkQueue() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.on("task:approved", () => qc.invalidateQueries({ queryKey: ["tasks"] }));
-    return () => { socket.off("task:approved"); };
+    const refresh = () => qc.invalidateQueries({ queryKey: ["tasks"] });
+    socket.on("task:approved", refresh);
+    socket.on("appointment:deleted", refresh);
+    socket.on("customer:deleted", refresh);
+    socket.on("customers:bulk-deleted", refresh);
+    return () => {
+      socket.off("task:approved", refresh);
+      socket.off("appointment:deleted", refresh);
+      socket.off("customer:deleted", refresh);
+      socket.off("customers:bulk-deleted", refresh);
+    };
   }, [socket, qc]);
 
   const statusLabel: Record<string, string> = { APPROVED: t("tasks.approved"), IN_PROGRESS: t("tasks.inProgress"), PENDING_APPROVAL: t("tasks.pendingApproval") };

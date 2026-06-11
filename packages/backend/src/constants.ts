@@ -5,6 +5,7 @@ export const SOCKET_EVENTS = {
   CUSTOMERS_BULK_DELETED: 'customers:bulk-deleted',
   APPOINTMENT_CREATED: 'appointment:created',
   APPOINTMENT_STATUS: 'appointment:status',
+  APPOINTMENT_DELETED: 'appointment:deleted',
   TASK_APPROVED: 'task:approved',
   TASK_COMPLETED: 'task:completed',
   TASK_POSTPONED: 'task:postponed',
