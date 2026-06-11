@@ -60,7 +60,9 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
     });
     emitToRole(SOCKET_ROOMS.ADMIN, 'urgent_visit:submitted', record);
 
-    // Auto-create or update customer from urgent visit data
+    // Auto-create customer from urgent visit data — never overwrite existing customer records.
+    // A customer is considered the same only when both phone AND name match (case-insensitive).
+    // Any mismatch in identity always produces a new, independent customer record.
     try {
       const phone = body.customerPhone.trim();
       const name = body.customerName.trim();
@@ -84,20 +86,20 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
         ...(loc.apartmentNo  ? { apartmentNo:  loc.apartmentNo }  : {}),
       };
 
-      const existing = await prisma.customer.findFirst({ where: { phone } });
+      // Match by phone AND name so a different person who happens to share a phone number
+      // is never confused with an existing customer and their data is never overwritten.
+      const existing = await prisma.customer.findFirst({
+        where: { phone, name: { equals: name, mode: 'insensitive' } },
+      });
+
+      let resolvedCustomerId: string;
 
       if (existing) {
-        await prisma.customer.update({
-          where: { id: existing.id },
-          data: { name, notes: body.serviceNotes || existing.notes || undefined, version: { increment: 1 } },
-        });
-        await prisma.address.upsert({
-          where: { customerId: existing.id },
-          create: { customerId: existing.id, ...addrData },
-          update: addrData,
-        });
+        // Confirmed same customer — link to existing record without touching their data.
+        resolvedCustomerId = existing.id;
         emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
       } else {
+        // New customer or different identity with same phone — always create a fresh record.
         const installDate = body.serviceType === 'INSTALLATION' ? new Date() : undefined;
         const newCust = await prisma.customer.create({
           data: {
@@ -111,8 +113,20 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
             address: { create: { ...addrData } },
           },
         });
+        resolvedCustomerId = newCust.id;
+        await writeAudit({
+          action: 'CREATE', entityType: 'customer', entityId: newCust.id, userId: req.user!.userId,
+          label: `Customer '${name}' created from urgent appointment`,
+          after: { id: newCust.id, name, phone },
+        });
         emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
       }
+
+      // Link the appointment to the resolved customer so the record is complete.
+      await prisma.appointment.update({
+        where: { id: body.appointmentId },
+        data: { customerId: resolvedCustomerId },
+      });
     } catch (autoErr: any) {
       console.error('[urgent-visit] auto-customer sync warning:', autoErr?.message);
     }
