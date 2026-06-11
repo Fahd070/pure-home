@@ -37,12 +37,12 @@ export default function ServerSetup() {
 
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-5 text-xs text-slate-600 space-y-1">
           <p className="font-semibold text-slate-700">Backend connection:</p>
-          <p>The default URL points to the cloud backend. You only need to change this if directed by your admin.</p>
+          <p>All departments connect to the shared cloud backend.</p>
           <p>Default: <code className="bg-slate-100 px-1 rounded">https://wfm-system.onrender.com</code></p>
           <p>Click <strong>Test &amp; Save</strong> to verify connectivity. Green = connected.</p>
           <div className="border-t border-slate-200 pt-1 mt-1">
             <p className="font-semibold text-slate-700">إعداد الخادم:</p>
-            <p>عنوان الخادم الافتراضي: <code className="bg-slate-100 px-1 rounded">https://wfm-system.onrender.com</code></p>
+            <p>جميع الأقسام متصلة بالخادم المشترك على الإنترنت.</p>
             <p>لا تحتاج لتغييره إلا بتعليمات من المسؤول.</p>
           </div>
         </div>

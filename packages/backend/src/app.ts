@@ -39,9 +39,9 @@ app.use(cors({
   origin: (origin, cb) => isAllowedOrigin(origin) ? cb(null, true) : cb(new Error('CORS: origin not allowed')),
 }));
 app.use(express.json({ limit: '5mb' }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { success: false, message: 'Too many attempts, try again later' } });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, message: { success: false, message: 'Too many attempts, try again later' } });
 
 // Health check — no auth required, used by monitoring and client connectivity tests
 app.get('/health', async (_req, res) => {
