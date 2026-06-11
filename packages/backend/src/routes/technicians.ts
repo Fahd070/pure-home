@@ -5,7 +5,7 @@ import { authenticate, requireRole } from '../middleware/auth';
 const router = Router();
 router.use(authenticate);
 
-router.get('/', async (req, res, next) => {
+router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const techs = await prisma.user.findMany({
       where: { role: 'TECHNICIAN' },

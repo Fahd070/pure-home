@@ -38,7 +38,7 @@ function customerFields(c: any) {
   return { id: c.id, name: c.name, phone: c.phone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version };
 }
 
-router.get('/', async (req: AuthRequest, res, next) => {
+router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20', active, includeSchedule } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -87,7 +87,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const customer = await prisma.customer.findUnique({
       where: { id: req.params.id },
