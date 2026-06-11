@@ -141,6 +141,18 @@ function prevMonthRange() {
   return { from, to };
 }
 
+const SALES_WEEK_MS  = 7  * 24 * 3600 * 1000;
+const SALES_MONTH_MS = 30 * 24 * 3600 * 1000;
+
+function getSalesLast(key: string)  { return Number(localStorage.getItem(`wfm_sales_${key}`) || 0); }
+function setSalesLast(key: string)  { localStorage.setItem(`wfm_sales_${key}`, String(Date.now())); }
+function salesRemaining(key: string, period: "weekly" | "monthly", now: number): number {
+  const last = getSalesLast(key);
+  if (!last) return 0;
+  const lockMs = period === "weekly" ? SALES_WEEK_MS : SALES_MONTH_MS;
+  return Math.max(0, last + lockMs - now);
+}
+
 function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, totalAmount: number) {
   const dir = isAr ? "rtl" : "ltr";
   const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
@@ -207,6 +219,8 @@ export default function Dashboard() {
   const [modal, setModal] = useState<{ title: string; endpoint: string } | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [generatingSales, setGeneratingSales] = useState<string | null>(null);
+  const [ticker, setTicker] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setTicker(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: () => api.get("/dashboard/stats").then(r => r.data.data) });
   const { data: activity } = useQuery({ queryKey: ["dashboard-activity"], queryFn: () => api.get("/dashboard/activity").then(r => r.data.data) });
@@ -270,6 +284,7 @@ export default function Dashboard() {
       if (format === "pdf") {
         const html = buildSalesPdfHtml(rows, isAr, periodLabel, totalAmount);
         const filePath = await (window as any).electron.printToPDF(html, `sales-${period}-${Date.now()}.pdf`);
+        setSalesLast(key);
         toast.success(`Saved: ${filePath}`);
       } else {
         const XLSX = await import("xlsx");
@@ -302,6 +317,7 @@ export default function Dashboard() {
         const a = document.createElement("a");
         a.href = url; a.download = `sales-${period}-${Date.now()}.xlsx`; a.click();
         URL.revokeObjectURL(url);
+        setSalesLast(key);
         toast.success(isAr ? "تم التنزيل" : "Downloaded");
       }
     } catch {
@@ -366,35 +382,77 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Sales Reports */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <h3 className="font-semibold text-slate-800 mb-3">
-          {t ? (document.documentElement.dir === "rtl" ? "تقارير المبيعات" : "Sales Reports") : "Sales Reports"}
-        </h3>
-        <p className="text-xs text-slate-400 mb-3">
-          {document.documentElement.dir === "rtl"
-            ? "تقارير الأسبوع والشهر الماضيَين — كاملة فقط"
-            : "Previous complete week & month reports only"}
+      {/* Sales Reports — countdown buttons */}
+      <div className="bg-white rounded-xl shadow-sm p-5" dir="rtl">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-lg">📊</span>
+          <h3 className="font-bold text-slate-800 text-base">تقارير المبيعات</h3>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          تُنشأ تلقائياً بعد انتهاء كل أسبوع أو شهر — يبدأ العد التنازلي بعد كل تنزيل
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <button onClick={() => generateSalesReport("weekly", "pdf")} disabled={generatingSales !== null}
-            style={{ backgroundColor: "#000080" }}
-            className="text-white text-xs px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1">
-            {generatingSales === "weekly-pdf" ? "..." : "📄 " + (document.documentElement.dir === "rtl" ? "PDF أسبوعي" : "Weekly PDF")}
-          </button>
-          <button onClick={() => generateSalesReport("monthly", "pdf")} disabled={generatingSales !== null}
-            style={{ backgroundColor: "#000080" }}
-            className="text-white text-xs px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1">
-            {generatingSales === "monthly-pdf" ? "..." : "📄 " + (document.documentElement.dir === "rtl" ? "PDF شهري" : "Monthly PDF")}
-          </button>
-          <button onClick={() => generateSalesReport("weekly", "excel")} disabled={generatingSales !== null}
-            className="bg-green-700 text-white text-xs px-3 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 flex items-center justify-center gap-1">
-            {generatingSales === "weekly-excel" ? "..." : "📊 " + (document.documentElement.dir === "rtl" ? "Excel أسبوعي" : "Weekly Excel")}
-          </button>
-          <button onClick={() => generateSalesReport("monthly", "excel")} disabled={generatingSales !== null}
-            className="bg-green-700 text-white text-xs px-3 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 flex items-center justify-center gap-1">
-            {generatingSales === "monthly-excel" ? "..." : "📊 " + (document.documentElement.dir === "rtl" ? "Excel شهري" : "Monthly Excel")}
-          </button>
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            { key: "weekly-pdf",    period: "weekly"  as const, format: "pdf"   as const, label: "تقرير المبيعات الأسبوعي (PDF)" },
+            { key: "monthly-pdf",   period: "monthly" as const, format: "pdf"   as const, label: "تقرير المبيعات الشهري (PDF)" },
+            { key: "weekly-excel",  period: "weekly"  as const, format: "excel" as const, label: "تقرير المبيعات الأسبوعي (Excel)" },
+            { key: "monthly-excel", period: "monthly" as const, format: "excel" as const, label: "تقرير المبيعات الشهري (Excel)" },
+          ] as const).map(({ key, period, format, label }) => {
+            const rem = salesRemaining(key, period, ticker);
+            const locked = rem > 0;
+            const isGen = generatingSales === key;
+            const icon = format === "pdf" ? "📄" : "📊";
+            const d = Math.floor(rem / 86400000);
+            const h = Math.floor((rem % 86400000) / 3600000);
+            const m = Math.floor((rem % 3600000) / 60000);
+            const s = Math.floor((rem % 60000) / 1000);
+
+            if (locked) {
+              return (
+                <div key={key} className="rounded-xl border-2 border-slate-200 bg-slate-50 p-3 min-h-[96px] flex flex-col justify-between select-none" style={{ opacity: 0.58 }}>
+                  <div className="flex items-start gap-2">
+                    <span className="text-base flex-shrink-0">{icon}</span>
+                    <span className="text-xs font-semibold text-slate-600 leading-snug">{label}</span>
+                  </div>
+                  <div className="mt-2 space-y-0.5">
+                    <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                      <span>🔒</span><span>متاح خلال</span>
+                    </div>
+                    <div className="text-xs font-mono font-bold text-slate-600 tabular-nums leading-none">
+                      {d > 0 && <span>{d} يوم </span>}
+                      <span>{h} س </span>
+                      <span>{m} د </span>
+                      <span>{s} ث</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={key}
+                onClick={() => generateSalesReport(period, format)}
+                disabled={generatingSales !== null}
+                className={`rounded-xl border-2 p-3 min-h-[96px] flex flex-col justify-between transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed text-white ${
+                  format === "pdf"
+                    ? "bg-[#000080] border-[#000060] hover:bg-[#0000a0]"
+                    : "bg-green-700 border-green-800 hover:bg-green-800"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <span className="text-base flex-shrink-0">{icon}</span>
+                  <span className="text-xs font-semibold leading-snug text-right">{label}</span>
+                </div>
+                <div className="mt-2 text-right">
+                  {isGen
+                    ? <span className="text-[10px] opacity-80 animate-pulse">⏳ جاري التحميل...</span>
+                    : <span className="text-[10px] opacity-90 font-semibold">✅ جاهز للتحميل</span>
+                  }
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
