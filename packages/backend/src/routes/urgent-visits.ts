@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToRole } from '../socket';
-import { SOCKET_ROOMS } from '../constants';
+import { emitToRole, emitToAll } from '../socket';
+import { SOCKET_ROOMS, SOCKET_EVENTS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 
 const router = Router();
@@ -59,6 +59,64 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
       after: { id: record.id, customerName: body.customerName, paymentMethod: record.paymentMethod, appointmentId: record.appointmentId },
     });
     emitToRole(SOCKET_ROOMS.ADMIN, 'urgent_visit:submitted', record);
+
+    // Auto-create or update customer from urgent visit data
+    try {
+      const phone = body.customerPhone.trim();
+      const name = body.customerName.trim();
+
+      // Parse structured location from appointment urgentLocation
+      let loc: Record<string, string> = {};
+      if (appt.urgentLocation) {
+        try { loc = JSON.parse(appt.urgentLocation); } catch {}
+      }
+
+      const city = loc.city || '—';
+      const district = loc.district || '—';
+      const street = loc.street || '—';
+      const addrData = {
+        city,
+        district,
+        street,
+        ...(loc.postalCode   ? { postalCode:   loc.postalCode }   : {}),
+        ...(loc.buildingNo   ? { buildingNo:   loc.buildingNo }   : {}),
+        ...(loc.floorNo      ? { floorNo:      loc.floorNo }      : {}),
+        ...(loc.apartmentNo  ? { apartmentNo:  loc.apartmentNo }  : {}),
+      };
+
+      const existing = await prisma.customer.findFirst({ where: { phone } });
+
+      if (existing) {
+        await prisma.customer.update({
+          where: { id: existing.id },
+          data: { name, notes: body.serviceNotes || existing.notes || undefined, version: { increment: 1 } },
+        });
+        await prisma.address.upsert({
+          where: { customerId: existing.id },
+          create: { customerId: existing.id, ...addrData },
+          update: addrData,
+        });
+        emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
+      } else {
+        const installDate = body.serviceType === 'INSTALLATION' ? new Date() : undefined;
+        const newCust = await prisma.customer.create({
+          data: {
+            name,
+            phone,
+            maintenanceCycle: 'MONTHLY' as any,
+            maintenanceFrequency: 1,
+            notes: body.serviceNotes || undefined,
+            ...(installDate ? { installationDate: installDate } : {}),
+            createdById: req.user!.userId,
+            address: { create: { ...addrData } },
+          },
+        });
+        emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
+      }
+    } catch (autoErr: any) {
+      console.error('[urgent-visit] auto-customer sync warning:', autoErr?.message);
+    }
+
     res.status(201).json({ success: true, data: record });
   } catch (e) { next(e); }
 });
