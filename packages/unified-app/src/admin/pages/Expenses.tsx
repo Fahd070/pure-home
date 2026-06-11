@@ -10,6 +10,52 @@ const STATUS_COLORS: Record<string, string> = {
   REJECTED: "bg-red-100 text-red-700",
 };
 
+function buildInvoicePdfHtml(expense: any, isAr: boolean) {
+  const dir = isAr ? "rtl" : "ltr";
+  const statusAr: Record<string, string> = { PENDING: "بانتظار", APPROVED: "موافق عليه", REJECTED: "مرفوض" };
+  const statusEn: Record<string, string> = { PENDING: "Pending", APPROVED: "Approved", REJECTED: "Rejected" };
+  const catAr: Record<string, string> = { fuel: "وقود", tools: "أدوات", materials: "مواد", food: "طعام", transport: "مواصلات", other: "أخرى" };
+  return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
+<style>
+body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${dir};color:#333}
+.hdr{border-bottom:3px solid #000080;margin-bottom:16px;padding-bottom:10px}
+.brand{font-size:20px;font-weight:bold;color:#000080}
+.title{font-size:15px;font-weight:bold;margin:6px 0 3px}
+.inv-id{color:#666;font-size:10px}
+.section{margin-top:14px}
+.sec-title{font-weight:bold;color:#000080;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:8px;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.item .lbl{color:#888;font-size:9px;margin-bottom:2px}
+.item .val{font-size:12px;font-weight:600}
+.amount-box{margin-top:14px;background:#f0f4ff;border:1px solid #000080;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+.amount-box .lbl{color:#000080;font-size:11px;font-weight:bold}
+.amount-box .val{font-size:18px;font-weight:bold;color:#000080}
+.ftr{margin-top:20px;border-top:1px solid #eee;padding-top:8px;color:#999;font-size:9px;text-align:center}
+</style></head><body>
+<div class="hdr">
+  <div class="brand">Pure Home</div>
+  <div class="title">${isAr ? "فاتورة مصروف" : "Expense Invoice"}</div>
+  <div class="inv-id">${isAr ? "رقم الفاتورة" : "Invoice ID"}: ${expense.id}</div>
+</div>
+<div class="section">
+  <div class="sec-title">${isAr ? "تفاصيل المصروف" : "Expense Details"}</div>
+  <div class="grid">
+    <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${expense.technician?.name || "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val">${new Date(expense.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${isAr ? (catAr[expense.category] || expense.category) : expense.category}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "طريقة الدفع" : "Payment Method"}</div><div class="val">—</div></div>
+    ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${expense.description}</div></div>` : ""}
+  </div>
+</div>
+<div class="amount-box">
+  <span class="lbl">${isAr ? "المبلغ الإجمالي" : "Total Amount"}</span>
+  <span class="val">${expense.amount.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span>
+</div>
+<div class="ftr">Pure Home System — ${new Date().toLocaleString()} &nbsp;|&nbsp; ${isAr ? "تاريخ الإصدار" : "Issued"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+</body></html>`;
+}
+
 function buildExpensePdfHtml(expenses: any[], isAr: boolean, period: string) {
   const dir = isAr ? "rtl" : "ltr";
   const total = expenses.reduce((s, e) => s + e.amount, 0);
@@ -92,6 +138,22 @@ export default function AdminExpenses() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-expenses"] }); toast.success(t("common.success")); },
     onError: () => toast.error(t("common.error")),
   });
+
+  const markInvoiceMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/expenses/${id}/mark-invoice`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-expenses"] }),
+  });
+
+  async function generateInvoice(expense: any) {
+    try {
+      const html = buildInvoicePdfHtml(expense, isAr);
+      const filePath = await (window as any).electron.printToPDF(html, `invoice-${expense.id.slice(0, 8)}-${Date.now()}.pdf`);
+      await markInvoiceMutation.mutateAsync(expense.id);
+      toast.success(`${t("reports.savedTo")}: ${filePath}`);
+    } catch {
+      toast.error(t("common.error"));
+    }
+  }
 
   const expenses: any[] = data?.data || [];
   const totalAmount: number = data?.meta?.totalAmount || 0;
@@ -229,7 +291,7 @@ export default function AdminExpenses() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-1 items-center">
+                      <div className="flex gap-1 items-center flex-wrap">
                         {e.status === "PENDING" && (
                           <>
                             <button onClick={() => statusMutation.mutate({ id: e.id, status: "APPROVED" })}
@@ -242,6 +304,10 @@ export default function AdminExpenses() {
                             </button>
                           </>
                         )}
+                        <button onClick={() => generateInvoice(e)}
+                          className={`text-xs px-2 py-1 rounded border flex items-center gap-1 ${e.invoiceGenerated ? "border-green-300 text-green-700 bg-green-50" : "border-indigo-200 text-indigo-600 hover:bg-indigo-50"}`}>
+                          {e.invoiceGenerated ? "✓" : "📄"} {isAr ? "فاتورة" : "Invoice"}
+                        </button>
                         <button onClick={() => { if (confirm(isAr ? "حذف هذا المصروف؟" : "Delete this expense?")) deleteMutation.mutate(e.id); }}
                           className="text-xs text-slate-400 hover:text-red-600 px-1">✕</button>
                       </div>

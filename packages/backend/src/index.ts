@@ -73,6 +73,8 @@ async function ensureSchemaUpdates() {
     await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "serviceNotes" TEXT`);
     await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "serviceType" TEXT`);
     await run(`ALTER TABLE "urgent_visit_records" ADD COLUMN IF NOT EXISTS "amount" DOUBLE PRECISION`);
+    // expenses: invoiceGenerated flag
+    await run(`ALTER TABLE "expenses" ADD COLUMN IF NOT EXISTS "invoiceGenerated" BOOLEAN NOT NULL DEFAULT false`);
     // user_settings color columns
     await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "primaryColor" TEXT`);
     await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "secondaryColor" TEXT`);

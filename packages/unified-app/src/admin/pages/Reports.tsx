@@ -200,7 +200,7 @@ export default function Reports() {
     enabled: hasSearchedAppts,
   });
   const allAppts: any[] = apptData || [];
-  const regularAppts = allAppts.filter((a: any) => !a.isUrgent);
+  const regularAppts = allAppts.filter((a: any) => !a.isUrgent && a.customer != null);
   const urgentAppts  = allAppts.filter((a: any) => a.isUrgent);
 
   function apptSourceLabel(role: string) {
