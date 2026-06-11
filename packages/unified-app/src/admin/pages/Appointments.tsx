@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -17,6 +18,7 @@ export default function Appointments() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
+  const socket = useSocket();
   const [filter, setFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editAppt, setEditAppt] = useState<any>(null);
@@ -67,6 +69,32 @@ export default function Appointments() {
     },
     onError: () => toast.error(t("common.error")),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/appointments/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast.success(isAr ? "تم حذف الموعد" : "Appointment deleted");
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    };
+    socket.on("appointment:deleted", refresh);
+    socket.on("customer:deleted", refresh);
+    socket.on("customers:bulk-deleted", refresh);
+    return () => {
+      socket.off("appointment:deleted", refresh);
+      socket.off("customer:deleted", refresh);
+      socket.off("customers:bulk-deleted", refresh);
+    };
+  }, [socket, qc]);
 
   const statusKey: Record<string, string> = {
     SCHEDULED:   t("appointments.scheduled"),
@@ -268,6 +296,12 @@ export default function Appointments() {
                             {isAr ? "إظهار للجدولة" : "Show to Scheduling"}
                           </button>
                         )}
+                        <button
+                          onClick={() => { if (confirm(isAr ? "حذف هذا الموعد نهائياً؟" : "Permanently delete this appointment?")) deleteMutation.mutate(a.id); }}
+                          disabled={deleteMutation.isPending}
+                          className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 disabled:opacity-50">
+                          {isAr ? "حذف" : "Delete"}
+                        </button>
                       </div>
                     </td>
                   </tr>

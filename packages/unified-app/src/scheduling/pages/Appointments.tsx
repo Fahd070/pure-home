@@ -16,9 +16,19 @@ export default function Appointments() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.on("appointment:created", () => qc.invalidateQueries({ queryKey: ["appointments"] }));
-    socket.on("appointment:status", () => qc.invalidateQueries({ queryKey: ["appointments"] }));
-    return () => { socket.off("appointment:created"); socket.off("appointment:status"); };
+    const refresh = () => qc.invalidateQueries({ queryKey: ["appointments"] });
+    socket.on("appointment:created", refresh);
+    socket.on("appointment:status", refresh);
+    socket.on("appointment:deleted", refresh);
+    socket.on("customer:deleted", refresh);
+    socket.on("customers:bulk-deleted", refresh);
+    return () => {
+      socket.off("appointment:created", refresh);
+      socket.off("appointment:status", refresh);
+      socket.off("appointment:deleted", refresh);
+      socket.off("customer:deleted", refresh);
+      socket.off("customers:bulk-deleted", refresh);
+    };
   }, [socket, qc]);
 
   return (

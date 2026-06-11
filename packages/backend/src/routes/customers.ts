@@ -177,8 +177,12 @@ router.patch('/:id/toggle-active', requireRole('ADMIN'), async (req: AuthRequest
 
 router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({ where: { id: req.params.id } });
+    const customer = await prisma.customer.findUnique({
+      where: { id: req.params.id },
+      include: { appointments: { select: { id: true } } },
+    });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
+    const apptIds = customer.appointments.map((a: any) => a.id);
     await prisma.customer.delete({ where: { id: req.params.id } });
     await writeAudit({
       action: 'DELETE', entityType: 'customer', entityId: req.params.id, userId: req.user!.userId,
@@ -188,6 +192,9 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: req.params.id, userId: req.user!.userId, payload: { id: req.params.id, name: customer.name } });
     emitToAll(SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
+    if (apptIds.length > 0) {
+      emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
+    }
     res.json({ success: true });
   } catch (e) { next(e); }
 });
@@ -196,6 +203,11 @@ router.delete('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => 
   try {
     const customers = await prisma.customer.findMany({ select: { id: true, name: true } });
     if (customers.length === 0) return res.json({ success: true, data: { count: 0 } });
+    const apptRecords = await prisma.appointment.findMany({
+      where: { customerId: { in: customers.map(c => c.id) } },
+      select: { id: true },
+    });
+    const apptIds = apptRecords.map((a: any) => a.id);
     const result = await prisma.customer.deleteMany();
     await writeAudit({
       action: 'DELETE', entityType: 'customer', entityId: 'bulk',
@@ -210,6 +222,9 @@ router.delete('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => 
       payload: { bulk: true, count: result.count, ids: customers.map(c => c.id) },
     });
     emitToAll(SOCKET_EVENTS.CUSTOMERS_BULK_DELETED, { count: result.count });
+    if (apptIds.length > 0) {
+      emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, bulk: true });
+    }
     res.json({ success: true, data: { count: result.count } });
   } catch (e) { next(e); }
 });
