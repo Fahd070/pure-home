@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 type Tab = "list" | "records";
@@ -15,6 +16,7 @@ export default function UrgentAppointments() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
+  const socket = useSocket();
   const [tab, setTab] = useState<Tab>("list");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -22,6 +24,20 @@ export default function UrgentAppointments() {
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-urgent-admin"));
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => {
+      qc.invalidateQueries({ queryKey: ["urgent-appointments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    };
+    socket.on("appointment:deleted", refresh);
+    socket.on("appointment:created", refresh);
+    return () => {
+      socket.off("appointment:deleted", refresh);
+      socket.off("appointment:created", refresh);
+    };
+  }, [socket, qc]);
 
   const { data: apptData, isLoading: apptLoading } = useQuery({
     queryKey: ["urgent-appointments"],
@@ -49,9 +65,19 @@ export default function UrgentAppointments() {
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/appointments/${id}/approve-visibility`),
-    onSuccess: (_, id) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["urgent-appointments"] });
       toast.success(isAr ? "تم إظهار الموعد للجدولة" : "Appointment visible to Scheduling");
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/appointments/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["urgent-appointments"] });
+      qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      toast.success(isAr ? "تم حذف الموعد العاجل" : "Urgent appointment deleted");
     },
     onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
   });
@@ -226,12 +252,24 @@ export default function UrgentAppointments() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {!a.visibleToScheduling && (
-                          <button onClick={() => approveMutation.mutate(a.id)} disabled={approveMutation.isPending}
-                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                            {t("urgentAppts.approve")}
+                        <div className="flex gap-2 items-center">
+                          {!a.visibleToScheduling && (
+                            <button onClick={() => approveMutation.mutate(a.id)} disabled={approveMutation.isPending}
+                              className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                              {t("urgentAppts.approve")}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              if (window.confirm(isAr ? "هل تريد حذف هذا الموعد العاجل؟ سيتم حذف جميع السجلات المرتبطة به." : "Delete this urgent appointment? All related records will be removed.")) {
+                                deleteMutation.mutate(a.id);
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                            {isAr ? "حذف" : "Delete"}
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}

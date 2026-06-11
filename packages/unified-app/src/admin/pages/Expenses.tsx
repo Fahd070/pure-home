@@ -56,6 +56,57 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 </body></html>`;
 }
 
+function buildAllInvoicesPdfHtml(expenses: any[], isAr: boolean) {
+  const dir = isAr ? "rtl" : "ltr";
+  const statusAr: Record<string, string> = { PENDING: "بانتظار", APPROVED: "موافق عليه", REJECTED: "مرفوض" };
+  const statusEn: Record<string, string> = { PENDING: "Pending", APPROVED: "Approved", REJECTED: "Rejected" };
+  const catAr: Record<string, string> = { fuel: "وقود", tools: "أدوات", materials: "مواد", food: "طعام", transport: "مواصلات", other: "أخرى" };
+
+  const pages = expenses.map((expense, idx) => `
+    <div class="page${idx < expenses.length - 1 ? " page-break" : ""}">
+      <div class="hdr">
+        <div class="brand">Pure Home</div>
+        <div class="title">${isAr ? "فاتورة مصروف" : "Expense Invoice"}</div>
+        <div class="inv-id">${isAr ? "رقم الفاتورة" : "Invoice ID"}: ${expense.id}</div>
+      </div>
+      <div class="section">
+        <div class="sec-title">${isAr ? "تفاصيل المصروف" : "Expense Details"}</div>
+        <div class="grid">
+          <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${expense.technician?.name || "—"}</div></div>
+          <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val">${new Date(expense.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+          <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${isAr ? (catAr[expense.category] || expense.category) : expense.category}</div></div>
+          <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status)}</div></div>
+          ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${expense.description}</div></div>` : ""}
+        </div>
+      </div>
+      <div class="amount-box">
+        <span class="lbl">${isAr ? "المبلغ الإجمالي" : "Total Amount"}</span>
+        <span class="val">${expense.amount.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span>
+      </div>
+      <div class="ftr">Pure Home System — ${new Date().toLocaleString()} &nbsp;|&nbsp; ${isAr ? "تاريخ الإصدار" : "Issued"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+    </div>`).join("");
+
+  return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
+<style>
+body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:12px;direction:${dir};color:#333}
+.page{padding:24px;min-height:200px}
+.page-break{page-break-after:always;border-bottom:2px dashed #ccc;margin-bottom:20px;padding-bottom:20px}
+.hdr{border-bottom:3px solid #000080;margin-bottom:16px;padding-bottom:10px}
+.brand{font-size:20px;font-weight:bold;color:#000080}
+.title{font-size:15px;font-weight:bold;margin:6px 0 3px}
+.inv-id{color:#666;font-size:10px}
+.section{margin-top:14px}
+.sec-title{font-weight:bold;color:#000080;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:8px;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.item .lbl{color:#888;font-size:9px;margin-bottom:2px}
+.item .val{font-size:12px;font-weight:600}
+.amount-box{margin-top:14px;background:#f0f4ff;border:1px solid #000080;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+.amount-box .lbl{color:#000080;font-size:11px;font-weight:bold}
+.amount-box .val{font-size:18px;font-weight:bold;color:#000080}
+.ftr{margin-top:20px;border-top:1px solid #eee;padding-top:8px;color:#999;font-size:9px;text-align:center}
+</style></head><body>${pages}</body></html>`;
+}
+
 function buildExpensePdfHtml(expenses: any[], isAr: boolean, period: string) {
   const dir = isAr ? "rtl" : "ltr";
   const total = expenses.reduce((s, e) => s + e.amount, 0);
@@ -199,35 +250,17 @@ export default function AdminExpenses() {
   const expenses: any[] = data?.data || [];
   const totalAmount: number = data?.meta?.totalAmount || 0;
 
-  async function exportPdf(period: "weekly" | "monthly") {
+  async function downloadAllInvoices() {
     setGenerating(true);
     try {
-      const now = new Date();
-      let from: Date, to: Date;
-      let periodLabel: string;
-
-      if (period === "weekly") {
-        // Current ISO week: Monday to Sunday
-        const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-        const daysFromMon = day === 0 ? 6 : day - 1;
-        from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysFromMon);
-        to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6, 23, 59, 59);
-        const fromLabel = from.toLocaleDateString(isAr ? "ar-SA" : "en-GB");
-        const toLabel = to.toLocaleDateString(isAr ? "ar-SA" : "en-GB");
-        periodLabel = isAr ? `الأسبوع الحالي: ${fromLabel} — ${toLabel}` : `Current Week: ${fromLabel} — ${toLabel}`;
-      } else {
-        // Full current month: 1st to last day
-        from = new Date(now.getFullYear(), now.getMonth(), 1);
-        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        const monthLabel = from.toLocaleDateString(isAr ? "ar-SA" : "en-US", { month: "long", year: "numeric" });
-        periodLabel = isAr ? `الشهر الحالي: ${monthLabel}` : `Current Month: ${monthLabel}`;
+      const { data: allData } = await api.get("/expenses", { params: { limit: 5000 } });
+      const allExpenses: any[] = allData.data || [];
+      if (!allExpenses.length) {
+        toast.error(isAr ? "لا توجد مصروفات" : "No expenses found");
+        return;
       }
-
-      const { data: pdfData } = await api.get("/expenses", {
-        params: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), limit: 5000 }
-      });
-      const html = buildExpensePdfHtml(pdfData.data || [], isAr, periodLabel);
-      const filePath = await (window as any).electron.printToPDF(html, `expenses-${period}-${Date.now()}.pdf`);
+      const html = buildAllInvoicesPdfHtml(allExpenses, isAr);
+      const filePath = await (window as any).electron.printToPDF(html, `all-invoices-${Date.now()}.pdf`);
       toast.success(`${t("reports.savedTo")}: ${filePath}`);
     } catch {
       toast.error(t("common.error"));
@@ -258,13 +291,9 @@ export default function AdminExpenses() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => exportPdf("weekly")} disabled={generating}
+          <button onClick={downloadAllInvoices} disabled={generating}
             style={{ backgroundColor: "#000080" }} className="text-white text-sm px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50">
-            📄 {isAr ? "PDF أسبوعي" : "Weekly PDF"}
-          </button>
-          <button onClick={() => exportPdf("monthly")} disabled={generating}
-            className="bg-indigo-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-            📄 {isAr ? "PDF شهري" : "Monthly PDF"}
+            📥 {isAr ? "تنزيل الفواتير" : "Download Invoices"}
           </button>
         </div>
       </div>

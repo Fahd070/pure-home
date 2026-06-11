@@ -66,6 +66,15 @@ router.get('/', async (req: AuthRequest, res, next) => {
       },
       orderBy: { scheduledDate: 'desc' },
     });
+
+    // Scheduling role must never see financial data
+    if (req.user!.role === 'SCHEDULING') {
+      appts.forEach((a: any) => {
+        if (a.task) { delete a.task.completionAmount; delete a.task.completionPaymentMethod; }
+        if (a.urgentVisitRecord) { delete a.urgentVisitRecord.amount; delete a.urgentVisitRecord.paymentMethod; }
+      });
+    }
+
     res.json({ success: true, data: appts });
   } catch (e) { next(e); }
 });

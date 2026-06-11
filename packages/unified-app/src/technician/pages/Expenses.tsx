@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 
 const CATEGORIES = ["fuel","tools","materials","food","transport","other"] as const;
-const EMPTY = { amount: "", category: "fuel", description: "", date: new Date().toISOString().slice(0,10) };
+const EMPTY = { amount: "", category: "fuel", description: "", date: new Date().toISOString().slice(0,10), customCategory: "" };
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
@@ -40,9 +40,14 @@ export default function TechExpenses() {
     e.preventDefault();
     const amount = parseFloat(form.amount);
     if (!amount || amount <= 0 || !form.date) return;
+    if (form.category === "other" && !form.customCategory.trim()) {
+      toast.error(isAr ? "يرجى تحديد الفئة عند اختيار 'أخرى'" : "Please specify the category when selecting 'Other'");
+      return;
+    }
+    const finalCategory = form.category === "other" ? form.customCategory.trim() : form.category;
     createMutation.mutate({
       amount,
-      category: form.category,
+      category: finalCategory,
       description: form.description || undefined,
       date: form.date,
     });
@@ -93,7 +98,7 @@ export default function TechExpenses() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("expenses.category")}</label>
-              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value, customCategory: e.target.value !== "other" ? "" : f.customCategory }))}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white">
                 {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
               </select>
@@ -103,6 +108,20 @@ export default function TechExpenses() {
               <input type="date" required value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
+            {form.category === "other" && (
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-red-600 mb-1">
+                  {isAr ? "تحديد الفئة *" : "Specify Category *"}
+                </label>
+                <input
+                  required
+                  value={form.customCategory}
+                  onChange={e => setForm(f => ({ ...f, customCategory: e.target.value }))}
+                  placeholder={isAr ? "اكتب الفئة هنا..." : "Enter category here..."}
+                  className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("expenses.description")}</label>
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}

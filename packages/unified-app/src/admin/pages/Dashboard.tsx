@@ -125,6 +125,80 @@ function StatCard({ label, value, color, onClick }: { label: string; value: numb
   );
 }
 
+function prevWeekRange() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const daysToLastMon = day === 0 ? 7 : day + 6;
+  const lastMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysToLastMon);
+  const lastSun = new Date(lastMon.getFullYear(), lastMon.getMonth(), lastMon.getDate() + 6);
+  return { from: lastMon, to: lastSun };
+}
+
+function prevMonthRange() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const to = new Date(now.getFullYear(), now.getMonth(), 0);
+  return { from, to };
+}
+
+function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, totalAmount: number) {
+  const dir = isAr ? "rtl" : "ltr";
+  const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
+  const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
+  const headers = isAr
+    ? ["#", "اسم العميل", "الجوال", "نوع الخدمة", "التاريخ", "الفني", "طريقة الدفع", "المبلغ (ريال)"]
+    : ["#", "Customer", "Phone", "Service Type", "Date", "Technician", "Payment", "Amount (SAR)"];
+  const tableRows = rows.map((r, i) => `<tr>
+    <td style="text-align:center;color:#888">${i + 1}</td>
+    <td>${r.customerName}</td>
+    <td>${r.customerPhone}</td>
+    <td>${typeLabels[r.appointmentType] || r.appointmentType}</td>
+    <td style="white-space:nowrap">${new Date(r.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+    <td>${r.technicianName}</td>
+    <td>${payLabels[r.paymentMethod] || r.paymentMethod}</td>
+    <td style="text-align:center;font-weight:600;font-family:monospace">${Number(r.amount).toFixed(2)}</td>
+  </tr>`).join("");
+  return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
+<style>
+*{box-sizing:border-box}
+body{font-family:Tahoma,Arial,sans-serif;margin:20px;font-size:11px;direction:${dir};color:#222}
+.border-box{border:2px solid #000080;border-radius:6px;padding:16px}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000080;margin-bottom:14px;padding-bottom:10px}
+.brand{font-size:22px;font-weight:bold;color:#000080}
+.rtitle{font-size:14px;font-weight:bold;margin:4px 0 2px;color:#000080}
+.period-badge{font-size:11px;color:#333;background:#e8eeff;border:1px solid #b0c0ff;border-radius:4px;padding:3px 10px;display:inline-block;margin-top:4px}
+.print-date{font-size:10px;color:#888}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:10px}
+th{background:#000080;color:#fff;padding:7px 8px;text-align:${dir==="rtl"?"right":"left"};font-size:10px}
+td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:middle}
+tr:nth-child(even) td{background:#f7f8fc}
+.grand-box{margin-top:16px;background:linear-gradient(135deg,#000080,#1a1ab0);color:#fff;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+.grand-lbl{font-size:13px;font-weight:bold}
+.grand-val{font-size:22px;font-weight:bold;font-family:monospace}
+.ftr{margin-top:14px;border-top:1px solid #eee;padding-top:6px;color:#aaa;font-size:9px;text-align:center}
+</style></head><body>
+<div class="border-box">
+<div class="hdr">
+  <div>
+    <div class="brand">Pure Home</div>
+    <div class="rtitle">${isAr ? "تقرير المبيعات" : "Sales Report"}</div>
+    <div><span class="period-badge">📅 ${periodLabel}</span></div>
+  </div>
+  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+</div>
+<table>
+  <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+  <tbody>${tableRows || `<tr><td colspan="8" style="text-align:center;color:#bbb;padding:20px">${isAr ? "لا توجد بيانات في هذه الفترة" : "No data for this period"}</td></tr>`}</tbody>
+</table>
+<div class="grand-box">
+  <span class="grand-lbl">${isAr ? "إجمالي المبيعات" : "Total Sales"} &nbsp;·&nbsp; ${rows.length} ${isAr ? "سجل" : "records"}</span>
+  <span class="grand-val">${totalAmount.toFixed(2)} <span style="font-size:13px;opacity:0.85">${isAr ? "ريال" : "SAR"}</span></span>
+</div>
+<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+</div>
+</body></html>`;
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -132,6 +206,7 @@ export default function Dashboard() {
   const socket = useSocket();
   const [modal, setModal] = useState<{ title: string; endpoint: string } | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [generatingSales, setGeneratingSales] = useState<string | null>(null);
 
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: () => api.get("/dashboard/stats").then(r => r.data.data) });
   const { data: activity } = useQuery({ queryKey: ["dashboard-activity"], queryFn: () => api.get("/dashboard/activity").then(r => r.data.data) });
@@ -170,6 +245,69 @@ export default function Dashboard() {
     POSTPONED: t("tasks.postponed"), PENDING_APPROVAL: t("tasks.pendingApproval"),
     APPROVED: t("tasks.approved"), NO_TASK: "—"
   };
+
+  async function generateSalesReport(period: "weekly" | "monthly", format: "pdf" | "excel") {
+    const key = `${period}-${format}`;
+    setGeneratingSales(key);
+    try {
+      const isAr = document.documentElement.lang === "ar" || document.documentElement.dir === "rtl";
+      const { from, to } = period === "weekly" ? prevWeekRange() : prevMonthRange();
+      const fromStr = from.toISOString().slice(0, 10);
+      const toStr = to.toISOString().slice(0, 10);
+
+      const periodLabel = period === "weekly"
+        ? (isAr
+            ? `الأسبوع الماضي: ${from.toLocaleDateString("ar-SA")} — ${to.toLocaleDateString("ar-SA")}`
+            : `Previous Week: ${from.toLocaleDateString("en-GB")} — ${to.toLocaleDateString("en-GB")}`)
+        : (isAr
+            ? `الشهر الماضي: ${from.toLocaleDateString("ar-SA", { month: "long", year: "numeric" })}`
+            : `Previous Month: ${from.toLocaleDateString("en-US", { month: "long", year: "numeric" })}`);
+
+      const { data: salesData } = await api.get("/reports/sales", { params: { from: fromStr, to: toStr } });
+      const rows: any[] = salesData.data || [];
+      const totalAmount: number = salesData.meta?.totalAmount || 0;
+
+      if (format === "pdf") {
+        const html = buildSalesPdfHtml(rows, isAr, periodLabel, totalAmount);
+        const filePath = await (window as any).electron.printToPDF(html, `sales-${period}-${Date.now()}.pdf`);
+        toast.success(`Saved: ${filePath}`);
+      } else {
+        const XLSX = await import("xlsx");
+        const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
+        const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
+        const excelRows = [
+          ...rows.map((r: any) => ({
+            [isAr ? "اسم العميل" : "Customer"]: r.customerName,
+            [isAr ? "الجوال" : "Phone"]: r.customerPhone,
+            [isAr ? "نوع الخدمة" : "Service Type"]: typeLabels[r.appointmentType] || r.appointmentType,
+            [isAr ? "التاريخ" : "Date"]: new Date(r.date).toLocaleDateString(),
+            [isAr ? "الفني" : "Technician"]: r.technicianName,
+            [isAr ? "طريقة الدفع" : "Payment"]: payLabels[r.paymentMethod] || r.paymentMethod,
+            [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: Number(r.amount),
+          })),
+          {
+            [isAr ? "اسم العميل" : "Customer"]: isAr ? "الإجمالي" : "TOTAL",
+            [isAr ? "الجوال" : "Phone"]: "", [isAr ? "نوع الخدمة" : "Service Type"]: "",
+            [isAr ? "التاريخ" : "Date"]: "", [isAr ? "الفني" : "Technician"]: "",
+            [isAr ? "طريقة الدفع" : "Payment"]: "", [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: totalAmount,
+          },
+        ];
+        const ws = XLSX.utils.json_to_sheet(excelRows);
+        ws['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 14 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, isAr ? "المبيعات" : "Sales");
+        const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+        const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `sales-${period}-${Date.now()}.xlsx`; a.click();
+        URL.revokeObjectURL(url);
+        toast.success(isAr ? "تم التنزيل" : "Downloaded");
+      }
+    } catch {
+      toast.error(t("common.error"));
+    } finally { setGeneratingSales(null); }
+  }
 
   const cards = [
     { label: t("dashboard.customers"),            key: "total",          endpoint: "customers-list",          color: "border-blue-500" },
@@ -225,6 +363,38 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Sales Reports */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <h3 className="font-semibold text-slate-800 mb-3">
+          {t ? (document.documentElement.dir === "rtl" ? "تقارير المبيعات" : "Sales Reports") : "Sales Reports"}
+        </h3>
+        <p className="text-xs text-slate-400 mb-3">
+          {document.documentElement.dir === "rtl"
+            ? "تقارير الأسبوع والشهر الماضيَين — كاملة فقط"
+            : "Previous complete week & month reports only"}
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <button onClick={() => generateSalesReport("weekly", "pdf")} disabled={generatingSales !== null}
+            style={{ backgroundColor: "#000080" }}
+            className="text-white text-xs px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1">
+            {generatingSales === "weekly-pdf" ? "..." : "📄 " + (document.documentElement.dir === "rtl" ? "PDF أسبوعي" : "Weekly PDF")}
+          </button>
+          <button onClick={() => generateSalesReport("monthly", "pdf")} disabled={generatingSales !== null}
+            style={{ backgroundColor: "#000080" }}
+            className="text-white text-xs px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1">
+            {generatingSales === "monthly-pdf" ? "..." : "📄 " + (document.documentElement.dir === "rtl" ? "PDF شهري" : "Monthly PDF")}
+          </button>
+          <button onClick={() => generateSalesReport("weekly", "excel")} disabled={generatingSales !== null}
+            className="bg-green-700 text-white text-xs px-3 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 flex items-center justify-center gap-1">
+            {generatingSales === "weekly-excel" ? "..." : "📊 " + (document.documentElement.dir === "rtl" ? "Excel أسبوعي" : "Weekly Excel")}
+          </button>
+          <button onClick={() => generateSalesReport("monthly", "excel")} disabled={generatingSales !== null}
+            className="bg-green-700 text-white text-xs px-3 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 flex items-center justify-center gap-1">
+            {generatingSales === "monthly-excel" ? "..." : "📊 " + (document.documentElement.dir === "rtl" ? "Excel شهري" : "Monthly Excel")}
+          </button>
         </div>
       </div>
 

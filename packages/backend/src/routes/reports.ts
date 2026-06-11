@@ -45,6 +45,13 @@ function enrichWithSchedule(customers: any[], now: Date) {
 
     const maintenanceStatus = computeMaintenanceStatus(appts, now);
 
+    // Sum all completion amounts from tasks and urgent visit records
+    const totalAmount = appts.reduce((sum: number, a: any) => {
+      if (a.task?.completionAmount) sum += Number(a.task.completionAmount);
+      if (a.urgentVisitRecord?.amount) sum += Number(a.urgentVisitRecord.amount);
+      return sum;
+    }, 0);
+
     return {
       id: c.id, name: c.name, phone: c.phone, notes: c.notes,
       isActive: c.isActive, createdAt: c.createdAt,
@@ -52,7 +59,7 @@ function enrichWithSchedule(customers: any[], now: Date) {
       maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency,
       address: c.address, lastMaintenance, nextMaintenance, nextMaintenanceDate,
       daysUntil, alertLevel, overdueCount: overdue.length,
-      maintenanceStatus,
+      maintenanceStatus, totalAmount,
     };
   });
 }
@@ -114,7 +121,7 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
       where,
       include: {
         address: true,
-        appointments: { include: { task: true }, orderBy: { scheduledDate: 'desc' } }
+        appointments: { include: { task: true, urgentVisitRecord: true }, orderBy: { scheduledDate: 'desc' } }
       },
       skip: (parseInt(page) - 1) * safeLimit,
       take: safeLimit,
@@ -122,7 +129,79 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
     });
 
     const enriched = enrichWithSchedule(customers, now);
-    res.json({ success: true, data: enriched, meta: { total, page: parseInt(page), limit: safeLimit } });
+    // Scheduling must not see financial data
+    const safe = req.user!.role === 'SCHEDULING'
+      ? enriched.map((c: any) => { const { totalAmount, ...rest } = c; return rest; })
+      : enriched;
+    res.json({ success: true, data: safe, meta: { total, page: parseInt(page), limit: safeLimit } });
+  } catch (e) { next(e); }
+});
+
+// Sales report: completed tasks + urgent visits for a date range
+router.get('/sales', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const { from, to } = req.query as any;
+    if (!from || !to) return res.status(400).json({ success: false, message: 'from and to dates are required' });
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to + 'T23:59:59');
+
+    // Regular appointments with completed tasks in the date range
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        scheduledDate: { gte: fromDate, lte: toDate },
+        isUrgent: false,
+        task: { status: 'COMPLETED', completionAmount: { not: null } },
+      },
+      include: {
+        customer: true,
+        task: { include: { technician: true } },
+      },
+      orderBy: { scheduledDate: 'asc' },
+    });
+
+    // Urgent visit records in the date range
+    const urgentVisits = await prisma.urgentVisitRecord.findMany({
+      where: {
+        createdAt: { gte: fromDate, lte: toDate },
+        amount: { not: null },
+      },
+      include: {
+        appointment: true,
+        submittedBy: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const regularRows = appointments.map(a => ({
+      kind: 'regular',
+      customerName: a.customer?.name || '—',
+      customerPhone: a.customer?.phone || '—',
+      appointmentType: a.type,
+      date: a.scheduledDate,
+      technicianName: a.task?.technician?.name || '—',
+      paymentMethod: a.task?.completionPaymentMethod || '—',
+      amount: a.task?.completionAmount || 0,
+    }));
+
+    const urgentRows = urgentVisits.map(v => ({
+      kind: 'urgent',
+      customerName: v.customerName || '—',
+      customerPhone: v.customerPhone || '—',
+      appointmentType: v.serviceType || 'MAINTENANCE',
+      date: v.createdAt,
+      technicianName: v.submittedBy?.name || '—',
+      paymentMethod: v.paymentMethod,
+      amount: v.amount || 0,
+    }));
+
+    const allRows = [...regularRows, ...urgentRows].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    const totalAmount = allRows.reduce((s, r) => s + Number(r.amount), 0);
+
+    res.json({ success: true, data: allRows, meta: { total: allRows.length, totalAmount } });
   } catch (e) { next(e); }
 });
 
