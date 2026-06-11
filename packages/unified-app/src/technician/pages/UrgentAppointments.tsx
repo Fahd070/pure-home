@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER";
@@ -16,12 +17,28 @@ export default function TechUrgentAppointments() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
+  const socket = useSocket();
   const [submitModal, setSubmitModal] = useState<{ appt: any } | null>(null);
   const [record, setRecord] = useState({ ...EMPTY_RECORD });
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-urgent-tech"));
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => qc.invalidateQueries({ queryKey: ["tech-urgent-appointments"] });
+    socket.on("appointment:created", refresh);
+    socket.on("task:approved", refresh);
+    socket.on("appointment:deleted", refresh);
+    socket.on("customer:deleted", refresh);
+    return () => {
+      socket.off("appointment:created", refresh);
+      socket.off("task:approved", refresh);
+      socket.off("appointment:deleted", refresh);
+      socket.off("customer:deleted", refresh);
+    };
+  }, [socket, qc]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["tech-urgent-appointments"],

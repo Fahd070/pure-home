@@ -5,7 +5,7 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 const router = Router();
 router.use(authenticate);
 
-router.get('/stats', async (req, res, next) => {
+router.get('/stats', async (req: AuthRequest, res, next) => {
   try {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -13,6 +13,10 @@ router.get('/stats', async (req, res, next) => {
     const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart.getTime() + 86400000);
+
+    // Scheduling dept only sees urgent appointments that admin has made visible to them
+    const urgentWhere: any = { isUrgent: true };
+    if (req.user?.role === 'SCHEDULING') urgentWhere.visibleToScheduling = true;
 
     const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
       prisma.customer.count(),
@@ -38,7 +42,7 @@ router.get('/stats', async (req, res, next) => {
           NOT: { task: { status: 'COMPLETED' } }
         }
       }),
-      prisma.appointment.count({ where: { isUrgent: true } }),
+      prisma.appointment.count({ where: urgentWhere }),
     ]);
 
     res.json({ success: true, data: { total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
@@ -232,11 +236,12 @@ router.get('/today', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/urgent', async (req, res, next) => {
+router.get('/urgent', async (req: AuthRequest, res, next) => {
   try {
     const { page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
     const where: any = { isUrgent: true };
+    if (req.user?.role === 'SCHEDULING') where.visibleToScheduling = true;
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
       where,
