@@ -39,12 +39,11 @@ async function upsertCode(dept: Dept, newCode: string, userId: string): Promise<
   const key = CODE_KEYS[dept];
   const now = new Date();
   const id = randomUUID();
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "system_configs" ("id","key","value","updatedBy","updatedAt","createdAt")
-     VALUES ($1,$2,$3,$4,$5,$5)
-     ON CONFLICT ("key") DO UPDATE SET "value"=$3,"updatedBy"=$4,"updatedAt"=$5`,
-    id, key, newCode, userId, now
-  );
+  await prisma.$executeRaw`
+    INSERT INTO "system_configs" ("id","key","value","updatedBy","updatedAt","createdAt")
+    VALUES (${id},${key},${newCode},${userId},${now},${now})
+    ON CONFLICT ("key") DO UPDATE SET "value"=${newCode},"updatedBy"=${userId},"updatedAt"=${now}
+  `;
 }
 
 router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {

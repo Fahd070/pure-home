@@ -5,7 +5,7 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 const router = Router();
 router.use(authenticate);
 
-router.get('/stats', async (req: AuthRequest, res, next) => {
+router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -49,7 +49,7 @@ router.get('/stats', async (req: AuthRequest, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/activity', async (req, res, next) => {
+router.get('/activity', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const customers = await prisma.customer.findMany({
       where: { isActive: true, activityDismissed: false },
@@ -95,7 +95,7 @@ router.delete('/activity', requireRole('ADMIN'), async (req: AuthRequest, res, n
 });
 
 // --- Drill-down endpoints for clickable cards ---
-router.get('/customers-list', async (req, res, next) => {
+router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -111,7 +111,7 @@ router.get('/customers-list', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/completed-maintenance', async (req, res, next) => {
+router.get('/completed-maintenance', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -132,7 +132,7 @@ router.get('/completed-maintenance', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/this-month', async (req, res, next) => {
+router.get('/this-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -151,7 +151,7 @@ router.get('/this-month', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/next-month', async (req, res, next) => {
+router.get('/next-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -170,7 +170,7 @@ router.get('/next-month', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/postponed', async (req, res, next) => {
+router.get('/postponed', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -188,7 +188,7 @@ router.get('/postponed', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/overdue', async (req, res, next) => {
+router.get('/overdue', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -211,7 +211,7 @@ router.get('/overdue', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/today', async (req, res, next) => {
+router.get('/today', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -236,7 +236,7 @@ router.get('/today', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/urgent', async (req: AuthRequest, res, next) => {
+router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);

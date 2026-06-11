@@ -29,9 +29,17 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
     const body = visitSchema.parse(req.body);
     const appt = await prisma.appointment.findUnique({
       where: { id: body.appointmentId },
+      include: { task: { select: { technicianId: true } } },
     });
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
     if (!appt.isUrgent) return res.status(400).json({ success: false, message: 'Appointment is not urgent' });
+
+    // IDOR guard: if the appointment has an assigned technician, only that technician may submit
+    const assignedTechId = (appt as any).task?.technicianId;
+    if (assignedTechId && assignedTechId !== req.user!.userId) {
+      return res.status(403).json({ success: false, message: 'You are not assigned to this appointment' });
+    }
+
     if (await prisma.urgentVisitRecord.findUnique({ where: { appointmentId: body.appointmentId } })) {
       return res.status(409).json({ success: false, message: 'Record already submitted for this appointment' });
     }

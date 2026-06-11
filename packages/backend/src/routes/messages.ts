@@ -7,7 +7,7 @@ import { SOCKET_EVENTS } from '../constants';
 const router = Router();
 router.use(authenticate);
 
-router.get('/', async (req: AuthRequest, res, next) => {
+router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const where: any = { NOT: { action: { contains: 'Scheduling visibility' } } };
     if (req.user!.role === 'SCHEDULING') {

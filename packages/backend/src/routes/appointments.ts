@@ -56,6 +56,10 @@ router.get('/', async (req: AuthRequest, res, next) => {
     if (req.user!.role === 'SCHEDULING') {
       where.visibleToScheduling = true;
     }
+    // Technician only sees appointments assigned to them
+    if (req.user!.role === 'TECHNICIAN') {
+      where.task = { technicianId: req.user!.userId };
+    }
 
     const appts = await prisma.appointment.findMany({
       where,
@@ -92,6 +96,10 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
     // Scheduling cannot see admin-hidden appointments
     if (req.user!.role === 'SCHEDULING' && !appt.visibleToScheduling) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    // Technician can only see appointments assigned to them
+    if (req.user!.role === 'TECHNICIAN' && (appt as any).task?.technicianId !== req.user!.userId) {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     res.json({ success: true, data: appt });
