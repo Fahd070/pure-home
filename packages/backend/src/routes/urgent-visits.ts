@@ -105,7 +105,8 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
       if (existing) {
         // Confirmed same customer — link to existing record without touching their data.
         resolvedCustomerId = existing.id;
-        emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
+        emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
+        emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
       } else {
         // New customer or different identity with same phone — always create a fresh record.
         const installDate = body.serviceType === 'INSTALLATION' ? new Date() : undefined;
@@ -127,7 +128,8 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
           label: `Customer '${name}' created from urgent appointment`,
           after: { id: newCust.id, name, phone },
         });
-        emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
+        emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
+        emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
       }
 
       // Link the appointment to the resolved customer so the record is complete.

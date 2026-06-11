@@ -47,10 +47,7 @@ function rowToSettings(row: any) {
 
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "user_settings" WHERE "userId" = $1 LIMIT 1`,
-      req.user!.userId
-    );
+    const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "user_settings" WHERE "userId" = ${req.user!.userId} LIMIT 1`;
     res.json({ success: true, data: rowToSettings(rows[0]) });
   } catch {
     res.json({ success: true, data: DEFAULT_SETTINGS });
@@ -79,56 +76,55 @@ router.put('/', async (req: AuthRequest, res, next) => {
     const userId = req.user!.userId;
     const id = randomUUID();
 
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "user_settings" (
+    const theme               = body.theme             ?? null;
+    const fontSize            = body.fontSize          ?? null;
+    const interfaceScale      = body.interfaceScale    ?? null;
+    const background          = body.background        ?? null;
+    const highContrast        = body.highContrast      ?? null;
+    const improvedReadability = body.improvedReadability    ?? null;
+    const notificationsEnabled= body.notificationsEnabled   ?? null;
+    const soundEnabled        = body.soundEnabled           ?? null;
+    const soundVolume         = body.soundVolume            ?? null;
+    const primaryColor        = body.primaryColor           ?? null;
+    const secondaryColor      = body.secondaryColor         ?? null;
+    const buttonColor         = body.buttonColor            ?? null;
+    const cardColor           = body.cardColor              ?? null;
+
+    await prisma.$executeRaw`
+      INSERT INTO "user_settings" (
         "id","userId","theme","fontSize","interfaceScale","background",
         "highContrast","improvedReadability","notificationsEnabled","soundEnabled","soundVolume",
         "primaryColor","secondaryColor","buttonColor","cardColor",
         "updatedAt","createdAt"
-       ) VALUES (
-        $1,$2,
-        COALESCE($3,'light'),COALESCE($4,'medium'),COALESCE($5,'normal'),COALESCE($6,'day'),
-        COALESCE($7::boolean,false),COALESCE($8::boolean,false),
-        COALESCE($9::boolean,true),COALESCE($10::boolean,true),
-        COALESCE($11::integer,70),
-        COALESCE($12,'#1E6FFF'),COALESCE($13,'#0F1B2D'),
-        COALESCE($14,'#1E6FFF'),COALESCE($15,'#FFFFFF'),
+      ) VALUES (
+        ${id},${userId},
+        COALESCE(${theme},'light'),COALESCE(${fontSize},'medium'),
+        COALESCE(${interfaceScale},'normal'),COALESCE(${background},'day'),
+        COALESCE(${highContrast}::boolean,false),COALESCE(${improvedReadability}::boolean,false),
+        COALESCE(${notificationsEnabled}::boolean,true),COALESCE(${soundEnabled}::boolean,true),
+        COALESCE(${soundVolume}::integer,70),
+        COALESCE(${primaryColor},'#1E6FFF'),COALESCE(${secondaryColor},'#0F1B2D'),
+        COALESCE(${buttonColor},'#1E6FFF'),COALESCE(${cardColor},'#FFFFFF'),
         CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-       )
-       ON CONFLICT ("userId") DO UPDATE SET
-        "theme"                = COALESCE($3,"user_settings"."theme"),
-        "fontSize"             = COALESCE($4,"user_settings"."fontSize"),
-        "interfaceScale"       = COALESCE($5,"user_settings"."interfaceScale"),
-        "background"           = COALESCE($6,"user_settings"."background"),
-        "highContrast"         = COALESCE($7::boolean,"user_settings"."highContrast"),
-        "improvedReadability"  = COALESCE($8::boolean,"user_settings"."improvedReadability"),
-        "notificationsEnabled" = COALESCE($9::boolean,"user_settings"."notificationsEnabled"),
-        "soundEnabled"         = COALESCE($10::boolean,"user_settings"."soundEnabled"),
-        "soundVolume"          = COALESCE($11::integer,"user_settings"."soundVolume"),
-        "primaryColor"         = COALESCE($12,"user_settings"."primaryColor"),
-        "secondaryColor"       = COALESCE($13,"user_settings"."secondaryColor"),
-        "buttonColor"          = COALESCE($14,"user_settings"."buttonColor"),
-        "cardColor"            = COALESCE($15,"user_settings"."cardColor"),
-        "updatedAt"            = CURRENT_TIMESTAMP`,
-      id, userId,
-      body.theme             ?? null,
-      body.fontSize          ?? null,
-      body.interfaceScale    ?? null,
-      body.background        ?? null,
-      body.highContrast      ?? null,
-      body.improvedReadability    ?? null,
-      body.notificationsEnabled   ?? null,
-      body.soundEnabled           ?? null,
-      body.soundVolume            ?? null,
-      body.primaryColor           ?? null,
-      body.secondaryColor         ?? null,
-      body.buttonColor            ?? null,
-      body.cardColor              ?? null,
-    );
+      )
+      ON CONFLICT ("userId") DO UPDATE SET
+        "theme"                = COALESCE(${theme},"user_settings"."theme"),
+        "fontSize"             = COALESCE(${fontSize},"user_settings"."fontSize"),
+        "interfaceScale"       = COALESCE(${interfaceScale},"user_settings"."interfaceScale"),
+        "background"           = COALESCE(${background},"user_settings"."background"),
+        "highContrast"         = COALESCE(${highContrast}::boolean,"user_settings"."highContrast"),
+        "improvedReadability"  = COALESCE(${improvedReadability}::boolean,"user_settings"."improvedReadability"),
+        "notificationsEnabled" = COALESCE(${notificationsEnabled}::boolean,"user_settings"."notificationsEnabled"),
+        "soundEnabled"         = COALESCE(${soundEnabled}::boolean,"user_settings"."soundEnabled"),
+        "soundVolume"          = COALESCE(${soundVolume}::integer,"user_settings"."soundVolume"),
+        "primaryColor"         = COALESCE(${primaryColor},"user_settings"."primaryColor"),
+        "secondaryColor"       = COALESCE(${secondaryColor},"user_settings"."secondaryColor"),
+        "buttonColor"          = COALESCE(${buttonColor},"user_settings"."buttonColor"),
+        "cardColor"            = COALESCE(${cardColor},"user_settings"."cardColor"),
+        "updatedAt"            = CURRENT_TIMESTAMP
+    `;
 
-    const rows = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT * FROM "user_settings" WHERE "userId" = $1 LIMIT 1`, userId
-    );
+    const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "user_settings" WHERE "userId" = ${userId} LIMIT 1`;
     const settings = rowToSettings(rows[0]);
 
     emitToRole(req.user!.role, SOCKET_EVENTS.SETTINGS_UPDATED, settings);

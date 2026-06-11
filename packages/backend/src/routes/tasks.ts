@@ -53,6 +53,13 @@ router.get('/', async (req: AuthRequest, res, next) => {
       },
       orderBy: { createdAt: 'desc' },
     });
+    // Scheduling must never see financial completion data
+    if (req.user!.role === 'SCHEDULING') {
+      tasks.forEach((t: any) => {
+        delete t.completionAmount;
+        delete t.completionPaymentMethod;
+      });
+    }
     res.json({ success: true, data: tasks });
   } catch (e) { next(e); }
 });
@@ -218,7 +225,11 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       before: taskFields(before), after: taskFields(task),
     });
     await emitEvent({ type: EVENT_TYPES.TASK_COMPLETED, entityType: 'task', entityId: task.id, userId: req.user!.userId, payload: taskFields(task) });
-    emitToAll(SOCKET_EVENTS.TASK_COMPLETED, task);
+    // Admin receives full task with financial data; other roles receive a sanitized version
+    const taskSanitized = { ...task, completionAmount: undefined, completionPaymentMethod: undefined };
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.TASK_COMPLETED, task);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.TASK_COMPLETED, taskSanitized);
+    emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.TASK_COMPLETED, taskSanitized);
     res.json({ success: true, data: task });
   } catch (e) { next(e); }
 });
