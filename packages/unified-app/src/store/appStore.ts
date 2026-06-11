@@ -39,11 +39,14 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "wfm-unified",
-      version: 2,
+      version: 4,
       migrate: (state: any, version: number) => {
-        if (version < 2) {
-          // Migrate existing installs from local/Tailscale URL to Render
+        if (version < 4) {
+          // Ensure all installs use the shared backend; clear stale tokens
           state.serverUrl = RENDER_URL;
+          state.adminAuth = null;
+          state.schedulingAuth = null;
+          state.technicianAuth = null;
         }
         return state;
       },

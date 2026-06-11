@@ -40,6 +40,8 @@ async function ensureSchemaUpdates() {
     try { await prisma.$executeRawUnsafe(sql); } catch {}
   };
   try {
+    // customers: installationDate
+    await run(`ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "installationDate" TIMESTAMP(3)`);
     // appointments: new columns & nullable customerId
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "isUrgent" BOOLEAN NOT NULL DEFAULT false`);
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "adminApproved" BOOLEAN NOT NULL DEFAULT false`);

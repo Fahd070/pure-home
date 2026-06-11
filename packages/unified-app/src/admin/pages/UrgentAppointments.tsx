@@ -44,7 +44,7 @@ export default function UrgentAppointments() {
       setShowForm(false);
       setForm({ ...EMPTY_FORM });
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
   });
 
   const approveMutation = useMutation({
@@ -53,7 +53,7 @@ export default function UrgentAppointments() {
       qc.invalidateQueries({ queryKey: ["urgent-appointments"] });
       toast.success(isAr ? "تم إظهار الموعد للجدولة" : "Appointment visible to Scheduling");
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
   });
 
   function handleSubmit(e: React.FormEvent) {
