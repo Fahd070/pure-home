@@ -59,43 +59,84 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 function buildExpensePdfHtml(expenses: any[], isAr: boolean, period: string) {
   const dir = isAr ? "rtl" : "ltr";
   const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const byCategory: Record<string, number> = {};
+  expenses.forEach(e => { byCategory[e.category] = (byCategory[e.category] || 0) + e.amount; });
+
   const headers = isAr
     ? ["#", "الفني", "الفئة", "المبلغ (ريال)", "التاريخ", "الوصف", "الحالة"]
     : ["#", "Technician", "Category", "Amount (SAR)", "Date", "Description", "Status"];
-  const statusAr: Record<string, string> = { PENDING: "بانتظار", APPROVED: "موافق", REJECTED: "مرفوض" };
+  const statusAr: Record<string, string> = { PENDING: "بانتظار", APPROVED: "موافق عليه", REJECTED: "مرفوض" };
   const statusEn: Record<string, string> = { PENDING: "Pending", APPROVED: "Approved", REJECTED: "Rejected" };
+  const catAr: Record<string, string> = { fuel: "وقود", tools: "أدوات", materials: "مواد", food: "طعام", transport: "مواصلات", other: "أخرى" };
+
   const rows = expenses.map((e, i) => `
     <tr>
-      <td>${i + 1}</td>
+      <td style="text-align:center;color:#888">${i + 1}</td>
       <td>${e.technician?.name || "—"}</td>
-      <td>${e.category}</td>
-      <td>${e.amount.toFixed(2)}</td>
-      <td>${new Date(e.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
-      <td>${e.description || "—"}</td>
-      <td>${isAr ? (statusAr[e.status] || e.status) : (statusEn[e.status] || e.status)}</td>
+      <td>${isAr ? (catAr[e.category] || e.category) : e.category}</td>
+      <td style="text-align:center;font-weight:600;font-family:monospace">${e.amount.toFixed(2)}</td>
+      <td style="white-space:nowrap">${new Date(e.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+      <td style="color:#666;font-size:9px">${e.description || "—"}</td>
+      <td><span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:bold;background:${e.status==="APPROVED"?"#dcfce7":e.status==="REJECTED"?"#fee2e2":"#fef3c7"};color:${e.status==="APPROVED"?"#166534":e.status==="REJECTED"?"#991b1b":"#92400e"}">${isAr ? (statusAr[e.status] || e.status) : (statusEn[e.status] || e.status)}</span></td>
+    </tr>`).join("");
+
+  const catRows = Object.entries(byCategory).map(([cat, amt]) => `
+    <tr>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:10px">${isAr ? (catAr[cat] || cat) : cat}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-weight:600;font-family:monospace;font-size:10px;text-align:${dir==="rtl"?"left":"right"}">${amt.toFixed(2)} ${isAr ? "ريال" : "SAR"}</td>
     </tr>`).join("");
 
   return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
 <style>
-body{font-family:Tahoma,Arial,sans-serif;margin:20px;font-size:11px;direction:${dir};color:#333}
-.hdr{border-bottom:3px solid #000080;margin-bottom:14px;padding-bottom:10px}
-.brand{font-size:20px;font-weight:bold;color:#000080;margin-bottom:4px}
-.meta{color:#666;font-size:10px}
+*{box-sizing:border-box}
+body{font-family:Tahoma,Arial,sans-serif;margin:20px;font-size:11px;direction:${dir};color:#222;background:#fff}
+.border-box{border:2px solid #000080;border-radius:6px;padding:16px}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000080;margin-bottom:14px;padding-bottom:10px}
+.brand{font-size:22px;font-weight:bold;color:#000080}
+.rtitle{font-size:14px;font-weight:bold;margin:4px 0 2px;color:#000080}
+.period-badge{font-size:11px;color:#333;background:#e8eeff;border:1px solid #b0c0ff;border-radius:4px;padding:3px 10px;display:inline-block;margin-top:4px}
+.print-date{font-size:10px;color:#888}
 table{width:100%;border-collapse:collapse;margin-top:8px;font-size:10px}
-th{background:#000080;color:#fff;padding:6px 8px;text-align:${dir === "rtl" ? "right" : "left"}}
-td{padding:5px 8px;border-bottom:1px solid #eee}
-tr:nth-child(even){background:#f9f9f9}
-.total{margin-top:10px;font-weight:bold;font-size:12px}
-.ftr{margin-top:14px;border-top:1px solid #eee;padding-top:6px;color:#999;font-size:9px;text-align:center}
+th{background:#000080;color:#fff;padding:7px 8px;text-align:${dir==="rtl"?"right":"left"};font-size:10px}
+td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:middle}
+tr:nth-child(even) td{background:#f7f8fc}
+.summary-row{margin-top:14px;display:flex;gap:14px;align-items:stretch}
+.cat-box{flex:1;border:1px solid #dde;border-radius:6px;overflow:hidden}
+.cat-title{background:#000080;color:#fff;padding:5px 10px;font-size:10px;font-weight:bold}
+.grand-box{min-width:180px;background:linear-gradient(135deg,#000080,#1a1ab0);color:#fff;border-radius:8px;padding:16px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+.grand-lbl{font-size:11px;opacity:0.9;margin-bottom:6px}
+.grand-val{font-size:24px;font-weight:bold;font-family:monospace}
+.grand-currency{font-size:12px;opacity:0.8}
+.grand-count{font-size:10px;opacity:0.75;margin-top:4px}
+.ftr{margin-top:14px;border-top:1px solid #eee;padding-top:6px;color:#aaa;font-size:9px;text-align:center}
 </style></head><body>
+<div class="border-box">
 <div class="hdr">
-  <div class="brand">Pure Home</div>
-  <div style="font-size:14px;font-weight:bold;margin-bottom:3px">${isAr ? "تقرير المصروفات" : "Expenses Report"} — ${period}</div>
-  <div class="meta">${isAr ? "تاريخ التقرير" : "Date"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)} &nbsp;|&nbsp; ${isAr ? "العدد" : "Count"}: ${expenses.length}</div>
+  <div>
+    <div class="brand">Pure Home</div>
+    <div class="rtitle">${isAr ? "تقرير المصروفات" : "Expenses Report"}</div>
+    <div><span class="period-badge">📅 ${period}</span></div>
+  </div>
+  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
 </div>
-<table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
-<div class="total">${isAr ? "الإجمالي" : "Total"}: ${total.toFixed(2)} ${isAr ? "ريال" : "SAR"}</div>
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<table>
+  <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+  <tbody>${rows || `<tr><td colspan="7" style="text-align:center;color:#bbb;padding:20px">${isAr ? "لا توجد مصروفات في هذه الفترة" : "No expenses in this period"}</td></tr>`}</tbody>
+</table>
+<div class="summary-row">
+  <div class="cat-box">
+    <div class="cat-title">${isAr ? "الملخص حسب الفئة" : "Summary by Category"}</div>
+    <table style="margin:0"><tbody>${catRows || `<tr><td colspan="2" style="padding:8px;color:#bbb;font-size:10px">${isAr ? "لا بيانات" : "No data"}</td></tr>`}</tbody></table>
+  </div>
+  <div class="grand-box">
+    <div class="grand-lbl">${isAr ? "إجمالي المصروفات" : "Total Expenses"}</div>
+    <div class="grand-val">${total.toFixed(2)}</div>
+    <div class="grand-currency">${isAr ? "ريال سعودي" : "Saudi Riyal (SAR)"}</div>
+    <div class="grand-count">${isAr ? `${expenses.length} مصروف` : `${expenses.length} expense(s)`}</div>
+  </div>
+</div>
+<div class="ftr">Pure Home System &nbsp;|&nbsp; ${isAr ? "نظام بيور هوم" : "Pure Home Management System"} &nbsp;|&nbsp; ${new Date().toLocaleString()}</div>
+</div>
 </body></html>`;
 }
 
@@ -162,18 +203,29 @@ export default function AdminExpenses() {
     setGenerating(true);
     try {
       const now = new Date();
-      let from: Date, to: Date = now;
+      let from: Date, to: Date;
+      let periodLabel: string;
+
       if (period === "weekly") {
-        from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        // Current ISO week: Monday to Sunday
+        const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+        const daysFromMon = day === 0 ? 6 : day - 1;
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysFromMon);
+        to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6, 23, 59, 59);
+        const fromLabel = from.toLocaleDateString(isAr ? "ar-SA" : "en-GB");
+        const toLabel = to.toLocaleDateString(isAr ? "ar-SA" : "en-GB");
+        periodLabel = isAr ? `الأسبوع الحالي: ${fromLabel} — ${toLabel}` : `Current Week: ${fromLabel} — ${toLabel}`;
       } else {
+        // Full current month: 1st to last day
         from = new Date(now.getFullYear(), now.getMonth(), 1);
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const monthLabel = from.toLocaleDateString(isAr ? "ar-SA" : "en-US", { month: "long", year: "numeric" });
+        periodLabel = isAr ? `الشهر الحالي: ${monthLabel}` : `Current Month: ${monthLabel}`;
       }
+
       const { data: pdfData } = await api.get("/expenses", {
         params: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), limit: 5000 }
       });
-      const periodLabel = period === "weekly"
-        ? (isAr ? "أسبوعي" : "Weekly")
-        : (isAr ? "شهري" : "Monthly");
       const html = buildExpensePdfHtml(pdfData.data || [], isAr, periodLabel);
       const filePath = await (window as any).electron.printToPDF(html, `expenses-${period}-${Date.now()}.pdf`);
       toast.success(`${t("reports.savedTo")}: ${filePath}`);

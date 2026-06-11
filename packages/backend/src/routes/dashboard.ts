@@ -16,10 +16,10 @@ router.get('/stats', async (req, res, next) => {
 
     const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
       prisma.customer.count(),
-      prisma.maintenanceTask.count({ where: { status: 'COMPLETED' } }),
+      prisma.maintenanceTask.count({ where: { status: 'COMPLETED', appointment: { isUrgent: false } } }),
       prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
       prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfNextMonth, lte: endOfNextMonth } } }),
-      prisma.maintenanceTask.count({ where: { status: 'POSTPONED' } }),
+      prisma.maintenanceTask.count({ where: { status: 'POSTPONED', appointment: { isUrgent: false } } }),
       prisma.appointment.count({
         where: {
           isUrgent: false,
