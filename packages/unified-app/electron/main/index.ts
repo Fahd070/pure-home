@@ -88,10 +88,21 @@ function createWindow(): void {
     frame: false, show: false, icon: iconPath,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      contextIsolation: true, nodeIntegration: false
+      contextIsolation: true, nodeIntegration: false, sandbox: true
     }
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+
+  // Block renderer from navigating to external URLs
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const appUrl = process.env.NODE_ENV === "development"
+      ? process.env.ELECTRON_RENDERER_URL!
+      : `file://${join(__dirname, "../renderer/index.html")}`;
+    if (!url.startsWith(appUrl) && !url.startsWith("file://")) {
+      event.preventDefault();
+    }
+  });
+
   if (process.env.NODE_ENV === "development") {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL!);
   } else {

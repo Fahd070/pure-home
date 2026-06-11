@@ -118,7 +118,9 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
       after: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_CREATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
-    emitToAll(SOCKET_EVENTS.CUSTOMER_CREATED, customer);
+    // Customer PII must not leak to TECHNICIAN role via socket
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, customer);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, customer);
     res.status(201).json({ success: true, data: customer });
   } catch (e) { next(e); }
 });
@@ -149,7 +151,9 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       before: customerFields(before), after: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_UPDATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
-    emitToAll(SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
+    // Customer PII must not leak to TECHNICIAN role via socket
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
     res.json({ success: true, data: customer });
   } catch (e) { next(e); }
 });
@@ -170,7 +174,8 @@ router.patch('/:id/toggle-active', requireRole('ADMIN'), async (req: AuthRequest
       before: customerFields(existing), after: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_UPDATED, entityType: 'customer', entityId: customer.id, userId: req.user!.userId, payload: customerFields(customer) });
-    emitToAll(SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_UPDATED, customer);
     res.json({ success: true, data: customer });
   } catch (e) { next(e); }
 });
