@@ -22,7 +22,10 @@ export default function WorkQueue() {
   }, [socket, qc]);
 
   const statusLabel: Record<string, string> = { APPROVED: t("tasks.approved"), IN_PROGRESS: t("tasks.inProgress"), PENDING_APPROVAL: t("tasks.pendingApproval") };
-  const active = (data || []).filter((tk: any) => ["APPROVED","IN_PROGRESS"].includes(tk.status));
+  // Urgent appointment tasks are handled in the dedicated Urgent Appointments page, not here
+  const active = (data || []).filter((tk: any) =>
+    ["APPROVED","IN_PROGRESS"].includes(tk.status) && !tk.appointment?.isUrgent
+  );
 
   if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;
 

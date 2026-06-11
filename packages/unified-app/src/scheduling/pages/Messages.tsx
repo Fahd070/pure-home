@@ -76,7 +76,10 @@ export default function Messages() {
                     {t(`roles.${log.user?.role}`) || log.user?.role}
                   </span>
                 </div>
-                <p className="text-sm text-slate-700">{log.action}</p>
+                <p className="text-sm text-slate-700">{(() => {
+                  const [en, ar] = (log.action || '').split('|||');
+                  return i18n.language === 'ar' ? (ar || en) : en;
+                })()}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span className="text-lg">{ENTITY_ICONS[log.entityType] || "📌"}</span>

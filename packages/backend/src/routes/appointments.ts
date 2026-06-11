@@ -103,6 +103,8 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
       return res.status(400).json({ success: false, message: 'customerId is required for non-urgent appointments' });
     }
 
+    // Admin-created non-urgent appointments with a technician assigned are auto-approved
+    const taskStatus = (isAdmin && !isUrgent && body.technicianId) ? 'APPROVED' : 'PENDING_APPROVAL';
     const appt = await prisma.appointment.create({
       data: {
         customerId: body.customerId || null,
@@ -115,7 +117,7 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
         adminApproved,
         createdByRole: req.user!.role,
         createdById: req.user!.userId,
-        task: { create: { technicianId: body.technicianId ?? null } },
+        task: { create: { technicianId: body.technicianId ?? null, status: taskStatus as any } },
       },
       include: { customer: { include: { address: true } }, task: true },
     });
@@ -124,14 +126,24 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
     }
     const dateStr = new Date(body.scheduledDate).toLocaleDateString('en-GB');
     const urgentLabel = isUrgent ? ' [URGENT]' : '';
+    const urgentLabelAr = isUrgent ? ' [عاجل]' : '';
     const customerLabel = appt.customer?.name || 'Urgent Visit';
+    const customerLabelAr = appt.customer?.name || 'زيارة عاجلة';
+    const typeEn = appt.type === 'MAINTENANCE' ? 'Maintenance' : 'Installation';
+    const typeAr = appt.type === 'MAINTENANCE' ? 'صيانة' : 'تركيب';
+    const roleAr = req.user!.role === 'ADMIN' ? 'الإدارة' : 'قسم الجدولة';
     await writeAudit({
       action: 'CREATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
-      label: `Appointment${urgentLabel} scheduled for '${customerLabel}' on ${dateStr} (${appt.type}) by ${req.user!.role}`,
+      label: `Appointment${urgentLabel} scheduled for '${customerLabel}' on ${dateStr} (${typeEn}) by ${req.user!.role}`,
+      labelAr: `تم جدولة موعد${urgentLabelAr} لـ '${customerLabelAr}' بتاريخ ${dateStr} (${typeAr}) بواسطة ${roleAr}`,
       after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_CREATED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
     emitToAll(SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    // If task was auto-approved, notify technician department so their work queue updates
+    if (taskStatus === 'APPROVED') {
+      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.TASK_APPROVED, appt.task);
+    }
     res.status(201).json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -158,9 +170,12 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       },
       include: { customer: { include: { address: true } }, task: true, urgentVisitRecord: true },
     });
+    const custNameUpd = existing.customer?.name || 'Urgent Visit';
+    const custNameUpdAr = existing.customer?.name || 'زيارة عاجلة';
     await writeAudit({
       action: 'UPDATE', entityType: 'appointment', entityId: updated.id, userId: req.user!.userId,
-      label: `Appointment for '${existing.customer?.name || 'Urgent Visit'}' updated`,
+      label: `Appointment for '${custNameUpd}' updated`,
+      labelAr: `تم تحديث موعد العميل '${custNameUpdAr}'`,
       after: apptFields(updated),
     });
     emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
@@ -178,9 +193,12 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
       data: { visibleToScheduling: true, adminApproved: true, version: { increment: 1 } },
       include: { customer: { include: { address: true } }, task: true },
     });
+    const custNameVis = appt.customer?.name || 'Urgent Visit';
+    const custNameVisAr = appt.customer?.name || 'زيارة عاجلة';
     await writeAudit({
       action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
-      label: `Appointment for '${appt.customer?.name || 'Urgent Visit'}' approved for Scheduling visibility`,
+      label: `Appointment for '${custNameVis}' approved for Scheduling visibility`,
+      labelAr: `تمت الموافقة على رؤية موعد '${custNameVisAr}' لقسم الجدولة`,
       after: apptFields(updated),
     });
     emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
@@ -215,9 +233,13 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
       data: updateData,
       include: { customer: true, task: true },
     });
+    const custNameSt = appt.customer?.name || 'Urgent Visit';
+    const custNameStAr = appt.customer?.name || 'زيارة عاجلة';
+    const roleStAr = req.user!.role === 'ADMIN' ? 'الإدارة' : 'قسم الجدولة';
     await writeAudit({
       action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
-      label: `Appointment for '${appt.customer?.name || 'Urgent Visit'}' status changed to ${status} by ${req.user!.role}`,
+      label: `Appointment for '${custNameSt}' status changed to ${status} by ${req.user!.role}`,
+      labelAr: `تم تغيير حالة موعد '${custNameStAr}' إلى ${status} بواسطة ${roleStAr}`,
       before: apptFields(before), after: apptFields(appt),
     });
     const eventType = status === 'CANCELLED' ? EVENT_TYPES.APPOINTMENT_UPDATED : EVENT_TYPES.SCHEDULE_CHANGED;

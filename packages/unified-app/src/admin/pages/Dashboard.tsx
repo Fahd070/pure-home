@@ -22,7 +22,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const items = data?.data || [];
   const total = data?.meta?.total || 0;
   const pages = Math.ceil(total / 15) || 1;
-  const isAppointmentList = ["this-month","next-month","overdue","today"].includes(endpoint);
+  const isAppointmentList = ["this-month","next-month","overdue","today","urgent"].includes(endpoint);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -56,10 +56,14 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                   COMPLETED: "bg-green-100 text-green-700",
                   POSTPONED: "bg-orange-100 text-orange-700",
                 };
+                let loc: any = {};
+                try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
+                const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "Urgent Visit";
+                const displayPhone = a.customer?.phone || "—";
                 return (
                   <tr key={a.id} className="border-b hover:bg-slate-50">
-                    <td className="px-4 py-2.5 font-medium">{a.customer?.name}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{a.customer?.phone}</td>
+                    <td className="px-4 py-2.5 font-medium">{displayName}</td>
+                    <td className="px-4 py-2.5 text-slate-500">{displayPhone}</td>
                     <td className="px-4 py-2.5">{new Date(a.scheduledDate).toLocaleDateString()}</td>
                     <td className="px-4 py-2.5 text-xs font-medium text-slate-600">{a.type}</td>
                     <td className="px-4 py-2.5">
@@ -173,7 +177,7 @@ export default function Dashboard() {
     { label: t("dashboard.dueToday"),              key: "todayCount",     endpoint: "today",                   color: "border-orange-500" },
     { label: t("dashboard.suspendedPostponed"),    key: "pending",        endpoint: "postponed",               color: "border-yellow-500" },
     { label: t("dashboard.overdueMaintenance"),    key: "pendingApproval",endpoint: "overdue",                 color: "border-red-500" },
-    { label: t("dashboard.urgentAppointments"),    key: "urgentCount",    endpoint: "today",                   color: "border-rose-500" },
+    { label: t("dashboard.urgentAppointments"),    key: "urgentCount",    endpoint: "urgent",                  color: "border-rose-500" },
   ];
 
   return (

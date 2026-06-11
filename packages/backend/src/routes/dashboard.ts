@@ -17,11 +17,12 @@ router.get('/stats', async (req, res, next) => {
     const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
       prisma.customer.count(),
       prisma.maintenanceTask.count({ where: { status: 'COMPLETED' } }),
-      prisma.appointment.count({ where: { scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
-      prisma.appointment.count({ where: { scheduledDate: { gte: startOfNextMonth, lte: endOfNextMonth } } }),
+      prisma.appointment.count({ where: { isUrgent: false, scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
+      prisma.appointment.count({ where: { isUrgent: false, scheduledDate: { gte: startOfNextMonth, lte: endOfNextMonth } } }),
       prisma.maintenanceTask.count({ where: { status: 'POSTPONED' } }),
       prisma.appointment.count({
         where: {
+          isUrgent: false,
           scheduledDate: { lt: now },
           status: { not: 'CANCELLED' },
           task: { status: { notIn: ['COMPLETED'] } }
@@ -29,6 +30,7 @@ router.get('/stats', async (req, res, next) => {
       }),
       prisma.appointment.count({
         where: {
+          isUrgent: false,
           scheduledDate: { gte: todayStart, lt: todayEnd },
           status: { not: 'CANCELLED' },
           NOT: { task: { status: 'COMPLETED' } }
@@ -131,7 +133,7 @@ router.get('/this-month', async (req, res, next) => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const where: any = { scheduledDate: { gte: start, lt: end } };
+    const where: any = { isUrgent: false, scheduledDate: { gte: start, lt: end } };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
@@ -150,7 +152,7 @@ router.get('/next-month', async (req, res, next) => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59);
-    const where: any = { scheduledDate: { gte: start, lte: end } };
+    const where: any = { isUrgent: false, scheduledDate: { gte: start, lte: end } };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
@@ -186,6 +188,7 @@ router.get('/overdue', async (req, res, next) => {
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
     const now = new Date();
     const where: any = {
+      isUrgent: false,
       scheduledDate: { lt: now },
       status: { not: 'CANCELLED' },
       task: { status: { notIn: ['COMPLETED'] } }
@@ -209,6 +212,7 @@ router.get('/today', async (req, res, next) => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart.getTime() + 86400000);
     const where: any = {
+      isUrgent: false,
       scheduledDate: { gte: todayStart, lt: todayEnd },
       status: { not: 'CANCELLED' },
       NOT: { task: { status: 'COMPLETED' } }
@@ -219,6 +223,22 @@ router.get('/today', async (req, res, next) => {
       where, include: { customer: { include: { address: true } }, task: true },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
+    });
+    res.json({ success: true, data, meta: { total } });
+  } catch (e) { next(e); }
+});
+
+router.get('/urgent', async (req, res, next) => {
+  try {
+    const { page = '1', limit = '20' } = req.query as any;
+    const safeLimit = Math.min(parseInt(limit) || 20, 100);
+    const where: any = { isUrgent: true };
+    const total = await prisma.appointment.count({ where });
+    const data = await prisma.appointment.findMany({
+      where,
+      include: { task: { include: { technician: true } } },
+      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
+      orderBy: { scheduledDate: 'desc' }
     });
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
