@@ -2,6 +2,7 @@ import React from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import ConnectionBanner from "../../components/ConnectionBanner";
+import NotificationBar from "../../components/NotificationBar";
 import { getSocket } from "../hooks/useSocket";
 
 export default function SchedulingLayout() {
@@ -10,6 +11,7 @@ export default function SchedulingLayout() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <ConnectionBanner getSocket={getSocket} />
+        <NotificationBar role="SCHEDULING" getSocket={getSocket} />
         <main className="flex-1 overflow-y-auto p-4"><Outlet /></main>
       </div>
     </div>

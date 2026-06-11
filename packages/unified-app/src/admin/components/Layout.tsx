@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import ConnectionBanner from "../../components/ConnectionBanner";
+import NotificationBar from "../../components/NotificationBar";
 import { getSocket } from "../hooks/useSocket";
 
 const titles: Record<string, string> = {
@@ -27,6 +28,7 @@ export default function AdminLayout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title={t(titles[key])} />
         <ConnectionBanner getSocket={getSocket} />
+        <NotificationBar role="ADMIN" getSocket={getSocket} />
         <main className="flex-1 overflow-y-auto p-4">
           <Outlet />
         </main>
