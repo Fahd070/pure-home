@@ -30,6 +30,14 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   if (/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;      // RFC 1918 /16
   // Tailscale CGNAT range: 100.64.0.0/10 (100.64.x.x – 100.127.x.x)
   if (/^https?:\/\/100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(:\d+)?$/.test(origin)) return true;
+  // Web deployment: comma-separated list in ALLOWED_ORIGINS env var
+  // e.g. ALLOWED_ORIGINS=https://portal.purehome.sa,https://purehome.vercel.app
+  const extra = process.env.ALLOWED_ORIGINS || '';
+  if (extra) {
+    for (const allowed of extra.split(',')) {
+      if (allowed.trim() === origin) return true;
+    }
+  }
   return false;
 };
 
