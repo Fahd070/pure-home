@@ -5,6 +5,8 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "dev:backend": "npm run dev --workspace=packages/backend",
+    "dev:web": "npm run dev --workspace=packages/web",
+    "build:web": "npm run build --workspace=packages/web",
     "dev:admin": "npm run dev --workspace=packages/admin-app",
     "dev:scheduling": "npm run dev --workspace=packages/scheduling-app",
     "dev:technician": "npm run dev --workspace=packages/technician-app",

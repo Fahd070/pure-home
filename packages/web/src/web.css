@@ -1,0 +1,14 @@
+/* ──────────────────────────────────────────────────────
+   Web-specific overrides on top of unified-app globals.css
+   ────────────────────────────────────────────────────── */
+
+/* Neutralise Electron window-region hints — they are silently
+   ignored by regular browsers, but make intent explicit. */
+.titlebar-drag    { -webkit-app-region: unset !important; }
+.titlebar-no-drag { -webkit-app-region: unset !important; }
+
+/* On small viewports let the page scroll rather than clip. */
+@media (max-height: 600px) {
+  body { overflow: auto !important; }
+  #root > div { height: auto !important; min-height: 100vh; }
+}
