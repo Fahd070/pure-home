@@ -56,9 +56,12 @@ router.get('/', async (req: AuthRequest, res, next) => {
     if (req.user!.role === 'SCHEDULING') {
       where.visibleToScheduling = true;
     }
-    // Technician only sees appointments assigned to them
+    // Technician sees urgent appointments (open to all techs) + own regular appointments
     if (req.user!.role === 'TECHNICIAN') {
-      where.task = { technicianId: req.user!.userId };
+      where.OR = [
+        { isUrgent: true },
+        { isUrgent: false, task: { technicianId: req.user!.userId } },
+      ];
     }
 
     const appts = await prisma.appointment.findMany({
@@ -98,8 +101,8 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
     if (req.user!.role === 'SCHEDULING' && !appt.visibleToScheduling) {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
-    // Technician can only see appointments assigned to them
-    if (req.user!.role === 'TECHNICIAN' && (appt as any).task?.technicianId !== req.user!.userId) {
+    // Technician can see urgent appointments (open to all) + own regular appointments
+    if (req.user!.role === 'TECHNICIAN' && !(appt as any).isUrgent && (appt as any).task?.technicianId !== req.user!.userId) {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     res.json({ success: true, data: appt });

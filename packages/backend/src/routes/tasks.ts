@@ -38,10 +38,16 @@ router.get('/pending-count', requireRole('ADMIN'), async (req: AuthRequest, res,
 
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
+    const { status: statusFilter } = req.query as any;
     const where: any = {};
     if (req.user!.role === 'TECHNICIAN') {
       where.technicianId = req.user!.userId;
       where.appointment = { isUrgent: false };
+    }
+    if (statusFilter) {
+      const statuses = String(statusFilter).split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length === 1) where.status = statuses[0];
+      else if (statuses.length > 1) where.status = { in: statuses };
     }
     const tasks = await prisma.maintenanceTask.findMany({
       where,

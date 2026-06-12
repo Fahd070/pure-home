@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
+import HelpButton from "../../components/HelpButton";
+import { HELP } from "../../helpContent";
 
 const EMPTY = { customerId: "", callDate: "", notes: "", employeeName: "" };
 
@@ -80,7 +82,10 @@ export default function CallReports() {
 
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="font-semibold text-slate-700 mb-4">{t("callReports.newReport")}</h2>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="font-semibold text-slate-700">{t("callReports.newReport")}</h2>
+            <HelpButton titleAr={HELP["form.callReport"].titleAr} contentAr={HELP["form.callReport"].contentAr} />
+          </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.customer")}</label>

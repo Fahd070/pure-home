@@ -11,29 +11,32 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
       where: { role: 'TECHNICIAN' },
       select: {
         id: true, name: true, email: true, role: true,
-        _count: { select: { tasks: true } }
-      }
-    });
-    const result = await Promise.all(techs.map(async (t: any) => {
-      const completed = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'COMPLETED' } });
-      const postponed = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'POSTPONED' } });
-      const pending = await prisma.maintenanceTask.count({ where: { technicianId: t.id, status: 'POSTPONED' } });
-      const completedTasksList = await prisma.maintenanceTask.findMany({
-        where: { technicianId: t.id, status: 'COMPLETED' },
-        include: { appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } } },
-        orderBy: { completedAt: 'desc' },
-        take: 20,
-      });
-      const postponedTasksList = await prisma.maintenanceTask.findMany({
-        where: { technicianId: t.id, status: 'POSTPONED' },
-        include: {
-          appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } },
-          postponements: { orderBy: { createdAt: 'desc' }, take: 1 },
+        _count: { select: { tasks: true } },
+        tasks: {
+          where: { status: { in: ['COMPLETED', 'POSTPONED'] } },
+          select: {
+            id: true, status: true, completedAt: true,
+            appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } },
+            postponements: { orderBy: { createdAt: 'desc' as const }, take: 1 },
+          },
+          orderBy: { createdAt: 'desc' as const },
+          take: 40,
         },
-        take: 20,
-      });
-      return { ...t, completedTasks: completed, postponedTasks: postponed, pendingTasks: pending, completedTasksList, postponedTasksList };
-    }));
+      },
+    });
+    const result = techs.map((t: any) => {
+      const completedTasksList = t.tasks.filter((x: any) => x.status === 'COMPLETED').slice(0, 20);
+      const postponedTasksList = t.tasks.filter((x: any) => x.status === 'POSTPONED').slice(0, 20);
+      const { tasks, ...rest } = t;
+      return {
+        ...rest,
+        completedTasks: completedTasksList.length,
+        postponedTasks: postponedTasksList.length,
+        pendingTasks: postponedTasksList.length,
+        completedTasksList,
+        postponedTasksList,
+      };
+    });
     res.json({ success: true, data: result });
   } catch (e) { next(e); }
 });

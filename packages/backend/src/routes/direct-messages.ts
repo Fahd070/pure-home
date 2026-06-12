@@ -36,8 +36,8 @@ router.get('/conversations', async (req: AuthRequest, res, next) => {
     const myUserId = req.user!.userId;
 
     const [inbox, sent] = await Promise.all([
-      prisma.directMessage.findMany({ where: { recipientRole: myRole }, include, orderBy: { createdAt: 'asc' } }),
-      prisma.directMessage.findMany({ where: { senderId: myUserId }, include, orderBy: { createdAt: 'asc' } })
+      prisma.directMessage.findMany({ where: { recipientRole: myRole }, include, orderBy: { createdAt: 'desc' }, take: 200 }),
+      prisma.directMessage.findMany({ where: { senderId: myUserId }, include, orderBy: { createdAt: 'desc' }, take: 200 })
     ]);
 
     const convMap: Record<string, any[]> = {};

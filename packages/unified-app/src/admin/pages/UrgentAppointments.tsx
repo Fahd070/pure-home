@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import HelpButton from "../../components/HelpButton";
+import { HELP } from "../../helpContent";
 
 type Tab = "list" | "records";
 
@@ -138,13 +140,20 @@ export default function UrgentAppointments() {
 
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="font-semibold text-slate-700 mb-4">{t("urgentAppts.newUrgent")}</h2>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="font-semibold text-slate-700">{t("urgentAppts.newUrgent")}</h2>
+            <HelpButton titleAr={HELP["admin.urgentAppointments"].titleAr} contentAr={HELP["admin.urgentAppointments"].contentAr} />
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")} *</label>
               <input type="datetime-local" required value={form.scheduledDate}
                 onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              {t("urgentAppts.locationInfo")}
+              <HelpButton titleAr={HELP["form.urgentLocation"].titleAr} contentAr={HELP["form.urgentLocation"].contentAr} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
