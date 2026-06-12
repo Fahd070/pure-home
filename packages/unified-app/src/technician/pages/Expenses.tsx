@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import HelpButton from "../../components/HelpButton";
+import { HELP } from "../../helpContent";
 
 const CATEGORIES = ["fuel","tools","materials","food","transport","other"] as const;
 const EMPTY = { amount: "", category: "fuel", description: "", date: new Date().toISOString().slice(0,10), customCategory: "" };
@@ -88,7 +90,10 @@ export default function TechExpenses() {
 
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="font-semibold text-slate-700 mb-4">{t("expenses.newExpense")}</h2>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="font-semibold text-slate-700">{t("expenses.newExpense")}</h2>
+            <HelpButton titleAr={HELP["form.expenseSubmit"].titleAr} contentAr={HELP["form.expenseSubmit"].contentAr} />
+          </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("expenses.amount")}</label>

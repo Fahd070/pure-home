@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import HelpButton from "../../components/HelpButton";
+import { HELP } from "../../helpContent";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER";
 
@@ -118,7 +120,10 @@ export default function TaskDetail() {
       {showComplete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold">{t("tasks.confirmComplete")}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold">{t("tasks.confirmComplete")}</h3>
+              <HelpButton titleAr={HELP["form.taskCompletion"].titleAr} contentAr={HELP["form.taskCompletion"].contentAr} />
+            </div>
             <p className="text-xs text-slate-500 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
               {isAr ? "جميع الحقول إلزامية لإتمام المهمة" : "All fields are required to complete the task"}
             </p>

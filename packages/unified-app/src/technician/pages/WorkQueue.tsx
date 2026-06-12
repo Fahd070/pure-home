@@ -13,7 +13,7 @@ export default function WorkQueue() {
   const qc = useQueryClient();
   const socket = useSocket();
 
-  const { data, isLoading } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks").then(r => r.data.data) });
+  const { data, isLoading } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks?status=APPROVED,IN_PROGRESS").then(r => r.data.data) });
 
   useEffect(() => {
     if (!socket) return;

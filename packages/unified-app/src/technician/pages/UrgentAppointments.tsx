@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import HelpButton from "../../components/HelpButton";
+import { HELP } from "../../helpContent";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER";
 type ServiceType = "INSTALLATION" | "MAINTENANCE" | "VISIT_ONLY";
@@ -165,7 +167,10 @@ export default function TechUrgentAppointments() {
       {submitModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-semibold text-slate-800">{t("urgentAppts.visitRecord")}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-slate-800">{t("urgentAppts.visitRecord")}</h3>
+              <HelpButton titleAr={HELP["form.visitRecord"].titleAr} contentAr={HELP["form.visitRecord"].contentAr} />
+            </div>
             <p className="text-xs text-slate-400 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
               🚨 {locationText(submitModal.appt)}
             </p>

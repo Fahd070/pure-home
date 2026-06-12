@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import HelpButton from "../../components/HelpButton";
+import { HELP } from "../../helpContent";
 
 const PHONE_RE = /^05\d{8}$/;
 
@@ -67,7 +69,10 @@ export default function SchedAddCustomer() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">{t("customers.maintenanceCycle")}</label>
+            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+              {t("customers.maintenanceCycle")}
+              <HelpButton titleAr={HELP["form.maintenanceCycle"].titleAr} contentAr={HELP["form.maintenanceCycle"].contentAr} />
+            </label>
             <select value={form.maintenanceCycle} onChange={e => set("maintenanceCycle", e.target.value)}
               className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
               <option value="DAILY">{t("customers.daily")}</option>
@@ -81,7 +86,10 @@ export default function SchedAddCustomer() {
               className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
           </div>
         </div>
-        <p className="text-sm font-semibold text-slate-600 border-t pt-3">{t("customers.address")}</p>
+        <div className="flex items-center gap-2 border-t pt-3">
+          <p className="text-sm font-semibold text-slate-600">{t("customers.address")}</p>
+          <HelpButton titleAr={HELP["form.customerAddress"].titleAr} contentAr={HELP["form.customerAddress"].contentAr} />
+        </div>
         <div className="grid grid-cols-2 gap-4">
           {field("city", t("customers.city"), "text", true)}
           {field("district", t("customers.district"), "text", true)}
