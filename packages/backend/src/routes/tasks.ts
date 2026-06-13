@@ -41,8 +41,11 @@ router.get('/', async (req: AuthRequest, res, next) => {
     const { status: statusFilter } = req.query as any;
     const where: any = {};
     if (req.user!.role === 'TECHNICIAN') {
-      where.technicianId = req.user!.userId;
       where.appointment = { isUrgent: false };
+      where.OR = [
+        { technicianId: req.user!.userId },
+        { technicianId: null },
+      ];
     }
     if (statusFilter) {
       const statuses = String(statusFilter).split(',').map(s => s.trim()).filter(Boolean);

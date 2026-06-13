@@ -13,6 +13,12 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
   // Render cloud URL — allow only the specific deployed URL, not all HTTPS origins
   const renderUrl = process.env.RENDER_EXTERNAL_URL;
   if (renderUrl && origin === renderUrl) return true;
+  const extra = process.env.ALLOWED_ORIGINS || '';
+  if (extra) {
+    for (const allowed of extra.split(',')) {
+      if (allowed.trim() === origin) return true;
+    }
+  }
   return false;
 };
 
