@@ -138,9 +138,9 @@ npm run build
 **Default credentials after seed:**
 | Department | Email | Password |
 |---|---|---|
-| Admin | admin@wfm.local | admin123 |
-| Scheduling | scheduling@wfm.local | sched123 |
-| Technician | tech1@wfm.local | tech123 |
+| Admin | admin@wfm.local | *(set via seed script)* |
+| Scheduling | scheduling@wfm.local | *(set via seed script)* |
+| Technician | tech1@wfm.local | *(set via seed script)* |
 
 ---
 

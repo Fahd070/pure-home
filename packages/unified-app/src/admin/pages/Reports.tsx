@@ -505,12 +505,12 @@ tr:nth-child(even){background:#f9f9f9}
       {/* ── Customer Reports ── */}
       {tab === "customers" && <>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800">{t("reports.customerReports")}</h1>
           <p className="text-sm text-slate-500">{t("reports.showingCount", { count: total })}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={exportPdf} disabled={!customers.length || generating === "pdf"}
             style={{ backgroundColor: "#000080" }}
             className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
@@ -637,7 +637,7 @@ tr:nth-child(even){background:#f9f9f9}
 
       {/* ── Appointment Reports ── */}
       {tab === "appointments" && <>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-xl font-bold text-slate-800">{isAr ? "تقارير المواعيد" : "Appointment Reports"}</h1>
             <p className="text-sm text-slate-500">
@@ -646,7 +646,7 @@ tr:nth-child(even){background:#f9f9f9}
                 : `${regularAppts.length} regular | ${urgentAppts.length} urgent`}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button onClick={exportApptPdf} disabled={!allAppts.length || generatingAppts === "pdf"}
               style={{ backgroundColor: "#000080" }}
               className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50">
@@ -660,7 +660,7 @@ tr:nth-child(even){background:#f9f9f9}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
               <input type="date" value={apptFilters.dateFrom}

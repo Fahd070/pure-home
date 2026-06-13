@@ -44,3 +44,6 @@ packages/backend/node_modules/.prisma/
 
 # Local config overrides (keep .env.example for documentation)
 config/local.*
+
+# Vercel deployment metadata — NEVER commit
+.vercel/

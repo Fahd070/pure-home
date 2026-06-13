@@ -9,7 +9,7 @@ export default function Login() {
   const { t } = useTranslation();
   const { serverUrl, login } = useAuthStore();
   const [email, setEmail] = useState('scheduling@wfm.local');
-  const [password, setPassword] = useState('sched123');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 

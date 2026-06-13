@@ -9,7 +9,7 @@ export default function Login() {
   const { t } = useTranslation();
   const { serverUrl, login } = useAuthStore();
   const [email, setEmail] = useState('admin@wfm.local');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 

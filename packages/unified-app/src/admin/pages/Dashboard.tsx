@@ -261,7 +261,7 @@ export default function Dashboard() {
   };
 
   async function generateSalesReport(period: "weekly" | "monthly", format: "pdf" | "excel") {
-    const key = `${period}-${format}`;
+    const key = `${period}-${format}`; // used only for per-button loading state
     setGeneratingSales(key);
     try {
       const isAr = document.documentElement.lang === "ar" || document.documentElement.dir === "rtl";
@@ -284,7 +284,7 @@ export default function Dashboard() {
       if (format === "pdf") {
         const html = buildSalesPdfHtml(rows, isAr, periodLabel, totalAmount);
         const filePath = await (window as any).electron.printToPDF(html, `sales-${period}-${Date.now()}.pdf`);
-        setSalesLast(key);
+        setSalesLast(period);
         toast.success(`Saved: ${filePath}`);
       } else {
         const XLSX = await import("xlsx");
@@ -317,7 +317,7 @@ export default function Dashboard() {
         const a = document.createElement("a");
         a.href = url; a.download = `sales-${period}-${Date.now()}.xlsx`; a.click();
         URL.revokeObjectURL(url);
-        setSalesLast(key);
+        setSalesLast(period);
         toast.success(isAr ? "تم التنزيل" : "Downloaded");
       }
     } catch {
@@ -393,12 +393,14 @@ export default function Dashboard() {
         </p>
         <div className="grid grid-cols-2 gap-3">
           {([
-            { key: "weekly-pdf",    period: "weekly"  as const, format: "pdf"   as const, label: "تقرير المبيعات الأسبوعي (PDF)" },
-            { key: "monthly-pdf",   period: "monthly" as const, format: "pdf"   as const, label: "تقرير المبيعات الشهري (PDF)" },
-            { key: "weekly-excel",  period: "weekly"  as const, format: "excel" as const, label: "تقرير المبيعات الأسبوعي (Excel)" },
-            { key: "monthly-excel", period: "monthly" as const, format: "excel" as const, label: "تقرير المبيعات الشهري (Excel)" },
-          ] as const).map(({ key, period, format, label }) => {
-            const rem = salesRemaining(key, period, ticker);
+            { period: "weekly"  as const, format: "pdf"   as const, label: "تقرير المبيعات الأسبوعي (PDF)" },
+            { period: "monthly" as const, format: "pdf"   as const, label: "تقرير المبيعات الشهري (PDF)" },
+            { period: "weekly"  as const, format: "excel" as const, label: "تقرير المبيعات الأسبوعي (Excel)" },
+            { period: "monthly" as const, format: "excel" as const, label: "تقرير المبيعات الشهري (Excel)" },
+          ] as const).map(({ period, format, label }) => {
+            const key = `${period}-${format}`;
+            // Timer is shared per period — both formats share the same lock window
+            const rem = salesRemaining(period, period, ticker);
             const locked = rem > 0;
             const isGen = generatingSales === key;
             const icon = format === "pdf" ? "📄" : "📊";
