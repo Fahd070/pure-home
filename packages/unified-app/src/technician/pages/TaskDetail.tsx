@@ -171,8 +171,8 @@ export default function TaskDetail() {
       )}
 
       {showPostpone && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-80 shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="font-semibold mb-3">{t("tasks.confirmPostpone")}</h3>
             <textarea value={postponeReason} onChange={e => setPostponeReason(e.target.value)} placeholder={t("tasks.reason") + " *"} rows={3}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 mb-3" />

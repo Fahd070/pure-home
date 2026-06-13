@@ -461,8 +461,8 @@ export default function Dashboard() {
       {modal && <DrillModal title={modal.title} endpoint={modal.endpoint} onClose={() => setModal(null)} />}
 
       {confirmClearAll && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-80 shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="font-semibold mb-2">{t("dashboard.clearAllConfirm")}</h3>
             <p className="text-sm text-slate-500 mb-4">{t("dashboard.clearAllDesc")}</p>
             <div className="flex gap-2">
