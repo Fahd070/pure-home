@@ -119,7 +119,8 @@ export default function Tasks() {
         </div>
       )}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[480px]">
           <thead className="bg-slate-50 border-b">
             <tr>
               <th className="text-start px-4 py-3">{t("appointments.customer")}</th>
@@ -198,11 +199,12 @@ export default function Tasks() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {selectedTask && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-80 shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="font-semibold mb-4">{t("tasks.approve")}</h3>
             <p className="text-sm text-slate-600 mb-3">{selectedTask.appointment?.customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</p>
             <div className="mb-4">
@@ -223,8 +225,8 @@ export default function Tasks() {
       )}
 
       {postponeModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-96 shadow-xl space-y-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl space-y-4">
             <h3 className="font-semibold">{t("tasks.confirmPostpone")}</h3>
             <p className="text-sm text-slate-600">{postponeModal.task.appointment?.customer?.name}</p>
             <div>
