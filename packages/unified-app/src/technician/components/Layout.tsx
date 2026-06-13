@@ -41,19 +41,19 @@ export default function TechnicianLayout() {
 
   return (
     <div className="h-full flex bg-slate-100 overflow-hidden">
-      {/* Mobile backdrop */}
+      {/* Mobile/tablet backdrop — hidden on desktop (lg+) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar — fixed drawer on mobile, static flex child on desktop */}
+      {/* Sidebar — fixed drawer on mobile/tablet, static flex child on desktop (lg+) */}
       <div
         className={[
           "fixed inset-y-0 start-0 z-50 transition-transform duration-300",
-          "md:relative md:inset-auto md:z-auto md:translate-x-0 md:transition-none",
+          "lg:relative lg:inset-auto lg:z-auto lg:translate-x-0 lg:transition-none",
           sidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full",
         ].join(" ")}
       >
@@ -62,9 +62,9 @@ export default function TechnicianLayout() {
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
-        <div className="h-12 bg-white border-b flex items-center px-3 md:px-4 shadow-sm gap-2 flex-shrink-0">
+        <div className="h-12 bg-white border-b flex items-center px-3 lg:px-4 shadow-sm gap-2 flex-shrink-0">
           <button
-            className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 active:bg-slate-200 touch-manipulation"
+            className="lg:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 active:bg-slate-200 touch-manipulation"
             onClick={() => setSidebarOpen(true)}
             aria-label="Menu"
           >
@@ -72,14 +72,16 @@ export default function TechnicianLayout() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h2 className="font-semibold text-slate-700 text-sm md:text-base">{titleKey ? t(titles[titleKey]) : ""}</h2>
+          <h2 className="font-semibold text-slate-700 text-sm lg:text-base">{titleKey ? t(titles[titleKey]) : ""}</h2>
           {help && <HelpButton titleAr={help.titleAr} contentAr={help.contentAr} />}
         </div>
 
         <ConnectionBanner getSocket={getSocket} />
         <NotificationBar role="TECHNICIAN" getSocket={getSocket} />
-        <main className="flex-1 overflow-y-auto p-2 md:p-4">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto p-3 lg:p-5">
+          <div className="max-w-[1400px] mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

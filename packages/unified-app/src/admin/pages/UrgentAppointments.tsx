@@ -226,7 +226,7 @@ export default function UrgentAppointments() {
             <p className="text-center py-10 text-slate-400">{t("urgentAppts.noRecords")}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead className="bg-slate-50 border-b">
                   <tr>
                     <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "الموقع" : "Location"}</th>
@@ -297,7 +297,7 @@ export default function UrgentAppointments() {
             <p className="text-center py-10 text-slate-400">{t("urgentAppts.noRecords")}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[600px]">
                 <thead className="bg-slate-50 border-b">
                   <tr>
                     <th className="text-start px-4 py-3 font-medium text-slate-600">{t("urgentAppts.customerName")}</th>
