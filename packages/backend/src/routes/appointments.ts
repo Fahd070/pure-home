@@ -88,8 +88,20 @@ router.get('/', async (req: AuthRequest, res, next) => {
 
 router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
-    const appt = await prisma.appointment.findUnique({
-      where: { id: req.params.id },
+    // Build access-control into the query so unauthorized IDs return 404, not 403
+    // (prevents IDOR enumeration: attacker cannot distinguish "not found" from "not allowed")
+    const where: any = { id: req.params.id };
+    if (req.user!.role === 'SCHEDULING') {
+      where.visibleToScheduling = true;
+    }
+    if (req.user!.role === 'TECHNICIAN') {
+      where.OR = [
+        { isUrgent: true },
+        { isUrgent: false, task: { technicianId: req.user!.userId } },
+      ];
+    }
+    const appt = await prisma.appointment.findFirst({
+      where,
       include: {
         customer: { include: { address: true } },
         task: { include: { technician: true } },
@@ -97,14 +109,6 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
       },
     });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
-    // Scheduling cannot see admin-hidden appointments
-    if (req.user!.role === 'SCHEDULING' && !appt.visibleToScheduling) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-    // Technician can see urgent appointments (open to all) + own regular appointments
-    if (req.user!.role === 'TECHNICIAN' && !(appt as any).isUrgent && (appt as any).task?.technicianId !== req.user!.userId) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });

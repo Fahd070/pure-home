@@ -62,11 +62,18 @@ router.get('/', async (req: AuthRequest, res, next) => {
       },
       orderBy: { createdAt: 'desc' },
     });
-    // Scheduling must never see financial completion data
+    // Scheduling must never see financial data; technicians only see their own task's financials
     if (req.user!.role === 'SCHEDULING') {
       tasks.forEach((t: any) => {
         delete t.completionAmount;
         delete t.completionPaymentMethod;
+      });
+    } else if (req.user!.role === 'TECHNICIAN') {
+      tasks.forEach((t: any) => {
+        if (t.technicianId !== req.user!.userId) {
+          delete t.completionAmount;
+          delete t.completionPaymentMethod;
+        }
       });
     }
     res.json({ success: true, data: tasks });

@@ -190,7 +190,7 @@ export default function Customers() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-3 items-center">
+      <div className="flex gap-2 items-center flex-wrap">
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder={t("common.search")}
           className="border rounded-lg px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500" />
         <button onClick={() => navigate("/admin/customers/add")} style={{ backgroundColor: "#000080" }} className="text-white px-4 py-2 rounded-lg hover:opacity-90 text-sm font-medium">
@@ -211,7 +211,8 @@ export default function Customers() {
       </div>
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {isLoading ? <p className="text-center py-8 text-slate-400">{t("common.loading")}</p> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-slate-50 border-b">
               <tr>
                 <th className="text-start px-4 py-3">{t("common.name")}</th>
@@ -267,6 +268,7 @@ export default function Customers() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
       {data?.meta && (
@@ -278,8 +280,8 @@ export default function Customers() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-80 shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="font-semibold mb-2 text-red-700">{t("customers.deleteCustomer")}</h3>
             <p className="text-sm text-slate-600 mb-1">{t("customers.deleteConfirm")}</p>
             <p className="font-bold text-slate-800 mb-4">"{deleteTarget.name}"</p>
@@ -296,8 +298,8 @@ export default function Customers() {
       )}
 
       {showDeleteAll && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-96 shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-lg">⚠️</div>
               <div>
