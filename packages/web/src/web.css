@@ -1,226 +1,309 @@
-/* ──────────────────────────────────────────────────────
-   Web-specific overrides on top of unified-app globals.css
-   ────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════
+   Pure Home — Web Responsive Stylesheet
+   Three dedicated device experiences:
+     Desktop/Laptop  ≥ 1024px
+     Tablet/iPad     768 – 1023px
+     Mobile Phone    < 768px
+   ═══════════════════════════════════════════════════════ */
 
-/* Neutralise Electron window-region hints */
+/* ── Electron cleanup ───────────────────────────────── */
 .titlebar-drag    { -webkit-app-region: unset !important; display: none !important; }
 .titlebar-no-drag { -webkit-app-region: unset !important; }
-
-/* On small viewports let the page scroll rather than clip. */
 @media (max-height: 600px) {
   body { overflow: auto !important; }
   #root > div { height: auto !important; min-height: 100vh; }
 }
 
-/* ── Global ──────────────────────────────────────────── */
-
-/* Prevent horizontal overflow globally */
+/* ── Universal baseline ─────────────────────────────── */
 html, body {
   overflow-x: hidden;
   max-width: 100vw;
 }
-
-/* Smooth scrolling everywhere */
-* {
-  scroll-behavior: smooth;
-}
-
-/* Touch-friendly tap targets across all sizes */
-button,
-[role="button"],
-a {
+* { box-sizing: border-box; }
+button, [role="button"], a {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-
-/* Ensure tables inside overflow wrappers scroll smoothly */
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
   overflow-x: auto;
 }
 
-/* ── Desktop (1280px+) ───────────────────────────────── */
-@media (min-width: 1280px) {
-  /* Prevent cards/text from stretching grotesquely on ultra-wide monitors */
-  /* The max-w-[1400px] container in Layout.tsx handles this, but also cap modals */
-  .max-w-2xl { max-width: 42rem; }
-  .max-w-xl  { max-width: 36rem; }
-  .max-w-lg  { max-width: 32rem; }
-  .max-w-md  { max-width: 28rem; }
-  .max-w-sm  { max-width: 24rem; }
-}
+/* ════════════════════════════════════════════════════════
+   ① DESKTOP / LAPTOP EXPERIENCE  (≥ 1024px)
+   Goal: identical to the desktop application
+   ════════════════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+  /* Layout shell */
+  #root, #root > div { height: 100vh; }
 
-/* ── Laptop (1024px – 1279px) ────────────────────────── */
-@media (min-width: 1024px) and (max-width: 1279px) {
-  /* Slightly tighter padding for laptop viewports */
-  .p-5 { padding: 1.1rem; }
-  .p-6 { padding: 1.25rem; }
+  /* Content area — same comfortable padding as the Electron app */
+  main { padding: 1.25rem 1.5rem !important; }
 
-  /* Tables: ensure min-width forces horizontal scroll on narrow laptops */
-  .overflow-x-auto table {
-    min-width: max-content;
-  }
-}
+  /* Cap content width on ultra-wide monitors so the layout
+     doesn't stretch beyond what the desktop app would show */
+  main > div { max-width: 1440px; margin-left: auto; margin-right: auto; }
 
-/* ── Tablet (768px – 1023px) ─────────────────────────── */
-@media (min-width: 768px) and (max-width: 1023px) {
-  /* Full-height screen on tablets */
-  #root, #root > div {
-    height: 100dvh;
-    height: 100vh;
-  }
+  /* ── Dashboard stat cards ── */
+  /* 4 columns on large desktop, 3 on laptop (handled by Tailwind xl:grid-cols-4) */
+  /* The Tailwind xl: breakpoint fires at 1280px, so 1024–1279px gets 3 cols = laptop */
 
-  /* Sidebar is a drawer on tablets (lg: handles desktop) */
-  /* Padding adjustments for tablet content area */
-  main {
-    padding: 1rem !important;
-  }
+  /* ── Tables ─ */
+  /* Tables sit comfortably within the content area; no overflow needed */
+  table { width: 100%; font-size: 0.875rem; }
+  .overflow-x-auto { overflow-x: visible; }
 
-  /* Prevent iOS/iPadOS input zoom */
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="search"],
-  input[type="date"],
-  input[type="time"],
-  select,
-  textarea {
-    font-size: 16px !important;
-  }
+  /* ── Forms ── */
+  /* 2-column forms match the desktop app */
 
-  /* Tables: horizontal scroll on tablet too */
-  table:not(.no-wrap) {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
+  /* ── Cards / sections ── */
+  .rounded-xl.p-4 { padding: 1rem !important; }
+  .rounded-xl.p-5 { padding: 1.25rem !important; }
+  .rounded-xl.p-6 { padding: 1.5rem !important; }
 
-  /* On tablets, 4-col grids become 2-col */
-  .grid.grid-cols-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  /* Stat cards: 3-col on tablet is fine, keep it */
-  /* Forms: keep 2-col on tablet, single col only on mobile */
-
-  /* Reduce oversized card padding slightly */
-  .rounded-xl.p-6 { padding: 1.1rem !important; }
-
-  /* Modals: give a bit of breathing room */
+  /* ── Modals ── */
   .fixed.inset-0 > div,
   .fixed.inset-0 > form {
-    max-height: 90dvh;
     max-height: 90vh;
     overflow-y: auto;
   }
 
-  /* Sales report grid: 2-col on tablet is fine */
+  /* ── Sidebar ── */
+  /* Sidebar is always visible — handled by lg: classes in Layout.tsx */
 
-  /* Activity feed cards: full width */
-  .max-w-lg { max-width: 100% !important; }
-  .max-w-2xl { max-width: 100% !important; }
+  /* ── Typography ── */
+  /* Normal text sizes — no overrides needed, Tailwind defaults are fine */
 }
 
-/* ── Mobile (< 768px) ────────────────────────────────── */
-@media (max-width: 767px) {
-  /* Full-height screen on mobile */
+/* Fine-tune for laptop (1024–1279px) */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  main { padding: 1rem 1.25rem !important; }
+
+  /* On narrower laptops, 3-col stat grids work better */
+  /* Dashboard xl:grid-cols-4 only fires at 1280px so 1024–1279 shows 3 — correct */
+
+  /* Give tables a minimum width so columns don't collapse too aggressively */
+  table { min-width: 0; }
+}
+
+
+/* ════════════════════════════════════════════════════════
+   ② TABLET / IPAD EXPERIENCE  (768 – 1023px)
+   Goal: dedicated touch-optimised layout, NOT scaled desktop
+   ════════════════════════════════════════════════════════ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Layout */
   #root, #root > div {
     height: 100dvh;
     height: 100vh;
   }
 
-  /* Prevent iOS input zoom (requires font-size >= 16px) */
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="search"],
-  input[type="date"],
-  input[type="time"],
-  select,
-  textarea {
-    font-size: 16px !important;
+  /* Content padding — more generous for touch */
+  main { padding: 1rem 1.25rem !important; }
+
+  /* ── Touch targets: every tappable element ≥ 44px ── */
+  button, [role="button"], a[href],
+  select, input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Narrow inline buttons (badges, small actions) stay compact */
+  .text-xs.px-2.py-1, .text-xs.px-1\.5 {
+    min-height: 32px;
+    min-width: unset;
   }
 
-  /* Tables: allow horizontal scroll, reduce font */
-  table {
-    font-size: 0.7rem;
-    min-width: max-content;
-  }
+  /* ── Prevent iOS/iPadOS input zoom ── */
+  input, select, textarea { font-size: 16px !important; }
 
-  /* Auto-wrap tables that aren't already in overflow-x-auto */
+  /* ── Typography — slightly larger base for tablet readability ── */
+  body { font-size: 15px; }
+  .text-sm { font-size: 0.9rem !important; }
+
+  /* ── Grid layouts ── */
+  /* 4-column grids → 2 columns on tablet */
+  .grid.grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  /* 3-column grids → 2 columns on tablet (e.g. technician cards stay 2-col) */
+  /* (leave .grid-cols-3 alone — md:grid-cols-2 on Technicians.tsx handles it) */
+
+  /* ── Spacing: more breathing room for fingers ── */
+  .space-y-4 > * + * { margin-top: 1rem !important; }
+  .gap-2 { gap: 0.625rem !important; }
+  .gap-3 { gap: 0.75rem !important; }
+  .gap-4 { gap: 1rem !important; }
+
+  /* ── Tables ── */
+  /* Tables scroll horizontally; header/rows stay at readable font size */
   table:not(.no-wrap) {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    font-size: 0.85rem;
+  }
+  /* Add scroll hint on the right edge */
+  .overflow-x-auto::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 24px;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.9));
+    pointer-events: none;
+  }
+  .overflow-x-auto { position: relative; }
+
+  /* Table cells: taller rows for touch */
+  td, th { padding: 0.75rem 1rem !important; }
+
+  /* ── Cards ── */
+  .rounded-xl.p-4 { padding: 1rem !important; }
+  .rounded-xl.p-5 { padding: 1.1rem !important; }
+  .rounded-xl.p-6 { padding: 1.25rem !important; }
+
+  /* ── Header buttons and toolbars ── */
+  /* Action buttons in page headers: bigger tap targets */
+  .flex.items-center.justify-between > button,
+  .flex.gap-2 > button,
+  .flex.flex-wrap.gap-2 > button {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
   }
 
-  /* Stat card grids: 2 cols on mobile */
-  .grid.grid-cols-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  /* ── Filter button rows: wrap cleanly ── */
+  .flex.gap-2 { flex-wrap: wrap; }
+  .flex.flex-wrap { flex-wrap: wrap; }
+
+  /* ── Modals ── */
+  .fixed.inset-0 > div,
+  .fixed.inset-0 > form {
+    max-height: 92dvh;
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: 1rem;
+    padding: 1.25rem;
+  }
+  .max-w-2xl { max-width: min(680px, calc(100vw - 2rem)) !important; }
+  .max-w-xl  { max-width: min(560px, calc(100vw - 2rem)) !important; }
+  .max-w-lg  { max-width: min(480px, calc(100vw - 2rem)) !important; }
+  .max-w-md  { max-width: min(400px, calc(100vw - 2rem)) !important; }
+
+  /* ── Forms: 2-col on tablet is fine, single-col handled per-page ── */
+
+  /* ── Dashboard activity feed ── */
+  .max-w-2xl, .max-w-xl { max-width: 100% !important; }
+
+  /* ── Stat numbers ── */
+  .text-2xl { font-size: 1.5rem !important; }
+  .text-3xl { font-size: 1.75rem !important; }
+}
+
+
+/* ════════════════════════════════════════════════════════
+   ③ MOBILE PHONE EXPERIENCE  (< 768px)
+   Goal: purpose-built for small screens, one-thumb navigation
+   ════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Layout */
+  #root, #root > div {
+    height: 100dvh;
+    height: 100vh;
   }
 
+  /* ── Content padding ── */
+  main { padding: 0.75rem !important; }
+
+  /* ── Prevent iOS input zoom ── */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* ── Touch targets: minimum 44px ── */
+  button, [role="button"], a[href] { min-height: 44px; }
+  /* Keep small badge-style pills compact */
+  .text-xs.px-2.py-0\.5, .text-xs.px-1\.5.py-0\.5 { min-height: unset; }
+
+  /* ── Tables ── */
+  table:not(.no-wrap) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 0.75rem;
+  }
+  td, th { padding: 0.5rem 0.75rem !important; }
+
+  /* ── Grids ── */
+  /* 4-col and 3-col → 2 cols on most mobiles */
+  .grid.grid-cols-4,
   .grid.grid-cols-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
-
-  /* Forms: single column on mobile */
+  /* 2-col forms → 1 col */
   .grid.grid-cols-2:not(.keep-cols) {
     grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
   }
 
-  /* Reduce padding in cards */
+  /* ── Cards ── */
+  .rounded-xl.p-4 { padding: 0.75rem !important; }
   .rounded-xl.p-5 { padding: 0.75rem !important; }
   .rounded-xl.p-6 { padding: 0.75rem !important; }
 
-  /* Reduce modal/dialog max-width */
-  .max-w-2xl { max-width: calc(100vw - 1rem) !important; }
-  .max-w-xl  { max-width: calc(100vw - 1rem) !important; }
-  .max-w-lg  { max-width: calc(100vw - 1rem) !important; }
-  .max-w-md  { max-width: calc(100vw - 1rem) !important; }
+  /* ── Spacing ── */
+  .space-y-6 > * + * { margin-top: 0.875rem !important; }
+  .space-y-4 > * + * { margin-top: 0.75rem !important; }
 
-  /* Fixed modals/dialogs: ensure they fit on screen */
+  /* ── Flex button rows: always wrap ── */
+  .flex.gap-2,
+  .flex.gap-3,
+  .flex.gap-4,
+  .flex.items-center.gap-2 {
+    flex-wrap: wrap;
+  }
+
+  /* ── Modals / dialogs ── */
   .fixed.inset-0 > div,
   .fixed.inset-0 > form {
     max-height: 90dvh;
     max-height: 90vh;
     overflow-y: auto;
   }
+  .max-w-2xl { max-width: calc(100vw - 1rem) !important; }
+  .max-w-xl  { max-width: calc(100vw - 1rem) !important; }
+  .max-w-lg  { max-width: calc(100vw - 1rem) !important; }
+  .max-w-md  { max-width: calc(100vw - 1rem) !important; }
+  .max-w-sm  { max-width: calc(100vw - 1.5rem) !important; }
 
-  /* Prevent overflow from flex children */
-  .flex.gap-4 { flex-wrap: wrap; }
-
-  /* Stat numbers: slightly smaller on mobile */
+  /* ── Typography ── */
   .text-3xl { font-size: 1.5rem !important; }
   .text-2xl { font-size: 1.25rem !important; }
+  .text-xl  { font-size: 1.1rem !important; }
 
-  /* Nav link padding in sidebar */
-  .w-56 { width: 15rem; }
+  /* ── Nav / sidebar ── */
+  .w-56 { width: 16rem; }
 
-  /* Improve readability on small screens */
-  .text-xs { font-size: 0.7rem; }
-
-  /* Filter button rows: wrap on mobile */
-  .flex.gap-2 { flex-wrap: wrap; }
-
-  /* Action button rows: wrap and reduce gap */
-  .flex.items-center.gap-2 { flex-wrap: wrap; gap: 0.375rem; }
+  /* ── Full-width primary action buttons ── */
+  .space-y-4 > .flex.justify-end > button[type="submit"],
+  form > .flex.justify-end > button[type="submit"] {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
-/* ── Small phone (< 480px) ───────────────────────────── */
+/* ── Very small phones (< 480px) ─────────────────────── */
 @media (max-width: 479px) {
+  /* Single-column everything */
   .grid.grid-cols-4,
   .grid.grid-cols-3,
   .grid.grid-cols-2:not(.keep-cols) {
     grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
   }
 
+  /* Stat cards: still 2 cols (compact numbers need less space) */
+  .grid.grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+
+  .rounded-xl.p-4,
   .rounded-xl.p-5,
-  .rounded-xl.p-6,
-  .rounded-xl.p-4 {
+  .rounded-xl.p-6 {
     padding: 0.625rem !important;
   }
+
+  main { padding: 0.5rem !important; }
 }
