@@ -40,7 +40,7 @@ export default function Appointments() {
       </div>
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {isLoading ? <p className="text-center py-8 text-slate-400">{t("common.loading")}</p> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
             <thead className="bg-slate-50 border-b">
               <tr>
                 <th className="text-start px-4 py-3">{t("appointments.customer")}</th>
@@ -59,7 +59,7 @@ export default function Appointments() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </div>
