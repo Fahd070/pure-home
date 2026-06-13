@@ -2,13 +2,130 @@
    Web-specific overrides on top of unified-app globals.css
    ────────────────────────────────────────────────────── */
 
-/* Neutralise Electron window-region hints — they are silently
-   ignored by regular browsers, but make intent explicit. */
-.titlebar-drag    { -webkit-app-region: unset !important; }
+/* Neutralise Electron window-region hints */
+.titlebar-drag    { -webkit-app-region: unset !important; display: none !important; }
 .titlebar-no-drag { -webkit-app-region: unset !important; }
 
 /* On small viewports let the page scroll rather than clip. */
 @media (max-height: 600px) {
   body { overflow: auto !important; }
   #root > div { height: auto !important; min-height: 100vh; }
+}
+
+/* ── Mobile responsiveness (website only) ────────────── */
+
+/* Prevent horizontal overflow globally */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Smooth sidebar transition on mobile */
+@media (max-width: 767px) {
+  /* Full-height screen on mobile */
+  #root, #root > div {
+    height: 100dvh;
+    height: 100vh; /* fallback */
+  }
+
+  /* Prevent iOS input zoom (requires font-size >= 16px) */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="search"],
+  input[type="date"],
+  input[type="time"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Touch-friendly tap targets */
+  button,
+  [role="button"],
+  a {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Tables: allow horizontal scroll, reduce font */
+  table {
+    font-size: 0.7rem;
+    min-width: max-content;
+  }
+
+  /* Ensure table wrappers scroll horizontally */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+  }
+
+  /* Auto-wrap tables that aren't already in overflow-x-auto */
+  table:not(.no-wrap) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stat card grids: 2 cols on mobile instead of 3 or 4 */
+  .grid.grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .grid.grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Forms: single column on mobile */
+  .grid.grid-cols-2:not(.keep-cols) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  /* Reduce padding in cards */
+  .rounded-xl.p-5 { padding: 0.75rem !important; }
+  .rounded-xl.p-6 { padding: 0.75rem !important; }
+
+  /* Reduce modal/dialog max-width */
+  .max-w-2xl { max-width: calc(100vw - 1rem) !important; }
+  .max-w-xl  { max-width: calc(100vw - 1rem) !important; }
+  .max-w-lg  { max-width: calc(100vw - 1rem) !important; }
+  .max-w-md  { max-width: calc(100vw - 1rem) !important; }
+
+  /* Fixed modals/dialogs: ensure they fit on screen */
+  .fixed.inset-0 > div,
+  .fixed.inset-0 > form {
+    max-height: 90dvh;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* Prevent overflow from flex children */
+  .flex.gap-4 { flex-wrap: wrap; }
+
+  /* Stat numbers: slightly smaller on mobile */
+  .text-3xl { font-size: 1.5rem !important; }
+  .text-2xl { font-size: 1.25rem !important; }
+
+  /* Nav link padding in sidebar */
+  .w-56 { width: 15rem; }
+
+  /* Improve readability on small screens */
+  .text-xs { font-size: 0.7rem; }
+}
+
+/* ── Small phone (< 480px) ───────────────────────────── */
+@media (max-width: 479px) {
+  .grid.grid-cols-4,
+  .grid.grid-cols-3,
+  .grid.grid-cols-2:not(.keep-cols) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  .rounded-xl.p-5,
+  .rounded-xl.p-6,
+  .rounded-xl.p-4 {
+    padding: 0.625rem !important;
+  }
 }
