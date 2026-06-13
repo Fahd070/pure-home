@@ -338,7 +338,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {cards.map(c => (
           <StatCard key={c.key} label={c.label} value={stats?.[c.key]} color={c.color}
             onClick={() => setModal({ title: c.label, endpoint: c.endpoint })} />

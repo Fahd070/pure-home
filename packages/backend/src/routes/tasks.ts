@@ -138,8 +138,11 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
-    if (!isAdmin && before.technicianId !== req.user!.userId) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+    if (!isAdmin) {
+      // Allow self-assignment: if technicianId is null, any technician can start (and claim) the task
+      if (before.technicianId !== null && before.technicianId !== req.user!.userId) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
     }
     if (before.status !== 'APPROVED') {
       return res.status(409).json({ success: false, message: 'Task must be APPROVED before it can be started' });
@@ -149,6 +152,8 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
       where: { id: req.params.id },
       data: {
         status: 'IN_PROGRESS', startedAt: new Date(), version: { increment: 1 },
+        // Auto-assign technician if task was unassigned (admin created without specifying a technician)
+        ...(before.technicianId === null && !isAdmin ? { technicianId: req.user!.userId } : {}),
         history: { create: { status: 'IN_PROGRESS', changedById: req.user!.userId } },
       },
       include: { technician: true, appointment: { include: { customer: { include: { address: true } } } } },
@@ -202,8 +207,11 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (body.version !== undefined && before.version !== body.version) return conflict(res, before.version, body.version);
-    if (!isAdmin && before.technicianId !== req.user!.userId) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+    if (!isAdmin) {
+      // Allow completion by the assigned technician; null technicianId means the task was self-assigned at start time
+      if (before.technicianId !== null && before.technicianId !== req.user!.userId) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
     }
     if (before.status !== 'IN_PROGRESS') {
       return res.status(409).json({ success: false, message: 'Task must be IN_PROGRESS before it can be completed' });
@@ -265,8 +273,10 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
-    if (!isAdmin && before.technicianId !== req.user!.userId) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+    if (!isAdmin) {
+      if (before.technicianId !== null && before.technicianId !== req.user!.userId) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
     }
     if (before.status !== 'APPROVED' && before.status !== 'IN_PROGRESS') {
       return res.status(409).json({ success: false, message: 'Task cannot be postponed in its current state' });
