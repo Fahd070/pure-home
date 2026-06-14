@@ -33,7 +33,14 @@ router.post('/bulk-complete-existing', requireRole('ADMIN'), async (req: AuthReq
   try {
     const { count } = await prisma.maintenanceTask.updateMany({
       where: { status: { notIn: ['COMPLETED'] } },
-      data: { status: 'COMPLETED', completedAt: new Date() },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        completionAmount: 0,
+        serviceDetails: '.',
+        completionPaymentMethod: 'CASH',
+        notes: '.',
+      },
     });
     await writeAudit({
       action: 'UPDATE', entityType: 'task', entityId: 'bulk', userId: req.user!.userId,

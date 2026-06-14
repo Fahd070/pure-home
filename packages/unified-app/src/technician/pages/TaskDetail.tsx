@@ -9,7 +9,7 @@ import { HELP } from "../../helpContent";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER";
 
-const EMPTY_COMPLETE = { notes: "", serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod };
+const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod };
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -35,7 +35,7 @@ export default function TaskDetail() {
 
   const complete = useMutation({
     mutationFn: () => api.patch(`/tasks/${id}/complete`, {
-      notes: completeForm.notes,
+      notes: ".",
       serviceDetails: completeForm.serviceDetails,
       completionAmount: parseFloat(completeForm.amount),
       completionPaymentMethod: completeForm.paymentMethod,
@@ -57,7 +57,7 @@ export default function TaskDetail() {
   const customer = appt?.customer;
   const addr = customer?.address;
 
-  const isCompleteValid = completeForm.notes.trim() && completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0;
+  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0;
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
@@ -128,12 +128,6 @@ export default function TaskDetail() {
               {isAr ? "جميع الحقول إلزامية لإتمام المهمة" : "All fields are required to complete the task"}
             </p>
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.completionNotes")} *</label>
-                <textarea value={completeForm.notes} onChange={e => setCompleteForm(f => ({ ...f, notes: e.target.value }))} rows={3} required
-                  placeholder={isAr ? "ملاحظات الإتمام..." : "Completion notes..."}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
-              </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.serviceDetails")} *</label>
                 <textarea value={completeForm.serviceDetails} onChange={e => setCompleteForm(f => ({ ...f, serviceDetails: e.target.value }))} rows={3} required
