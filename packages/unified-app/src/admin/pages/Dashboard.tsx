@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
-// ── Drill-down modal ──────────────────────────────────────────────────────────
+// â”€â”€ Drill-down modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: string; onClose: () => void }) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
@@ -29,7 +29,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-bold text-lg text-slate-800">{title}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">✕</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">âœ•</button>
         </div>
         <div className="p-4 border-b">
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("dashboard.search")}
@@ -58,8 +58,8 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                 };
                 let loc: any = {};
                 try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
-                const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "Urgent Visit";
-                const displayPhone = a.customer?.phone || "—";
+                const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("طŒ ") || "Urgent Visit";
+                const displayPhone = a.customer?.phone || "â€”";
                 return (
                   <tr key={a.id} className="border-b hover:bg-slate-50">
                     <td className="px-4 py-2.5 font-medium">{displayName}</td>
@@ -92,7 +92,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                   <td className="px-4 py-2.5 font-medium">{c.name}</td>
                   <td className="px-4 py-2.5 text-slate-500">{c.phone}</td>
                   <td className="px-4 py-2.5 text-xs">{c.maintenanceCycle}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{c.address?.city || "—"}</td>
+                  <td className="px-4 py-2.5 text-slate-500">{c.address?.city || "â€”"}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -102,9 +102,9 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
           <div className="flex items-center justify-between p-3 border-t text-sm">
             <span className="text-slate-500">{total} {t("common.total")}</span>
             <div className="flex gap-2">
-              <button disabled={page === 1} onClick={() => setPage(p => p-1)} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">‹</button>
+              <button disabled={page === 1} onClick={() => setPage(p => p-1)} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">â€¹</button>
               <span className="px-2 py-1">{page}/{pages}</span>
-              <button disabled={page >= pages} onClick={() => setPage(p => p+1)} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">›</button>
+              <button disabled={page >= pages} onClick={() => setPage(p => p+1)} className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">â€؛</button>
             </div>
           </div>
         )}
@@ -113,114 +113,27 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
+// â”€â”€ Stat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function StatCard({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
   const { t } = useTranslation();
   return (
     <button onClick={onClick} className={`bg-white rounded-xl p-4 border-s-4 shadow-sm text-start hover:shadow-md hover:-translate-y-0.5 transition-all w-full ${color}`}>
-      <p className="text-2xl font-bold text-slate-800">{value ?? "—"}</p>
+      <p className="text-2xl font-bold text-slate-800">{value ?? "â€”"}</p>
       <p className="text-slate-500 text-sm mt-1">{label}</p>
       <p className="text-xs text-blue-500 mt-2">{t("dashboard.clickToView")}</p>
     </button>
   );
 }
 
-function prevWeekRange() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun
-  const daysToLastMon = day === 0 ? 7 : day + 6;
-  const lastMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysToLastMon);
-  const lastSun = new Date(lastMon.getFullYear(), lastMon.getMonth(), lastMon.getDate() + 6);
-  return { from: lastMon, to: lastSun };
-}
 
-function prevMonthRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const to = new Date(now.getFullYear(), now.getMonth(), 0);
-  return { from, to };
-}
 
-const SALES_WEEK_MS  = 7  * 24 * 3600 * 1000;
-const SALES_MONTH_MS = 30 * 24 * 3600 * 1000;
-
-function getSalesLast(key: string)  { return Number(localStorage.getItem(`wfm_sales_${key}`) || 0); }
-function setSalesLast(key: string)  { localStorage.setItem(`wfm_sales_${key}`, String(Date.now())); }
-function salesRemaining(key: string, period: "weekly" | "monthly", now: number): number {
-  const last = getSalesLast(key);
-  if (!last) return 0;
-  const lockMs = period === "weekly" ? SALES_WEEK_MS : SALES_MONTH_MS;
-  return Math.max(0, last + lockMs - now);
-}
-
-function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, totalAmount: number) {
-  const dir = isAr ? "rtl" : "ltr";
-  const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
-  const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
-  const headers = isAr
-    ? ["#", "اسم العميل", "الجوال", "نوع الخدمة", "التاريخ", "الفني", "طريقة الدفع", "المبلغ (ريال)"]
-    : ["#", "Customer", "Phone", "Service Type", "Date", "Technician", "Payment", "Amount (SAR)"];
-  const tableRows = rows.map((r, i) => `<tr>
-    <td style="text-align:center;color:#888">${i + 1}</td>
-    <td>${r.customerName}</td>
-    <td>${r.customerPhone}</td>
-    <td>${typeLabels[r.appointmentType] || r.appointmentType}</td>
-    <td style="white-space:nowrap">${new Date(r.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
-    <td>${r.technicianName}</td>
-    <td>${payLabels[r.paymentMethod] || r.paymentMethod}</td>
-    <td style="text-align:center;font-weight:600;font-family:monospace">${Number(r.amount).toFixed(2)}</td>
-  </tr>`).join("");
-  return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
-<style>
-*{box-sizing:border-box}
-body{font-family:Tahoma,Arial,sans-serif;margin:20px;font-size:11px;direction:${dir};color:#222}
-.border-box{border:2px solid #000080;border-radius:6px;padding:16px}
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000080;margin-bottom:14px;padding-bottom:10px}
-.brand{font-size:22px;font-weight:bold;color:#000080}
-.rtitle{font-size:14px;font-weight:bold;margin:4px 0 2px;color:#000080}
-.period-badge{font-size:11px;color:#333;background:#e8eeff;border:1px solid #b0c0ff;border-radius:4px;padding:3px 10px;display:inline-block;margin-top:4px}
-.print-date{font-size:10px;color:#888}
-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:10px}
-th{background:#000080;color:#fff;padding:7px 8px;text-align:${dir==="rtl"?"right":"left"};font-size:10px}
-td{padding:5px 8px;border-bottom:1px solid #e8e8e8;vertical-align:middle}
-tr:nth-child(even) td{background:#f7f8fc}
-.grand-box{margin-top:16px;background:linear-gradient(135deg,#000080,#1a1ab0);color:#fff;border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
-.grand-lbl{font-size:13px;font-weight:bold}
-.grand-val{font-size:22px;font-weight:bold;font-family:monospace}
-.ftr{margin-top:14px;border-top:1px solid #eee;padding-top:6px;color:#aaa;font-size:9px;text-align:center}
-</style></head><body>
-<div class="border-box">
-<div class="hdr">
-  <div>
-    <div class="brand">Pure Home</div>
-    <div class="rtitle">${isAr ? "تقرير المبيعات" : "Sales Report"}</div>
-    <div><span class="period-badge">📅 ${periodLabel}</span></div>
-  </div>
-  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
-</div>
-<table>
-  <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
-  <tbody>${tableRows || `<tr><td colspan="8" style="text-align:center;color:#bbb;padding:20px">${isAr ? "لا توجد بيانات في هذه الفترة" : "No data for this period"}</td></tr>`}</tbody>
-</table>
-<div class="grand-box">
-  <span class="grand-lbl">${isAr ? "إجمالي المبيعات" : "Total Sales"} &nbsp;·&nbsp; ${rows.length} ${isAr ? "سجل" : "records"}</span>
-  <span class="grand-val">${totalAmount.toFixed(2)} <span style="font-size:13px;opacity:0.85">${isAr ? "ريال" : "SAR"}</span></span>
-</div>
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
-</div>
-</body></html>`;
-}
-
-// ── Main Dashboard ─────────────────────────────────────────────────────────────
+// â”€â”€ Main Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function Dashboard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const socket = useSocket();
   const [modal, setModal] = useState<{ title: string; endpoint: string } | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
-  const [generatingSales, setGeneratingSales] = useState<string | null>(null);
-  const [ticker, setTicker] = useState(Date.now());
-  useEffect(() => { const id = setInterval(() => setTicker(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: () => api.get("/dashboard/stats").then(r => r.data.data) });
   const { data: activity } = useQuery({ queryKey: ["dashboard-activity"], queryFn: () => api.get("/dashboard/activity").then(r => r.data.data) });
@@ -257,73 +170,9 @@ export default function Dashboard() {
   const statusLabel: Record<string, string> = {
     COMPLETED: t("tasks.completed"), IN_PROGRESS: t("tasks.inProgress"),
     POSTPONED: t("tasks.postponed"), PENDING_APPROVAL: t("tasks.pendingApproval"),
-    APPROVED: t("tasks.approved"), NO_TASK: "—"
+    APPROVED: t("tasks.approved"), NO_TASK: "â€”"
   };
 
-  async function generateSalesReport(period: "weekly" | "monthly", format: "pdf" | "excel") {
-    const key = `${period}-${format}`; // used only for per-button loading state
-    setGeneratingSales(key);
-    try {
-      const isAr = document.documentElement.lang === "ar" || document.documentElement.dir === "rtl";
-      const { from, to } = period === "weekly" ? prevWeekRange() : prevMonthRange();
-      const fromStr = from.toISOString().slice(0, 10);
-      const toStr = to.toISOString().slice(0, 10);
-
-      const periodLabel = period === "weekly"
-        ? (isAr
-            ? `الأسبوع الماضي: ${from.toLocaleDateString("ar-SA")} — ${to.toLocaleDateString("ar-SA")}`
-            : `Previous Week: ${from.toLocaleDateString("en-GB")} — ${to.toLocaleDateString("en-GB")}`)
-        : (isAr
-            ? `الشهر الماضي: ${from.toLocaleDateString("ar-SA", { month: "long", year: "numeric" })}`
-            : `Previous Month: ${from.toLocaleDateString("en-US", { month: "long", year: "numeric" })}`);
-
-      const { data: salesData } = await api.get("/reports/sales", { params: { from: fromStr, to: toStr } });
-      const rows: any[] = salesData.data || [];
-      const totalAmount: number = salesData.meta?.totalAmount || 0;
-
-      if (format === "pdf") {
-        const html = buildSalesPdfHtml(rows, isAr, periodLabel, totalAmount);
-        const filePath = await (window as any).electron.printToPDF(html, `sales-${period}-${Date.now()}.pdf`);
-        setSalesLast(period);
-        toast.success(`Saved: ${filePath}`);
-      } else {
-        const XLSX = await import("xlsx");
-        const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
-        const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
-        const excelRows = [
-          ...rows.map((r: any) => ({
-            [isAr ? "اسم العميل" : "Customer"]: r.customerName,
-            [isAr ? "الجوال" : "Phone"]: r.customerPhone,
-            [isAr ? "نوع الخدمة" : "Service Type"]: typeLabels[r.appointmentType] || r.appointmentType,
-            [isAr ? "التاريخ" : "Date"]: new Date(r.date).toLocaleDateString(),
-            [isAr ? "الفني" : "Technician"]: r.technicianName,
-            [isAr ? "طريقة الدفع" : "Payment"]: payLabels[r.paymentMethod] || r.paymentMethod,
-            [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: Number(r.amount),
-          })),
-          {
-            [isAr ? "اسم العميل" : "Customer"]: isAr ? "الإجمالي" : "TOTAL",
-            [isAr ? "الجوال" : "Phone"]: "", [isAr ? "نوع الخدمة" : "Service Type"]: "",
-            [isAr ? "التاريخ" : "Date"]: "", [isAr ? "الفني" : "Technician"]: "",
-            [isAr ? "طريقة الدفع" : "Payment"]: "", [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: totalAmount,
-          },
-        ];
-        const ws = XLSX.utils.json_to_sheet(excelRows);
-        ws['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 14 }];
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, isAr ? "المبيعات" : "Sales");
-        const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-        const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `sales-${period}-${Date.now()}.xlsx`; a.click();
-        URL.revokeObjectURL(url);
-        setSalesLast(period);
-        toast.success(isAr ? "تم التنزيل" : "Downloaded");
-      }
-    } catch {
-      toast.error(t("common.error"));
-    } finally { setGeneratingSales(null); }
-  }
 
   const cards = [
     { label: t("dashboard.customers"),            key: "total",          endpoint: "customers-list",          color: "border-blue-500" },
@@ -374,87 +223,11 @@ export default function Dashboard() {
                 </span>
                 <button onClick={() => deleteActivity.mutate(a.customerId)}
                   className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded hover:bg-red-100 text-red-400 hover:text-red-600 text-xs flex items-center justify-center transition-all">
-                  ✕
+                  âœ•
                 </button>
               </div>
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Sales Reports — countdown buttons */}
-      <div className="bg-white rounded-xl shadow-sm p-5" dir="rtl">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-lg">📊</span>
-          <h3 className="font-bold text-slate-800 text-base">تقارير المبيعات</h3>
-        </div>
-        <p className="text-xs text-slate-400 mb-4">
-          تُنشأ تلقائياً بعد انتهاء كل أسبوع أو شهر — يبدأ العد التنازلي بعد كل تنزيل
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {([
-            { period: "weekly"  as const, format: "pdf"   as const, label: "تقرير المبيعات الأسبوعي (PDF)" },
-            { period: "monthly" as const, format: "pdf"   as const, label: "تقرير المبيعات الشهري (PDF)" },
-            { period: "weekly"  as const, format: "excel" as const, label: "تقرير المبيعات الأسبوعي (Excel)" },
-            { period: "monthly" as const, format: "excel" as const, label: "تقرير المبيعات الشهري (Excel)" },
-          ] as const).map(({ period, format, label }) => {
-            const key = `${period}-${format}`;
-            // Timer is shared per period — both formats share the same lock window
-            const rem = salesRemaining(period, period, ticker);
-            const locked = rem > 0;
-            const isGen = generatingSales === key;
-            const icon = format === "pdf" ? "📄" : "📊";
-            const d = Math.floor(rem / 86400000);
-            const h = Math.floor((rem % 86400000) / 3600000);
-            const m = Math.floor((rem % 3600000) / 60000);
-            const s = Math.floor((rem % 60000) / 1000);
-
-            if (locked) {
-              return (
-                <div key={key} className="rounded-xl border-2 border-slate-200 bg-slate-50 p-3 min-h-[96px] flex flex-col justify-between select-none" style={{ opacity: 0.58 }}>
-                  <div className="flex items-start gap-2">
-                    <span className="text-base flex-shrink-0">{icon}</span>
-                    <span className="text-xs font-semibold text-slate-600 leading-snug">{label}</span>
-                  </div>
-                  <div className="mt-2 space-y-0.5">
-                    <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                      <span>🔒</span><span>متاح خلال</span>
-                    </div>
-                    <div className="text-xs font-mono font-bold text-slate-600 tabular-nums leading-none">
-                      {d > 0 && <span>{d} يوم </span>}
-                      <span>{h} س </span>
-                      <span>{m} د </span>
-                      <span>{s} ث</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <button
-                key={key}
-                onClick={() => generateSalesReport(period, format)}
-                disabled={generatingSales !== null}
-                className={`rounded-xl border-2 p-3 min-h-[96px] flex flex-col justify-between transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed text-white ${
-                  format === "pdf"
-                    ? "bg-[#000080] border-[#000060] hover:bg-[#0000a0]"
-                    : "bg-green-700 border-green-800 hover:bg-green-800"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className="text-base flex-shrink-0">{icon}</span>
-                  <span className="text-xs font-semibold leading-snug text-right">{label}</span>
-                </div>
-                <div className="mt-2 text-right">
-                  {isGen
-                    ? <span className="text-[10px] opacity-80 animate-pulse">⏳ جاري التحميل...</span>
-                    : <span className="text-[10px] opacity-90 font-semibold">✅ جاهز للتحميل</span>
-                  }
-                </div>
-              </button>
-            );
-          })}
         </div>
       </div>
 

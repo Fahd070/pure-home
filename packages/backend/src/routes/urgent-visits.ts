@@ -107,8 +107,15 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
         resolvedCustomerId = existing.id;
         emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
         emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, { id: existing.id, name, phone });
+        // Link the appointment to the existing customer for history tracking.
+        await prisma.appointment.update({
+          where: { id: body.appointmentId },
+          data: { customerId: existing.id },
+        });
       } else {
-        // New customer or different identity with same phone — always create a fresh record.
+        // New customer created from urgent appointment — do NOT link the urgent appointment
+        // to prevent it from appearing as an unwanted "next maintenance" date. The visit
+        // record already captures all required customer and service info for reference.
         const installDate = body.serviceType === 'INSTALLATION' ? new Date() : undefined;
         const newCust = await prisma.customer.create({
           data: {
@@ -131,12 +138,6 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
         emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
         emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, { id: newCust.id, name, phone });
       }
-
-      // Link the appointment to the resolved customer so the record is complete.
-      await prisma.appointment.update({
-        where: { id: body.appointmentId },
-        data: { customerId: resolvedCustomerId },
-      });
     } catch (autoErr: any) {
       console.error('[urgent-visit] auto-customer sync warning:', autoErr?.message);
     }
