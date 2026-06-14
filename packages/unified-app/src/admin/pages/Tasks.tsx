@@ -23,6 +23,45 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+function ImageViewer({ src, onClose, isAr }: { src: string; onClose: () => void; isAr: boolean }) {
+  const [zoom, setZoom] = useState(1);
+  return (
+    <div className="fixed inset-0 bg-black/92 z-[9999] flex flex-col items-center justify-center p-3"
+      onClick={onClose}>
+      <div className="flex gap-2 mb-3" onClick={e => e.stopPropagation()}>
+        <button onClick={() => setZoom(z => Math.min(z + 0.5, 5))}
+          className="bg-white/15 hover:bg-white/25 text-white rounded-lg w-9 h-9 text-xl flex items-center justify-center font-light">+</button>
+        <span className="bg-white/10 text-white/80 rounded-lg px-3 flex items-center text-xs tabular-nums min-w-[52px] justify-center">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button onClick={() => setZoom(z => Math.max(z - 0.5, 0.5))}
+          className="bg-white/15 hover:bg-white/25 text-white rounded-lg w-9 h-9 text-xl flex items-center justify-center font-light">−</button>
+        <button onClick={() => setZoom(1)}
+          className="bg-white/15 hover:bg-white/25 text-white rounded-lg px-3 h-9 text-xs">
+          {isAr ? "ملاءمة" : "Fit"}
+        </button>
+        <button onClick={onClose}
+          className="bg-red-700/70 hover:bg-red-600 text-white rounded-lg w-9 h-9 text-base flex items-center justify-center">✕</button>
+      </div>
+      <div className="overflow-auto rounded-xl border border-white/10 shadow-2xl"
+        style={{ maxHeight: "80vh", maxWidth: "90vw" }}
+        onClick={e => e.stopPropagation()}>
+        <img src={src} alt=""
+          style={{
+            display: "block",
+            maxWidth: zoom === 1 ? "90vw" : "none",
+            maxHeight: zoom === 1 ? "76vh" : "none",
+            width: zoom > 1 ? `${zoom * 90}vw` : "auto",
+            height: "auto",
+          }} />
+      </div>
+      <p className="text-white/25 text-xs mt-2" onClick={e => e.stopPropagation()}>
+        {isAr ? "انقر خارج الصورة للإغلاق" : "Click outside to close"}
+      </p>
+    </div>
+  );
+}
+
 export default function Tasks() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
@@ -31,6 +70,7 @@ export default function Tasks() {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [techId, setTechId] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [imageViewer, setImageViewer] = useState<string | null>(null);
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-tasks-admin"));
@@ -113,7 +153,10 @@ export default function Tasks() {
 
   return (
     <div className="space-y-4">
-      {/* Bulk Complete Confirmation */}
+      {imageViewer && (
+        <ImageViewer src={imageViewer} onClose={() => setImageViewer(null)} isAr={isAr} />
+      )}
+
       {bulkConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
@@ -157,87 +200,103 @@ export default function Tasks() {
           </div>
         </div>
       )}
+
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[480px]">
-          <thead className="bg-slate-50 border-b">
-            <tr>
-              <th className="text-start px-4 py-3">{t("appointments.customer")}</th>
-              <th className="text-start px-4 py-3">{t("appointments.technician")}</th>
-              <th className="text-start px-4 py-3">{t("common.date")}</th>
-              <th className="text-start px-4 py-3">{t("common.status")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {others.map((task: any) => {
-              const isExpanded = expandedId === task.id;
-              const customer = task.appointment?.customer;
-              const postponement = task.postponements?.[0];
-              return (
-                <React.Fragment key={task.id}>
-                  <tr className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : task.id)}>
-                    <td className="px-4 py-3 font-medium">
-                      {customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}
-                      {task.appointment?.isUrgent && <span className="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">🚨</span>}
-                    </td>
-                    <td className="px-4 py-3">{task.technician?.name || "—"}</td>
-                    <td className="px-4 py-3">{new Date(task.appointment?.scheduledDate).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[task.status] || ""}`}>
-                        {statusLabel[task.status] || task.status}
-                      </span>
-                      <span className="text-xs text-slate-300 ms-2">{isExpanded ? "▲" : "▼"}</span>
-                    </td>
-                  </tr>
-                  {isExpanded && (
-                    <tr className="bg-slate-50 border-b">
-                      <td colSpan={4} className="px-6 py-4">
-                        <div className="space-y-3">
-                          {customer && (
-                            <div className="space-y-1">
-                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{isAr ? "معلومات العميل" : "Customer Info"}</p>
-                              <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-                                <DetailRow label={isAr ? "الاسم" : "Name"} value={customer.name} />
-                                <DetailRow label={isAr ? "الجوال" : "Phone"} value={customer.phone} />
-                                {customer.address && <>
-                                  <DetailRow label={isAr ? "المدينة" : "City"} value={customer.address.city} />
-                                  <DetailRow label={isAr ? "الحي" : "District"} value={customer.address.district} />
-                                </>}
-                              </div>
-                            </div>
-                          )}
-                          {task.status === "POSTPONED" && postponement && (
-                            <div className="space-y-1 border-t pt-3">
-                              <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">{isAr ? "تفاصيل التأجيل" : "Postponement Details"}</p>
-                              <DetailRow label={t("tasks.postponementReason")} value={postponement.reason} />
-                              {postponement.newDate && <DetailRow label={t("tasks.newDate")} value={new Date(postponement.newDate).toLocaleDateString(isAr ? "ar-SA" : undefined)} />}
-                              <DetailRow label={isAr ? "ملاحظات الفني" : "Technician Notes"} value={task.notes} />
-                            </div>
-                          )}
-                          {task.status === "COMPLETED" && (
-                            <div className="space-y-1 border-t pt-3">
-                              <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">{isAr ? "تفاصيل الإتمام" : "Completion Details"}</p>
-                              <DetailRow label={t("tasks.completionNotes")} value={task.notes} />
-                              <DetailRow label={t("tasks.serviceDetails")} value={task.serviceDetails} />
-                              <DetailRow label={t("tasks.paymentMethod")} value={task.completionPaymentMethod ? (PAYMENT_LABELS[task.completionPaymentMethod] || task.completionPaymentMethod) : null} />
-                              {task.completionAmount != null && (
-                                <div className="flex gap-2 text-xs">
-                                  <span className="text-slate-400 min-w-[100px]">{t("tasks.amount")}:</span>
-                                  <span className="font-semibold text-slate-800">{task.completionAmount.toFixed(2)} SAR</span>
-                                </div>
-                              )}
-                              {task.completedAt && <DetailRow label={t("tasks.completionDate")} value={new Date(task.completedAt).toLocaleString(isAr ? "ar-SA" : undefined)} />}
-                            </div>
-                          )}
-                        </div>
+          <table className="w-full text-sm min-w-[480px]">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-start px-4 py-3">{t("appointments.customer")}</th>
+                <th className="text-start px-4 py-3">{t("appointments.technician")}</th>
+                <th className="text-start px-4 py-3">{t("common.date")}</th>
+                <th className="text-start px-4 py-3">{t("common.status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {others.map((task: any) => {
+                const isExpanded = expandedId === task.id;
+                const customer = task.appointment?.customer;
+                const postponement = task.postponements?.[0];
+                return (
+                  <React.Fragment key={task.id}>
+                    <tr className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : task.id)}>
+                      <td className="px-4 py-3 font-medium">
+                        {customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}
+                        {task.appointment?.isUrgent && <span className="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">🚨</span>}
+                      </td>
+                      <td className="px-4 py-3">{task.technician?.name || "—"}</td>
+                      <td className="px-4 py-3">{new Date(task.appointment?.scheduledDate).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[task.status] || ""}`}>
+                          {statusLabel[task.status] || task.status}
+                        </span>
+                        <span className="text-xs text-slate-300 ms-2">{isExpanded ? "▲" : "▼"}</span>
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                    {isExpanded && (
+                      <tr className="bg-slate-50 border-b">
+                        <td colSpan={4} className="px-6 py-4">
+                          <div className="space-y-3">
+                            {customer && (
+                              <div className="space-y-1">
+                                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{isAr ? "معلومات العميل" : "Customer Info"}</p>
+                                <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+                                  <DetailRow label={isAr ? "الاسم" : "Name"} value={customer.name} />
+                                  <DetailRow label={isAr ? "الجوال" : "Phone"} value={customer.phone} />
+                                  {customer.address && <>
+                                    <DetailRow label={isAr ? "المدينة" : "City"} value={customer.address.city} />
+                                    <DetailRow label={isAr ? "الحي" : "District"} value={customer.address.district} />
+                                  </>}
+                                </div>
+                              </div>
+                            )}
+                            {task.status === "POSTPONED" && postponement && (
+                              <div className="space-y-1 border-t pt-3">
+                                <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">{isAr ? "تفاصيل التأجيل" : "Postponement Details"}</p>
+                                <DetailRow label={t("tasks.postponementReason")} value={postponement.reason} />
+                                {postponement.newDate && <DetailRow label={t("tasks.newDate")} value={new Date(postponement.newDate).toLocaleDateString(isAr ? "ar-SA" : undefined)} />}
+                                <DetailRow label={isAr ? "ملاحظات الفني" : "Technician Notes"} value={task.notes} />
+                              </div>
+                            )}
+                            {task.status === "COMPLETED" && (
+                              <div className="space-y-1 border-t pt-3">
+                                <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">{isAr ? "تفاصيل الإتمام" : "Completion Details"}</p>
+                                <DetailRow label={t("tasks.completionNotes")} value={task.notes} />
+                                <DetailRow label={t("tasks.serviceDetails")} value={task.serviceDetails} />
+                                <DetailRow label={t("tasks.paymentMethod")} value={task.completionPaymentMethod ? (PAYMENT_LABELS[task.completionPaymentMethod] || task.completionPaymentMethod) : null} />
+                                {task.completionAmount != null && (
+                                  <div className="flex gap-2 text-xs">
+                                    <span className="text-slate-400 min-w-[100px]">{t("tasks.amount")}:</span>
+                                    <span className="font-semibold text-slate-800">{task.completionAmount.toFixed(2)} SAR</span>
+                                  </div>
+                                )}
+                                {task.completedAt && <DetailRow label={t("tasks.completionDate")} value={new Date(task.completedAt).toLocaleString(isAr ? "ar-SA" : undefined)} />}
+                                {/* Completion photo */}
+                                <div className="pt-2">
+                                  <p className="text-xs font-semibold text-slate-500 mb-1.5">{t("tasks.completionPhoto")}</p>
+                                  {task.completionImage ? (
+                                    <img
+                                      src={task.completionImage}
+                                      alt="completion"
+                                      className="w-28 h-28 object-cover rounded-lg border border-green-200 cursor-zoom-in shadow-sm hover:opacity-90 transition-opacity"
+                                      onClick={() => setImageViewer(task.completionImage)}
+                                      title={isAr ? "انقر للتكبير" : "Click to enlarge"}
+                                    />
+                                  ) : (
+                                    <p className="text-xs text-slate-400 italic">{t("tasks.noImage")}</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 

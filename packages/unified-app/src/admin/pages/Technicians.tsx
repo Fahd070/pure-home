@@ -13,10 +13,50 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+function ImageViewer({ src, onClose, isAr }: { src: string; onClose: () => void; isAr: boolean }) {
+  const [zoom, setZoom] = useState(1);
+  return (
+    <div className="fixed inset-0 bg-black/92 z-[9999] flex flex-col items-center justify-center p-3"
+      onClick={onClose}>
+      <div className="flex gap-2 mb-3" onClick={e => e.stopPropagation()}>
+        <button onClick={() => setZoom(z => Math.min(z + 0.5, 5))}
+          className="bg-white/15 hover:bg-white/25 text-white rounded-lg w-9 h-9 text-xl flex items-center justify-center font-light">+</button>
+        <span className="bg-white/10 text-white/80 rounded-lg px-3 flex items-center text-xs tabular-nums min-w-[52px] justify-center">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button onClick={() => setZoom(z => Math.max(z - 0.5, 0.5))}
+          className="bg-white/15 hover:bg-white/25 text-white rounded-lg w-9 h-9 text-xl flex items-center justify-center font-light">−</button>
+        <button onClick={() => setZoom(1)}
+          className="bg-white/15 hover:bg-white/25 text-white rounded-lg px-3 h-9 text-xs">
+          {isAr ? "ملاءمة" : "Fit"}
+        </button>
+        <button onClick={onClose}
+          className="bg-red-700/70 hover:bg-red-600 text-white rounded-lg w-9 h-9 text-base flex items-center justify-center">✕</button>
+      </div>
+      <div className="overflow-auto rounded-xl border border-white/10 shadow-2xl"
+        style={{ maxHeight: "80vh", maxWidth: "90vw" }}
+        onClick={e => e.stopPropagation()}>
+        <img src={src} alt=""
+          style={{
+            display: "block",
+            maxWidth: zoom === 1 ? "90vw" : "none",
+            maxHeight: zoom === 1 ? "76vh" : "none",
+            width: zoom > 1 ? `${zoom * 90}vw` : "auto",
+            height: "auto",
+          }} />
+      </div>
+      <p className="text-white/25 text-xs mt-2" onClick={e => e.stopPropagation()}>
+        {isAr ? "انقر خارج الصورة للإغلاق" : "Click outside to close"}
+      </p>
+    </div>
+  );
+}
+
 export default function Technicians() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const [modal, setModal] = useState<{ tech: any; type: "completed" | "postponed" } | null>(null);
+  const [imageViewer, setImageViewer] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["technicians-detail"],
@@ -36,6 +76,10 @@ export default function Technicians() {
 
   return (
     <div>
+      {imageViewer && (
+        <ImageViewer src={imageViewer} onClose={() => setImageViewer(null)} isAr={isAr} />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(data || []).map((tech: any) => (
           <div key={tech.id} className="bg-white rounded-xl shadow-sm p-5">
@@ -128,6 +172,21 @@ export default function Technicians() {
                           label={isAr ? "تاريخ الإتمام" : "Completed at"}
                           value={new Date(task.completedAt).toLocaleString(isAr ? "ar-SA" : undefined)} />
                       )}
+                      {/* Completion photo */}
+                      <div className="pt-1.5">
+                        <p className="text-xs text-slate-400 mb-1">{t("tasks.completionPhoto")}</p>
+                        {task.completionImage ? (
+                          <img
+                            src={task.completionImage}
+                            alt="completion"
+                            className="w-24 h-24 object-cover rounded-lg border border-green-200 cursor-zoom-in shadow-sm hover:opacity-90 transition-opacity"
+                            onClick={() => setImageViewer(task.completionImage)}
+                            title={isAr ? "انقر للتكبير" : "Click to enlarge"}
+                          />
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">{t("tasks.noImage")}</p>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-1.5">
