@@ -26,6 +26,7 @@ const links = [
   { to: "/admin/urgent-appointments",   label: "nav.urgentAppointments",   icon: "🚨", badgeKey: "urgentAppts" },
   { to: "/admin/tasks",                 label: "nav.tasks",                icon: "✓",  badgeKey: "tasks" },
   { to: "/admin/technicians",           label: "nav.technicians",          icon: "🔧" },
+  { to: "/admin/call-reports",          label: "nav.callReports",          icon: "📞", badgeKey: "callReports" },
   { to: "/admin/expenses",              label: "nav.expenses",             icon: "💰", badgeKey: "expenses" },
   { to: "/admin/messages",              label: "nav.messages",             icon: "📋", badgeKey: "messages" },
   { to: "/admin/notifications",         label: "nav.notifications",        icon: "🔔", badgeKey: "notifications" },
@@ -49,6 +50,7 @@ export default function Sidebar() {
   const [reportsBadge, setReportsBadge] = useState(() => Number(localStorage.getItem("badge-reports-admin") || 0));
   const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-admin") || 0));
   const [expenseBadge, setExpenseBadge] = useState(() => Number(localStorage.getItem("badge-expenses-admin") || 0));
+  const [callReportsBadge, setCallReportsBadge] = useState(() => Number(localStorage.getItem("badge-callreports-admin") || 0));
 
   const { data: pendingTaskCount, refetch: refetchPendingTasks } = useQuery({
     queryKey: ["tasks-pending-count"],
@@ -79,12 +81,14 @@ export default function Sidebar() {
     socket.on("customer:updated", incReports);
     const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-admin", String(v)); return v; });
     const incExpense = () => setExpenseBadge(c => { const v = c + 1; localStorage.setItem("badge-expenses-admin", String(v)); return v; });
+    const incCallReports = () => setCallReportsBadge(c => { const v = c + 1; localStorage.setItem("badge-callreports-admin", String(v)); return v; });
     const onApptCreated = () => refetchPendingTasks();
     const onTaskApproved = () => refetchPendingTasks();
     socket.on("appointment:created", onApptCreated);
     socket.on("task:approved", onTaskApproved);
     socket.on("urgent_visit:submitted", incUrgent);
     socket.on("expense:new", incExpense);
+    socket.on("call_report:new", incCallReports);
     return () => {
       socket.off("customer:created", incCust);
       socket.off("customer:updated", incCust);
@@ -94,6 +98,7 @@ export default function Sidebar() {
       socket.off("task:approved", onTaskApproved);
       socket.off("urgent_visit:submitted", incUrgent);
       socket.off("expense:new", incExpense);
+      socket.off("call_report:new", incCallReports);
     };
   }, [socket, refetchPendingTasks]);
 
@@ -127,6 +132,12 @@ export default function Sidebar() {
     return () => window.removeEventListener("clear-badge-expenses-admin", clear);
   }, []);
 
+  useEffect(() => {
+    const clear = () => { localStorage.removeItem("badge-callreports-admin"); setCallReportsBadge(0); };
+    window.addEventListener("clear-badge-callreports-admin", clear);
+    return () => window.removeEventListener("clear-badge-callreports-admin", clear);
+  }, []);
+
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-admin"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
   const { data: dmCount } = useQuery({ queryKey: ["dm-unread-admin"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
   const { data: activityData } = useQuery({ queryKey: ["activity-feed"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
@@ -142,6 +153,7 @@ export default function Sidebar() {
     tasks: pendingTaskCount as number,
     urgentAppts: urgentBadge,
     expenses: expenseBadge,
+    callReports: callReportsBadge,
   };
 
   return (
