@@ -35,6 +35,7 @@ const links: NavItem[] = [
   { to: "/admin/messages",              label: "nav.messages",           icon: "📋", badgeKey: "messages" },
   { to: "/admin/notifications",         label: "nav.notifications",      icon: "🔔", badgeKey: "notifications" },
   { kind: "whatsapp",                   label: "nav.reportIssue" },
+  { to: "/admin/messaging",             label: "nav.messaging",          icon: "💬", badgeKey: "messaging" },
   { to: "/admin/access-codes",          label: "nav.accessCodes",        icon: "🔑" },
   { to: "/admin/settings",              label: "nav.settings",           icon: "⚙️" },
 ];
@@ -66,6 +67,13 @@ export default function Sidebar() {
   const { data: pendingTaskCount, refetch: refetchPendingTasks } = useQuery({
     queryKey: ["tasks-pending-count"],
     queryFn: () => api.get("/tasks/pending-count").then(r => Number(r.data.data.count) || 0),
+    refetchInterval: 30000,
+    initialData: 0,
+  });
+
+  const { data: dmCount } = useQuery({
+    queryKey: ["dm-unread-admin"],
+    queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0),
     refetchInterval: 30000,
     initialData: 0,
   });
@@ -144,6 +152,7 @@ export default function Sidebar() {
 
   const badges: Record<string, number> = {
     notifications: notifData as number,
+    messaging: dmCount as number,
     messages: newMessages,
     customers: custBadge,
     reports: reportsBadge,
@@ -163,31 +172,44 @@ export default function Sidebar() {
         <p className="text-blue-200 text-xs truncate">{user?.name}</p>
       </div>
       <nav className="flex-1 py-2 overflow-y-auto">
-        {links.map((l, idx) => {
+        {links.map((l) => {
           if (l.kind === "whatsapp") {
             return (
-              <a
-                key="wa"
-                href="https://wa.me/966501698445"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-2.5 text-sm transition-all"
-                style={{
-                  backgroundColor: "rgba(37, 211, 102, 0.13)",
-                  borderInlineEnd: "3px solid #25D366",
-                  color: "rgba(255, 255, 255, 0.92)",
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(37, 211, 102, 0.26)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(37, 211, 102, 0.13)"; }}
-              >
-                <span
-                  className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: "#25D366", boxShadow: "0 0 0 2px rgba(37,211,102,0.3)" }}
+              <div key="wa" className="px-3 py-1">
+                <a
+                  href="https://wa.me/966501698445"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold rounded-lg transition-all"
+                  style={{
+                    backgroundColor: "rgba(37, 211, 102, 0.18)",
+                    color: "#ffffff",
+                    border: "1px solid rgba(37, 211, 102, 0.45)",
+                    boxShadow: "0 1px 3px rgba(37, 211, 102, 0.15)",
+                  }}
+                  onMouseEnter={e => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.backgroundColor = "rgba(37, 211, 102, 0.32)";
+                    el.style.borderColor = "rgba(37, 211, 102, 0.7)";
+                    el.style.boxShadow = "0 2px 6px rgba(37, 211, 102, 0.25)";
+                  }}
+                  onMouseLeave={e => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.backgroundColor = "rgba(37, 211, 102, 0.18)";
+                    el.style.borderColor = "rgba(37, 211, 102, 0.45)";
+                    el.style.boxShadow = "0 1px 3px rgba(37, 211, 102, 0.15)";
+                  }}
                 >
-                  {WA_ICON}
-                </span>
-                <span className="flex-1 font-medium">{t(l.label)}</span>
-              </a>
+                  <span
+                    className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "#25D366", boxShadow: "0 0 0 2px rgba(37,211,102,0.3)" }}
+                  >
+                    {WA_ICON}
+                  </span>
+                  <span className="flex-1">{t(l.label)}</span>
+                  <span style={{ opacity: 0.6, fontSize: "10px" }}>↗</span>
+                </a>
+              </div>
             );
           }
           const navL = l as { to: string; label: string; icon: string; badgeKey?: string };
