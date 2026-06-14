@@ -29,6 +29,23 @@ function taskFields(t: any) {
   };
 }
 
+router.post('/bulk-complete-existing', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const { count } = await prisma.maintenanceTask.updateMany({
+      where: { status: { notIn: ['COMPLETED'] } },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    await writeAudit({
+      action: 'UPDATE', entityType: 'task', entityId: 'bulk', userId: req.user!.userId,
+      label: `Admin bulk-completed ${count} existing tasks (one-time cleanup)`,
+      labelAr: `الإدارة أكملت ${count} مهمة موجودة دفعةً واحدة (تنظيف لمرة واحدة)`,
+      before: {}, after: { count, status: 'COMPLETED' },
+    });
+    emitToAll(SOCKET_EVENTS.TASK_COMPLETED, { bulk: true, count });
+    res.json({ success: true, data: { count } });
+  } catch (e) { next(e); }
+});
+
 router.get('/pending-count', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const count = await prisma.maintenanceTask.count({ where: { status: 'PENDING_APPROVAL' } });

@@ -8,6 +8,8 @@ import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { getSocket } from "../hooks/useSocket";
 
+const DEPT_COLOR = "#ea580c";
+
 const titles: Record<string, string> = {
   "/technician/queue":               "nav.workQueue",
   "/technician/urgent-appointments": "nav.urgentAppointments",
@@ -35,12 +37,16 @@ export default function TechnicianLayout() {
 
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty("--color-primary", DEPT_COLOR);
+  }, []);
+
   const titleKey = Object.keys(titles).find(k => pathname.startsWith(k));
   const helpKey = titleKey ? helpKeys[titleKey] : undefined;
   const help = helpKey ? HELP[helpKey] : null;
 
   return (
-    <div className="h-full flex bg-slate-100 overflow-hidden">
+    <div className="h-full flex bg-slate-100 overflow-hidden" data-dept="technician">
       {/* Mobile/tablet backdrop — hidden on desktop (lg+) */}
       {sidebarOpen && (
         <div
@@ -62,17 +68,23 @@ export default function TechnicianLayout() {
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
-        <div className="h-12 bg-white border-b flex items-center px-3 lg:px-4 shadow-sm gap-2 flex-shrink-0">
+        <div
+          className="h-12 border-b flex items-center px-3 lg:px-4 shadow-sm gap-2 flex-shrink-0"
+          style={{ backgroundColor: DEPT_COLOR, borderBottomColor: "rgba(255,255,255,0.15)" }}
+        >
           <button
-            className="lg:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 active:bg-slate-200 touch-manipulation"
+            className="lg:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg touch-manipulation"
+            style={{ color: "rgba(255,255,255,0.9)" }}
             onClick={() => setSidebarOpen(true)}
             aria-label="Menu"
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.15)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h2 className="font-semibold text-slate-700 text-sm lg:text-base">{titleKey ? t(titles[titleKey]) : ""}</h2>
+          <h2 className="font-semibold text-white text-sm lg:text-base flex-1 min-w-0 truncate">{titleKey ? t(titles[titleKey]) : ""}</h2>
           {help && <HelpButton titleAr={help.titleAr} contentAr={help.contentAr} />}
         </div>
 

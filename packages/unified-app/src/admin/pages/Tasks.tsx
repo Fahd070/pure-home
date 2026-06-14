@@ -87,6 +87,19 @@ export default function Tasks() {
     }
   });
 
+  const bulkCompleteAll = useMutation({
+    mutationFn: () => api.post("/tasks/bulk-complete-existing"),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      const count = res?.data?.data?.count ?? 0;
+      toast.success(t("tasks.bulkCompleted", { count }));
+      setBulkConfirm(false);
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+
   const PAYMENT_LABELS = isAr ? PAYMENT_LABELS_AR : PAYMENT_LABELS_EN;
 
   const statusLabel: Record<string, string> = {
@@ -96,9 +109,35 @@ export default function Tasks() {
 
   const pending = (data || []).filter((tk: any) => tk.status === "PENDING_APPROVAL");
   const others = (data || []).filter((tk: any) => tk.status !== "PENDING_APPROVAL");
+  const activeCount = (data || []).filter((tk: any) => tk.status !== "COMPLETED").length;
 
   return (
     <div className="space-y-4">
+      {/* Bulk Complete Confirmation */}
+      {bulkConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <p className="text-sm font-medium text-slate-700 text-center mb-4">{t("tasks.completeAllConfirm")}</p>
+            <div className="flex gap-2 justify-center">
+              <button onClick={() => setBulkConfirm(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
+              <button onClick={() => bulkCompleteAll.mutate()} disabled={bulkCompleteAll.isPending}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
+                {bulkCompleteAll.isPending ? "..." : t("common.yes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeCount > 0 && (
+        <div className="flex justify-end">
+          <button onClick={() => setBulkConfirm(true)}
+            className="bg-green-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-700">
+            ✓ {t("tasks.completeAll")} ({activeCount})
+          </button>
+        </div>
+      )}
+
       {pending.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
           <h3 className="font-semibold text-yellow-800 mb-3">{t("tasks.pendingApproval")} ({pending.length})</h3>
