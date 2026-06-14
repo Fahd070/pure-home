@@ -91,6 +91,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
       tasks.forEach((t: any) => {
         delete t.completionAmount;
         delete t.completionPaymentMethod;
+        delete t.completionImage;
       });
     } else if (req.user!.role === 'TECHNICIAN') {
       tasks.forEach((t: any) => {
@@ -98,6 +99,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
           delete t.completionAmount;
           delete t.completionPaymentMethod;
         }
+        delete t.completionImage;
       });
     }
     res.json({ success: true, data: tasks });
@@ -213,6 +215,7 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       serviceDetails: z.string().max(2000).optional(),
       completionAmount: z.number().optional(),
       completionPaymentMethod: z.enum(['CASH','BANK_TRANSFER']).optional(),
+      completionImage: z.string().max(5_000_000).optional(),
       version: z.number().int().optional(),
     }).parse(req.body);
     const isAdmin = req.user!.role === 'ADMIN';
@@ -249,6 +252,7 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
         serviceDetails: body.serviceDetails,
         completionAmount: body.completionAmount,
         completionPaymentMethod: body.completionPaymentMethod,
+        completionImage: body.completionImage ?? null,
         version: { increment: 1 },
         history: { create: { status: 'COMPLETED', changedById: req.user!.userId, notes: body.notes } },
       },

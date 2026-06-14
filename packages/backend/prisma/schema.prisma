@@ -128,6 +128,7 @@ model MaintenanceTask {
   serviceDetails        String?
   completionAmount      Float?
   completionPaymentMethod String?
+  completionImage       String?      @db.Text
   startedAt             DateTime?
   completedAt           DateTime?
   version               Int          @default(1)

@@ -9,6 +9,31 @@ import { HELP } from "../../helpContent";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER";
 
+const ACCEPTED_IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMG_PX = 1200;
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, MAX_IMG_PX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.78));
+      };
+      img.onerror = reject;
+      img.src = e.target!.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod };
 
 export default function TaskDetail() {
@@ -22,6 +47,8 @@ export default function TaskDetail() {
   const [completeForm, setCompleteForm] = useState({ ...EMPTY_COMPLETE });
   const [postponeReason, setPostponeReason] = useState("");
   const [postponeDate, setPostponeDate] = useState("");
+  const [completionImage, setCompletionImage] = useState<string | null>(null);
+  const [imageCompressing, setImageCompressing] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["task", id],
@@ -39,6 +66,7 @@ export default function TaskDetail() {
       serviceDetails: completeForm.serviceDetails,
       completionAmount: parseFloat(completeForm.amount),
       completionPaymentMethod: completeForm.paymentMethod,
+      ...(completionImage ? { completionImage } : {}),
     }),
     onSuccess: () => { toast.success(t("common.success")); navigate("/technician/queue"); },
     onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
@@ -63,6 +91,31 @@ export default function TaskDetail() {
     CASH: isAr ? "نقداً" : "Cash",
     BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer",
   };
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) { setCompletionImage(null); return; }
+    if (!ACCEPTED_IMG_TYPES.includes(file.type)) {
+      toast.error(isAr ? "صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP." : "Unsupported format. Use JPG, PNG or WEBP.");
+      e.target.value = "";
+      return;
+    }
+    setImageCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      setCompletionImage(compressed);
+    } catch {
+      toast.error(t("common.error"));
+    } finally {
+      setImageCompressing(false);
+    }
+  }
+
+  function closeCompleteModal() {
+    setShowComplete(false);
+    setCompleteForm({ ...EMPTY_COMPLETE });
+    setCompletionImage(null);
+  }
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
@@ -151,13 +204,43 @@ export default function TaskDetail() {
                   ))}
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  {t("tasks.attachPhoto")}
+                  <span className="text-slate-400 font-normal ms-1">({isAr ? "اختياري" : "Optional"})</span>
+                </label>
+                <input
+                  type="file"
+                  accept={ACCEPTED_IMG_TYPES.join(",")}
+                  disabled={imageCompressing}
+                  onChange={handleImageChange}
+                  className="w-full border rounded-lg px-3 py-2 text-xs text-slate-600 cursor-pointer file:me-3 file:text-xs file:font-medium file:border-0 file:rounded file:bg-green-50 file:text-green-700 file:px-2 file:py-1 file:cursor-pointer"
+                />
+                {imageCompressing && (
+                  <p className="text-xs text-slate-400 mt-1 animate-pulse">
+                    {isAr ? "جاري ضغط الصورة..." : "Compressing image..."}
+                  </p>
+                )}
+                {completionImage && !imageCompressing && (
+                  <div className="mt-2 relative inline-block">
+                    <img src={completionImage} alt="preview"
+                      className="w-24 h-24 object-cover rounded-lg border border-green-200 shadow-sm" />
+                    <button
+                      type="button"
+                      onClick={() => setCompletionImage(null)}
+                      className="absolute -top-1.5 -end-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 leading-none">
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => complete.mutate()} disabled={!isCompleteValid || complete.isPending}
+              <button onClick={() => complete.mutate()} disabled={!isCompleteValid || complete.isPending || imageCompressing}
                 className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
                 {complete.isPending ? t("common.loading") : t("common.save")}
               </button>
-              <button onClick={() => { setShowComplete(false); setCompleteForm({ ...EMPTY_COMPLETE }); }}
+              <button onClick={closeCompleteModal}
                 className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
             </div>
           </div>

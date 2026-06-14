@@ -1,12 +1,13 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import prisma from '../prisma';
-import { authenticate, requireRole } from '../middleware/auth';
+import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authenticate);
 
-router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
+    const isAdmin = req.user!.role === 'ADMIN';
     const techs = await prisma.user.findMany({
       where: { role: 'TECHNICIAN' },
       select: {
@@ -16,6 +17,7 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
           where: { status: { in: ['COMPLETED', 'POSTPONED'] } },
           select: {
             id: true, status: true, completedAt: true,
+            completionImage: true,
             appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } },
             postponements: { orderBy: { createdAt: 'desc' as const }, take: 1 },
           },
@@ -37,6 +39,13 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
         postponedTasksList,
       };
     });
+    // Strip completionImage from SCHEDULING role — admin-only field
+    if (!isAdmin) {
+      result.forEach((tech: any) => {
+        tech.completedTasksList?.forEach((task: any) => { delete task.completionImage; });
+        tech.postponedTasksList?.forEach((task: any) => { delete task.completionImage; });
+      });
+    }
     res.json({ success: true, data: result });
   } catch (e) { next(e); }
 });
