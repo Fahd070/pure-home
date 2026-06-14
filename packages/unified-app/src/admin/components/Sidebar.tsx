@@ -18,22 +18,33 @@ function colorAdjust(hex: string, offset: number): string {
 
 const BADGE = "bg-red-500";
 
-const links = [
-  { to: "/admin/dashboard",             label: "nav.dashboard",            icon: "⊞" },
-  { to: "/admin/customers",             label: "nav.customers",            icon: "👥", badgeKey: "customers" },
-  { to: "/admin/reports",               label: "nav.reports",              icon: "📊", badgeKey: "reports" },
-  { to: "/admin/appointments",          label: "nav.appointments",         icon: "📅" },
-  { to: "/admin/urgent-appointments",   label: "nav.urgentAppointments",   icon: "🚨", badgeKey: "urgentAppts" },
-  { to: "/admin/tasks",                 label: "nav.tasks",                icon: "✓",  badgeKey: "tasks" },
-  { to: "/admin/technicians",           label: "nav.technicians",          icon: "🔧" },
-  { to: "/admin/call-reports",          label: "nav.callReports",          icon: "📞", badgeKey: "callReports" },
-  { to: "/admin/expenses",              label: "nav.expenses",             icon: "💰", badgeKey: "expenses" },
-  { to: "/admin/messages",              label: "nav.messages",             icon: "📋", badgeKey: "messages" },
-  { to: "/admin/notifications",         label: "nav.notifications",        icon: "🔔", badgeKey: "notifications" },
-  { to: "/admin/messaging",             label: "nav.messaging",            icon: "💬", badgeKey: "messaging" },
-  { to: "/admin/access-codes",          label: "nav.accessCodes",          icon: "🔑" },
-  { to: "/admin/settings",              label: "nav.settings",             icon: "⚙️" },
+type NavItem =
+  | { kind?: "nav"; to: string; label: string; icon: string; badgeKey?: string }
+  | { kind: "whatsapp"; label: string };
+
+const links: NavItem[] = [
+  { to: "/admin/dashboard",             label: "nav.dashboard",          icon: "⊞" },
+  { to: "/admin/customers",             label: "nav.customers",          icon: "👥", badgeKey: "customers" },
+  { to: "/admin/reports",               label: "nav.reports",            icon: "📊", badgeKey: "reports" },
+  { to: "/admin/appointments",          label: "nav.appointments",       icon: "📅" },
+  { to: "/admin/urgent-appointments",   label: "nav.urgentAppointments", icon: "🚨", badgeKey: "urgentAppts" },
+  { to: "/admin/tasks",                 label: "nav.tasks",              icon: "✓",  badgeKey: "tasks" },
+  { to: "/admin/technicians",           label: "nav.technicians",        icon: "🔧" },
+  { to: "/admin/call-reports",          label: "nav.callReports",        icon: "📞", badgeKey: "callReports" },
+  { to: "/admin/expenses",              label: "nav.expenses",           icon: "💰", badgeKey: "expenses" },
+  { to: "/admin/messages",              label: "nav.messages",           icon: "📋", badgeKey: "messages" },
+  { to: "/admin/notifications",         label: "nav.notifications",      icon: "🔔", badgeKey: "notifications" },
+  { kind: "whatsapp",                   label: "nav.reportIssue" },
+  { to: "/admin/access-codes",          label: "nav.accessCodes",        icon: "🔑" },
+  { to: "/admin/settings",              label: "nav.settings",           icon: "⚙️" },
 ];
+
+const WA_ICON = (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="white">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/>
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.556 4.122 1.527 5.853L0 24l6.335-1.652A11.93 11.93 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.806 9.806 0 01-5.003-1.374l-.36-.214-3.72.975.99-3.618-.234-.372A9.82 9.82 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/>
+  </svg>
+);
 
 export default function Sidebar() {
   const { t, i18n } = useTranslation();
@@ -61,29 +72,17 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (!socket) return;
-    const incCust = () => {
-      setCustBadge(c => {
-        const v = c + 1;
-        localStorage.setItem("badge-cust-admin", String(v));
-        return v;
-      });
-    };
-    const incReports = () => {
-      setReportsBadge(c => {
-        const v = c + 1;
-        localStorage.setItem("badge-reports-admin", String(v));
-        return v;
-      });
-    };
-    socket.on("customer:created", incCust);
-    socket.on("customer:updated", incCust);
-    socket.on("customer:created", incReports);
-    socket.on("customer:updated", incReports);
+    const incCust = () => setCustBadge(c => { const v = c + 1; localStorage.setItem("badge-cust-admin", String(v)); return v; });
+    const incReports = () => setReportsBadge(c => { const v = c + 1; localStorage.setItem("badge-reports-admin", String(v)); return v; });
     const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-admin", String(v)); return v; });
     const incExpense = () => setExpenseBadge(c => { const v = c + 1; localStorage.setItem("badge-expenses-admin", String(v)); return v; });
     const incCallReports = () => setCallReportsBadge(c => { const v = c + 1; localStorage.setItem("badge-callreports-admin", String(v)); return v; });
     const onApptCreated = () => refetchPendingTasks();
     const onTaskApproved = () => refetchPendingTasks();
+    socket.on("customer:created", incCust);
+    socket.on("customer:updated", incCust);
+    socket.on("customer:created", incReports);
+    socket.on("customer:updated", incReports);
     socket.on("appointment:created", onApptCreated);
     socket.on("task:approved", onTaskApproved);
     socket.on("urgent_visit:submitted", incUrgent);
@@ -139,14 +138,12 @@ export default function Sidebar() {
   }, []);
 
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-admin"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
-  const { data: dmCount } = useQuery({ queryKey: ["dm-unread-admin"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
   const { data: activityData } = useQuery({ queryKey: ["activity-feed"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
   const lastSeenMessages = Number(localStorage.getItem("msg-last-seen-admin") || 0);
   const newMessages = (activityData as any[]).filter((log: any) => new Date(log.createdAt).getTime() > lastSeenMessages).length;
 
   const badges: Record<string, number> = {
     notifications: notifData as number,
-    messaging: dmCount as number,
     messages: newMessages,
     customers: custBadge,
     reports: reportsBadge,
@@ -166,35 +163,47 @@ export default function Sidebar() {
         <p className="text-blue-200 text-xs truncate">{user?.name}</p>
       </div>
       <nav className="flex-1 py-2 overflow-y-auto">
-        {links.map(l => {
-          const badge = l.badgeKey ? (badges[l.badgeKey] || 0) : 0;
+        {links.map((l, idx) => {
+          if (l.kind === "whatsapp") {
+            return (
+              <a
+                key="wa"
+                href="https://wa.me/966501698445"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-2.5 text-sm transition-all"
+                style={{
+                  backgroundColor: "rgba(37, 211, 102, 0.13)",
+                  borderInlineEnd: "3px solid #25D366",
+                  color: "rgba(255, 255, 255, 0.92)",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(37, 211, 102, 0.26)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(37, 211, 102, 0.13)"; }}
+              >
+                <span
+                  className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: "#25D366", boxShadow: "0 0 0 2px rgba(37,211,102,0.3)" }}
+                >
+                  {WA_ICON}
+                </span>
+                <span className="flex-1 font-medium">{t(l.label)}</span>
+              </a>
+            );
+          }
+          const navL = l as { to: string; label: string; icon: string; badgeKey?: string };
+          const badge = navL.badgeKey ? (badges[navL.badgeKey] || 0) : 0;
           return (
-            <NavLink key={l.to} to={l.to}
+            <NavLink key={navL.to} to={navL.to}
               className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isActive ? "font-medium border-e-2 border-blue-300" : "text-blue-100"}`}
               style={({ isActive }) => ({ backgroundColor: isActive ? BG_ACTIVE : undefined })}
               onMouseEnter={e => { if (!(e.currentTarget as any)._active) (e.currentTarget as HTMLElement).style.backgroundColor = BG_HOVER; }}
               onMouseLeave={e => { if (!(e.currentTarget as any)._active) (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}>
-              <span className="text-base flex-shrink-0">{l.icon}</span>
-              <span className="flex-1">{t(l.label)}</span>
+              <span className="text-base flex-shrink-0">{navL.icon}</span>
+              <span className="flex-1">{t(navL.label)}</span>
               {badge > 0 && <span className={`${BADGE} text-white text-xs rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none`}>{badge > 99 ? "99+" : badge}</span>}
             </NavLink>
           );
         })}
-        <a
-          href="https://wa.me/966501698445"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 px-4 py-2.5 text-sm text-blue-100 transition-colors"
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = BG_HOVER; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}>
-          <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: "#25D366" }}>
-            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="white" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/>
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.556 4.122 1.527 5.853L0 24l6.335-1.652A11.93 11.93 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.806 9.806 0 01-5.003-1.374l-.36-.214-3.72.975.99-3.618-.234-.372A9.82 9.82 0 012.182 12C2.182 6.58 6.58 2.182 12 2.182S21.818 6.58 21.818 12 17.42 21.818 12 21.818z"/>
-            </svg>
-          </span>
-          <span className="flex-1">{t("nav.reportIssue")}</span>
-        </a>
       </nav>
       <div style={{ borderColor: BORDER }} className="p-3 border-t space-y-1">
         <button onClick={() => i18n.changeLanguage(i18n.language === "ar" ? "en" : "ar")}

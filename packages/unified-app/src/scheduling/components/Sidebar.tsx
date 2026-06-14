@@ -6,7 +6,6 @@ import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
-import { useSettingsStore } from "../../store/settingsStore";
 
 function colorAdjust(hex: string, offset: number): string {
   const n = parseInt((hex || '#008000').replace('#', ''), 16);
@@ -35,8 +34,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
-  const { settings } = useSettingsStore();
-  const BG = settings.primaryColor || "#008000";
+  const BG = "#008000";
   const BG_HOVER = colorAdjust(BG, -14);
   const BG_ACTIVE = colorAdjust(BG, 50);
   const BORDER = BG_HOVER;
