@@ -104,6 +104,16 @@ export default function Sidebar() {
             </NavLink>
           );
         })}
+        <a
+          href="https://wa.me/966501698445"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 px-4 py-2.5 text-sm text-orange-100 transition-colors"
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = BG_HOVER; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}>
+          <span className="flex-shrink-0">💬</span>
+          <span className="flex-1">{t("nav.reportIssue")}</span>
+        </a>
       </nav>
       <div style={{ borderColor: BORDER }} className="p-3 border-t space-y-1">
         <button onClick={() => i18n.changeLanguage(i18n.language === "ar" ? "en" : "ar")}
