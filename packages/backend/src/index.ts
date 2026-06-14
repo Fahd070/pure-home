@@ -57,6 +57,8 @@ async function ensureSchemaUpdates() {
     await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "serviceDetails" TEXT`);
     await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "completionAmount" DOUBLE PRECISION`);
     await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "completionPaymentMethod" TEXT`);
+    await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "startedAt" TIMESTAMP(3)`);
+    await run(`ALTER TABLE "maintenance_tasks" ADD COLUMN IF NOT EXISTS "completionImage" TEXT`);
     // call_reports table
     await run(`CREATE TABLE IF NOT EXISTS "call_reports" ("id" TEXT NOT NULL,"customerId" TEXT NOT NULL,"employeeName" TEXT NOT NULL,"callDate" TIMESTAMP(3) NOT NULL,"notes" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"createdById" TEXT,CONSTRAINT "call_reports_pkey" PRIMARY KEY ("id"))`);
     await run(`ALTER TABLE "call_reports" ADD CONSTRAINT "call_reports_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
