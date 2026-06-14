@@ -10,7 +10,7 @@ import { HELP } from "../../helpContent";
 
 const EMPTY = { customerId: "", callDate: "", notes: "", employeeName: "" };
 
-export default function CallReports() {
+export default function AdminCallReports() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
@@ -21,6 +21,11 @@ export default function CallReports() {
   const [filterSearch, setFilterSearch] = useState("");
   const [formSearch, setFormSearch] = useState("");
 
+  // Clear badge when admin visits this page
+  useEffect(() => {
+    window.dispatchEvent(new Event("clear-badge-callreports-admin"));
+  }, []);
+
   // Real-time: invalidate query when any user creates a call report
   useEffect(() => {
     if (!socket) return;
@@ -30,7 +35,7 @@ export default function CallReports() {
   }, [socket, qc]);
 
   const { data: customersData } = useQuery({
-    queryKey: ["customers-select-sched"],
+    queryKey: ["customers-select-admin"],
     queryFn: () => api.get("/customers", { params: { limit: 500 } }).then(r => r.data.data || []),
   });
 
@@ -85,7 +90,7 @@ export default function CallReports() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800">{t("callReports.title")}</h1>
         <button onClick={() => setShowForm(v => !v)}
-          className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800">
+          className="bg-blue-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-800">
           📞 {t("callReports.newReport")}
         </button>
       </div>
@@ -101,7 +106,7 @@ export default function CallReports() {
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.customer")}</label>
               <input value={formSearch} onChange={e => { setFormSearch(e.target.value); setForm(f => ({ ...f, customerId: "" })); }}
                 placeholder={isAr ? "ابحث بالاسم أو الجوال..." : "Search by name or phone..."}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 mb-1" />
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1" />
               {formSearch && !form.customerId && (
                 <div className="border rounded-lg max-h-40 overflow-y-auto bg-white shadow-sm z-10">
                   {filteredFormCustomers.length === 0 ? (
@@ -109,34 +114,34 @@ export default function CallReports() {
                   ) : filteredFormCustomers.slice(0, 8).map((c: any) => (
                     <button key={c.id} type="button"
                       onClick={() => { setForm(f => ({ ...f, customerId: c.id })); setFormSearch(`${c.name} — ${c.phone}`); }}
-                      className="w-full text-start px-3 py-2 text-sm hover:bg-green-50 border-b last:border-b-0">
+                      className="w-full text-start px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0">
                       <span className="font-medium">{c.name}</span> <span className="text-slate-400">{c.phone}</span>
                     </button>
                   ))}
                 </div>
               )}
-              {form.customerId && <p className="text-xs text-green-600">✓ {isAr ? "تم اختيار العميل" : "Customer selected"}</p>}
+              {form.customerId && <p className="text-xs text-blue-600">✓ {isAr ? "تم اختيار العميل" : "Customer selected"}</p>}
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.callDate")}</label>
               <input type="datetime-local" required value={form.callDate}
                 onChange={e => setForm(f => ({ ...f, callDate: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.employeeName")}</label>
               <input value={form.employeeName} onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.notes")}</label>
               <textarea rows={4} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </div>
             <div className="col-span-2 flex gap-2 justify-end">
               <button type="button" onClick={() => { setShowForm(false); setFormSearch(""); }} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
               <button type="submit" disabled={createMutation.isPending || !form.customerId}
-                className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50">
+                className="bg-blue-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-800 disabled:opacity-50">
                 {createMutation.isPending ? "..." : t("common.save")}
               </button>
             </div>
@@ -151,7 +156,7 @@ export default function CallReports() {
           </label>
           <input value={filterSearch} onChange={e => setFilterSearch(e.target.value)}
             placeholder={isAr ? "ابحث..." : "Search..."}
-            className="w-64 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            className="w-64 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
 

@@ -21,6 +21,7 @@ const titles: Record<string, string> = {
   "/admin/notifications":        "nav.notifications",
   "/admin/messaging":            "nav.messaging",
   "/admin/reports":              "nav.reports",
+  "/admin/call-reports":         "nav.callReports",
   "/admin/access-codes":         "nav.accessCodes",
   "/admin/settings":             "nav.settings",
 };
@@ -38,6 +39,7 @@ const helpKeys: Record<string, string> = {
   "/admin/notifications":        "admin.notifications",
   "/admin/messaging":            "admin.messaging",
   "/admin/reports":              "admin.reports",
+  "/admin/call-reports":         "admin.callReports",
   "/admin/access-codes":         "admin.accessCodes",
   "/admin/settings":             "admin.settings",
 };

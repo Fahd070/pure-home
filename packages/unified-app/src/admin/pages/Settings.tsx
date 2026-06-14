@@ -5,5 +5,5 @@ import SettingsPage from "../../components/SettingsPage";
 
 export default function AdminSettings() {
   const socket = useSocket();
-  return <SettingsPage api={api} socket={socket} />;
+  return <SettingsPage api={api} socket={socket} showSupport />;
 }
