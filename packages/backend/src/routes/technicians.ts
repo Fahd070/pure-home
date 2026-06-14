@@ -17,6 +17,8 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
           where: { status: { in: ['COMPLETED', 'POSTPONED'] } },
           select: {
             id: true, status: true, completedAt: true,
+            notes: true, serviceDetails: true,
+            completionAmount: true, completionPaymentMethod: true,
             completionImage: true,
             appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } },
             postponements: { orderBy: { createdAt: 'desc' as const }, take: 1 },
@@ -39,10 +41,14 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
         postponedTasksList,
       };
     });
-    // Strip completionImage from SCHEDULING role — admin-only field
+    // Strip admin-only fields from SCHEDULING role
     if (!isAdmin) {
       result.forEach((tech: any) => {
-        tech.completedTasksList?.forEach((task: any) => { delete task.completionImage; });
+        tech.completedTasksList?.forEach((task: any) => {
+          delete task.completionImage;
+          delete task.completionAmount;
+          delete task.completionPaymentMethod;
+        });
         tech.postponedTasksList?.forEach((task: any) => { delete task.completionImage; });
       });
     }
