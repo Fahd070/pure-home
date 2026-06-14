@@ -10,6 +10,8 @@ import { HELP } from "../../helpContent";
 
 const EMPTY = { customerId: "", callDate: "", notes: "", employeeName: "" };
 
+type ConfirmType = "single" | "selected" | "all";
+
 export default function AdminCallReports() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
@@ -20,18 +22,23 @@ export default function AdminCallReports() {
   const [form, setForm] = useState({ ...EMPTY, employeeName: user?.name || "" });
   const [filterSearch, setFilterSearch] = useState("");
   const [formSearch, setFormSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirm, setConfirm] = useState<{ type: ConfirmType; ids?: string[] } | null>(null);
 
-  // Clear badge when admin visits this page
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-callreports-admin"));
   }, []);
 
-  // Real-time: invalidate query when any user creates a call report
   useEffect(() => {
     if (!socket) return;
     const onNew = () => qc.invalidateQueries({ queryKey: ["call-reports"] });
+    const onDeleted = () => { qc.invalidateQueries({ queryKey: ["call-reports"] }); setSelected(new Set()); };
     socket.on("call_report:new", onNew);
-    return () => socket.off("call_report:new", onNew);
+    socket.on("call_report:deleted", onDeleted);
+    return () => {
+      socket.off("call_report:new", onNew);
+      socket.off("call_report:deleted", onDeleted);
+    };
   }, [socket, qc]);
 
   const { data: customersData } = useQuery({
@@ -52,6 +59,22 @@ export default function AdminCallReports() {
       setShowForm(false);
       setForm({ ...EMPTY, employeeName: user?.name || "" });
       setFormSearch("");
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: ({ type, ids }: { type: ConfirmType; ids?: string[] }) => {
+      if (type === "single" || type === "selected") {
+        return api.delete("/call-reports/bulk", { data: { ids } });
+      }
+      return api.delete("/call-reports/all");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["call-reports"] });
+      setSelected(new Set());
+      setConfirm(null);
+      toast.success(t("callReports.deleted"));
     },
     onError: () => toast.error(t("common.error")),
   });
@@ -85,14 +108,96 @@ export default function AdminCallReports() {
     );
   }, [data, filterSearch]);
 
+  const allIds = reports.map((r: any) => r.id);
+  const allSelected = allIds.length > 0 && allIds.every((id: string) => selected.has(id));
+  const someSelected = allIds.some((id: string) => selected.has(id));
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allIds));
+    }
+  }
+
+  function toggleOne(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function openConfirm(type: ConfirmType, ids?: string[]) {
+    setConfirm({ type, ids });
+  }
+
+  function doDelete() {
+    if (!confirm) return;
+    const ids = confirm.type === "selected"
+      ? Array.from(selected)
+      : confirm.ids;
+    deleteMutation.mutate({ type: confirm.type, ids });
+  }
+
+  const selectedCount = selected.size;
+
+  const confirmMsg = confirm?.type === "all"
+    ? t("callReports.confirmDeleteAll")
+    : confirm?.type === "selected"
+      ? t("callReports.confirmDeleteSelected")
+      : t("callReports.deleteConfirm");
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Confirmation Dialog */}
+      {confirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <p className="text-sm font-medium text-slate-700 text-center mb-4">{confirmMsg}</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => setConfirm(null)}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={doDelete}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? "..." : t("common.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-bold text-slate-800">{t("callReports.title")}</h1>
-        <button onClick={() => setShowForm(v => !v)}
-          className="bg-blue-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-800">
-          📞 {t("callReports.newReport")}
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          {someSelected && (
+            <button
+              onClick={() => openConfirm("selected")}
+              className="bg-red-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-red-700"
+            >
+              {t("callReports.deleteSelected")} ({selectedCount})
+            </button>
+          )}
+          {reports.length > 0 && (
+            <button
+              onClick={() => openConfirm("all")}
+              className="border border-red-300 text-red-600 text-sm px-3 py-2 rounded-lg hover:bg-red-50"
+            >
+              {t("callReports.deleteAll")}
+            </button>
+          )}
+          <button onClick={() => setShowForm(v => !v)}
+            className="bg-blue-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-800">
+            📞 {t("callReports.newReport")}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -170,16 +275,25 @@ export default function AdminCallReports() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                      className="w-4 h-4 rounded cursor-pointer accent-blue-700" />
+                  </th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.customer")}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.phone")}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.employeeName")}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.callDate")}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.notes")}</th>
+                  <th className="px-4 py-3 w-16"></th>
                 </tr>
               </thead>
               <tbody>
                 {reports.map((r: any) => (
-                  <tr key={r.id} className="border-b hover:bg-slate-50">
+                  <tr key={r.id} className={`border-b transition-colors ${selected.has(r.id) ? "bg-blue-50" : "hover:bg-slate-50"}`}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)}
+                        className="w-4 h-4 rounded cursor-pointer accent-blue-700" />
+                    </td>
                     <td className="px-4 py-3 font-medium">{r.customer?.name || "—"}</td>
                     <td className="px-4 py-3 text-slate-500">{r.customer?.phone || "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{r.employeeName}</td>
@@ -187,6 +301,15 @@ export default function AdminCallReports() {
                       {new Date(r.callDate).toLocaleString(isAr ? "ar-SA" : undefined)}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[300px] truncate">{r.notes || "—"}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => openConfirm("single", [r.id])}
+                        className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                        title={t("common.delete")}
+                      >
+                        🗑
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

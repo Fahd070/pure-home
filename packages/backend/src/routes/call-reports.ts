@@ -57,11 +57,31 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
   } catch (e) { next(e); }
 });
 
-router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+router.delete('/bulk', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
+  try {
+    const { ids } = req.body as { ids?: string[] };
+    if (Array.isArray(ids) && ids.length > 0) {
+      await prisma.callReport.deleteMany({ where: { id: { in: ids } } });
+      emitToAll('call_report:deleted', { ids });
+    }
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+router.delete('/all', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
+  try {
+    await prisma.callReport.deleteMany({});
+    emitToAll('call_report:deleted', { all: true });
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+router.delete('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const report = await prisma.callReport.findUnique({ where: { id: req.params.id } });
     if (!report) return res.status(404).json({ success: false, message: 'Not found' });
     await prisma.callReport.delete({ where: { id: req.params.id } });
+    emitToAll('call_report:deleted', { ids: [req.params.id] });
     res.json({ success: true });
   } catch (e) { next(e); }
 });

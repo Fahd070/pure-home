@@ -7,6 +7,7 @@ import NotificationBar from "../../components/NotificationBar";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { getSocket } from "../hooks/useSocket";
+import { useSettingsStore } from "../../store/settingsStore";
 
 const titles: Record<string, string> = {
   "/admin/dashboard":            "nav.dashboard",
@@ -48,15 +49,21 @@ export default function AdminLayout() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { settings } = useSettingsStore();
+  const headerColor = settings.primaryColor || "#000080";
 
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--color-primary", headerColor);
+  }, [headerColor]);
 
   const titleKey = Object.keys(titles).find(k => pathname.startsWith(k)) || "/admin/dashboard";
   const helpKey = Object.keys(helpKeys).find(k => pathname.startsWith(k));
   const help = helpKey ? HELP[helpKeys[helpKey]] : null;
 
   return (
-    <div className="h-full flex bg-slate-100 overflow-hidden">
+    <div className="h-full flex bg-slate-100 overflow-hidden" data-dept="admin">
       {/* Mobile/tablet backdrop — hidden on desktop (lg+) */}
       {sidebarOpen && (
         <div
@@ -78,17 +85,23 @@ export default function AdminLayout() {
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header */}
-        <div className="h-12 bg-white border-b flex items-center px-3 lg:px-4 shadow-sm gap-2 flex-shrink-0">
+        <div
+          className="h-12 border-b flex items-center px-3 lg:px-4 shadow-sm gap-2 flex-shrink-0"
+          style={{ backgroundColor: headerColor, borderBottomColor: "rgba(255,255,255,0.15)" }}
+        >
           <button
-            className="lg:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 active:bg-slate-200 touch-manipulation"
+            className="lg:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg touch-manipulation"
+            style={{ color: "rgba(255,255,255,0.9)" }}
             onClick={() => setSidebarOpen(true)}
             aria-label="Menu"
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.15)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h2 className="font-semibold text-slate-700 text-sm lg:text-base">{t(titles[titleKey])}</h2>
+          <h2 className="font-semibold text-white text-sm lg:text-base flex-1 min-w-0 truncate">{t(titles[titleKey])}</h2>
           {help && <HelpButton titleAr={help.titleAr} contentAr={help.contentAr} />}
         </div>
 
