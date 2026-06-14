@@ -2,7 +2,9 @@
   "name": "water-filter-maintenance",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=packages/backend",
     "dev:web": "npm run dev --workspace=packages/web",
@@ -19,6 +21,7 @@
     "db:seed": "npm run db:seed --workspace=packages/backend"
   },
   "devDependencies": {
+    "playwright": "^1.60.0",
     "png-to-ico": "^3.0.1",
     "sharp": "^0.34.5"
   }
