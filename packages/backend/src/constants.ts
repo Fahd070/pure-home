@@ -17,6 +17,8 @@ export const SOCKET_EVENTS = {
   AUDIT_DELETED: 'audit:deleted',
   CONFIG_UPDATED:    'config:updated',
   SETTINGS_UPDATED:  'settings:updated',
+  CUSTOMER_APPROVAL_NEW:      'customer_approval:new',
+  CUSTOMER_APPROVAL_RESOLVED: 'customer_approval:resolved',
 };
 export const SOCKET_ROOMS = {
   ALL: 'all',

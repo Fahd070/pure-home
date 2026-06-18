@@ -83,6 +83,24 @@ async function ensureSchemaUpdates() {
     await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "secondaryColor" TEXT`);
     await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "buttonColor" TEXT`);
     await run(`ALTER TABLE "user_settings" ADD COLUMN IF NOT EXISTS "cardColor" TEXT`);
+    // customer approval requests table
+    await run(`CREATE TABLE IF NOT EXISTS "customer_approval_requests" (
+      "id"          TEXT NOT NULL,
+      "status"      TEXT NOT NULL DEFAULT 'PENDING',
+      "requestData" JSONB NOT NULL,
+      "creatorId"   TEXT,
+      "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "customer_approval_requests_pkey" PRIMARY KEY ("id")
+    )`);
+    // call_reports: make customerId nullable, add unregistered customer columns
+    await run(`ALTER TABLE "call_reports" ALTER COLUMN "customerId" DROP NOT NULL`);
+    await run(`ALTER TABLE "call_reports" ADD COLUMN IF NOT EXISTS "unregisteredName" TEXT`);
+    await run(`ALTER TABLE "call_reports" ADD COLUMN IF NOT EXISTS "unregisteredPhone" TEXT`);
+    // appointments: update deleted index if needed
+    await run(`DROP CONSTRAINT IF EXISTS "call_reports_customerId_fkey" ON "call_reports"`);
+    await run(`ALTER TABLE "call_reports" DROP CONSTRAINT IF EXISTS "call_reports_customerId_fkey"`);
+    await run(`ALTER TABLE "call_reports" ADD CONSTRAINT "call_reports_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED`);
     console.log('  schema updates:  applied');
   } catch (e: any) {
     console.error('  schema updates:  warning —', e?.message || e);
