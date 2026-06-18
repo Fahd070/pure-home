@@ -23,3 +23,19 @@ services:
         sync: false
       - key: TECHNICIAN_EMAIL
         sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+  - type: static
+    name: pure-home-web
+    rootDir: packages/web
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://wfm-system.onrender.com
