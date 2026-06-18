@@ -4,6 +4,47 @@ All notable changes to Pure Home are documented here.
 
 ---
 
+## [2.9.0] — 2026-06-18
+
+### New Features
+
+**Customer Approval Workflow**
+- Scheduling users now submit new customer requests for admin review instead of creating customers directly
+- Admin sees a new "الموافقة" page in the sidebar with a live badge showing pending request count
+- Admin can Approve (customer is created and synced) or Reject (request is discarded, no customer created)
+- Admin-created customers are still created immediately without approval
+- Pending requests include: name, phone, address, installation date, maintenance date, next maintenance date, notes, creator name, and submission date
+- Real-time socket notifications update the badge and queue without page refresh
+
+**Call Reports — Unregistered Customer**
+- New optional "عميل غير مسجل" toggle on call report creation form (Admin and Scheduling)
+- Guidance message explains that name and phone are the only required fields for unregistered customers
+- When toggled: customer search dropdown is replaced by name + phone text inputs
+- Registered customer reports remain unchanged
+- Unregistered reports display a "غير مسجل" badge in the reports table
+
+**Dashboard Customer Delete**
+- Delete button (🗑) added to customer list drill-down in the Admin dashboard
+- Confirmation dialog before deletion
+- Dashboard counters update automatically after deletion
+- Scheduling department does not have delete access (permission preserved)
+
+**Dashboard Appointment Edit & Delete**
+- Edit button (✏️) added to appointment drill-down in both Admin and Scheduling dashboards
+- Inline edit modal: change scheduled date, type, status, and notes without leaving the dashboard
+- Delete button (🗑) added to appointment drill-down in the Admin dashboard (Admin only)
+- Dashboard counters and lists sync automatically after edit or delete
+
+### Technical
+
+- New `customer_approval_requests` table created via `ensureSchemaUpdates()` at startup (no migration required)
+- `call_reports.customerId` made nullable; `unregisteredName` and `unregisteredPhone` columns added
+- New backend routes: `POST/GET /api/customer-approvals`, `POST /:id/approve`, `POST /:id/reject`
+- New backend routes: `DELETE /api/dashboard/customer/:id`, `DELETE /api/dashboard/appointment/:id`, `PUT /api/dashboard/appointment/:id`
+- Socket events: `customer_approval:new`, `customer_approval:resolved` for live queue updates
+
+---
+
 ## [1.4.0] — 2026-06-08
 
 ### New Features

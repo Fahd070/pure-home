@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
+import { emitToAll } from '../socket';
+import { SOCKET_EVENTS } from '../constants';
 
 const router = Router();
 router.use(authenticate);
@@ -250,6 +252,55 @@ router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
       orderBy: { scheduledDate: 'desc' }
     });
     res.json({ success: true, data, meta: { total } });
+  } catch (e) { next(e); }
+});
+
+// Delete customer from dashboard drill-down — ADMIN only
+router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const customer = await prisma.customer.findUnique({
+      where: { id: req.params.id },
+      include: { appointments: { select: { id: true } } },
+    });
+    if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
+    const apptIds = customer.appointments.map((a: any) => a.id);
+    await prisma.customer.delete({ where: { id: req.params.id } });
+    emitToAll(SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
+    if (apptIds.length > 0) {
+      emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
+    }
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+// Delete appointment from dashboard drill-down — ADMIN only
+router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+    if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
+    await prisma.appointment.delete({ where: { id: req.params.id } });
+    emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: [req.params.id] });
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+// Edit appointment from dashboard drill-down — ADMIN and SCHEDULING
+router.put('/appointment/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
+  try {
+    const { scheduledDate, type, status, notes } = req.body;
+    const appt = await prisma.appointment.update({
+      where: { id: req.params.id },
+      data: {
+        ...(scheduledDate ? { scheduledDate: new Date(scheduledDate) } : {}),
+        ...(type ? { type } : {}),
+        ...(status ? { status } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        version: { increment: 1 },
+      },
+      include: { customer: { include: { address: true } }, task: true },
+    });
+    emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
 
