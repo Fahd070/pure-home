@@ -13,10 +13,9 @@ export default function SchedAddCustomer() {
   const isAr = i18n.language === "ar";
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({
     name: "", phone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
-    installationDate: "", maintenanceDate: "", nextMaintenanceDate: "",
+    installationDate: "",
     city: "", district: "", street: "", postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,17 +37,14 @@ export default function SchedAddCustomer() {
     setLoading(true);
     try {
       const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo,
-        name, phone, maintenanceCycle, maintenanceFrequency, notes,
-        installationDate, maintenanceDate, nextMaintenanceDate } = form;
+        name, phone, maintenanceCycle, maintenanceFrequency, notes, installationDate } = form;
 
-      await api.post("/customer-approvals", {
+      await api.post("/customers", {
         name, phone,
         maintenanceCycle,
         maintenanceFrequency: Number(maintenanceFrequency),
         notes: notes || undefined,
         installationDate: installationDate || undefined,
-        maintenanceDate: maintenanceDate || undefined,
-        nextMaintenanceDate: nextMaintenanceDate || undefined,
         address: {
           city, district, street,
           postalCode: postalCode || undefined,
@@ -57,8 +53,8 @@ export default function SchedAddCustomer() {
           apartmentNo: apartmentNo || undefined,
         },
       });
-      setSubmitted(true);
-      toast.success(t("approvals.sentForApproval"));
+      toast.success(t("customers.saved"));
+      navigate("/scheduling/customers");
     } catch (err: any) {
       toast.error(err.response?.data?.message || t("common.error"));
     } finally { setLoading(false); }
@@ -73,39 +69,11 @@ export default function SchedAddCustomer() {
     </div>
   );
 
-  if (submitted) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm p-10 text-center">
-          <p className="text-5xl mb-4">✅</p>
-          <h2 className="text-lg font-bold text-green-700 mb-2">{t("approvals.sentForApproval")}</h2>
-          <p className="text-slate-500 text-sm mb-6">{t("approvals.pendingApprovalNotice")}</p>
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={() => { setSubmitted(false); setForm({ name:"",phone:"",maintenanceCycle:"MONTHLY",maintenanceFrequency:1,notes:"",installationDate:"",maintenanceDate:"",nextMaintenanceDate:"",city:"",district:"",street:"",postalCode:"",buildingNo:"",floorNo:"",apartmentNo:"" }); }}
-              className="bg-green-700 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-800"
-            >
-              {isAr ? "إضافة طلب آخر" : "Add Another Request"}
-            </button>
-            <button onClick={() => navigate("/scheduling/customers")} className="border px-6 py-2 rounded-lg hover:bg-slate-50">
-              {t("common.back")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-4">
         <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700">← {t("common.back")}</button>
         <h2 className="text-lg font-semibold">{t("customers.add")}</h2>
-      </div>
-
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2 text-sm text-amber-800">
-        <span className="text-base flex-shrink-0">ℹ️</span>
-        <span>{t("approvals.pendingApprovalNotice")}</span>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-4">
@@ -134,25 +102,11 @@ export default function SchedAddCustomer() {
         </div>
 
         <div className="border-t pt-3">
-          <p className="text-sm font-semibold text-slate-600 mb-3">{isAr ? "التواريخ المقترحة (اختياري)" : "Proposed Dates (optional)"}</p>
-          <div className="grid grid-cols-1 gap-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("approvals.installationDate")}</label>
-              <input type="date" value={form.installationDate} onChange={e => set("installationDate", e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">{t("approvals.maintenanceDate")}</label>
-                <input type="date" value={form.maintenanceDate} onChange={e => set("maintenanceDate", e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">{t("approvals.nextMaintenanceDate")}</label>
-                <input type="date" value={form.nextMaintenanceDate} onChange={e => set("nextMaintenanceDate", e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-              </div>
-            </div>
+          <p className="text-sm font-semibold text-slate-600 mb-3">{isAr ? "تاريخ التركيب (اختياري)" : "Installation Date (optional)"}</p>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("approvals.installationDate")}</label>
+            <input type="date" value={form.installationDate} onChange={e => set("installationDate", e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
           </div>
         </div>
 
@@ -178,7 +132,7 @@ export default function SchedAddCustomer() {
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={loading}
             className="bg-green-700 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-800 disabled:opacity-50">
-            {loading ? t("common.loading") : (isAr ? "إرسال للموافقة" : "Send for Approval")}
+            {loading ? t("common.loading") : t("common.save")}
           </button>
           <button type="button" onClick={() => navigate(-1)} className="border px-6 py-2 rounded-lg hover:bg-slate-50">
             {t("common.cancel")}

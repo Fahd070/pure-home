@@ -8,7 +8,7 @@ import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { getSocket } from "../hooks/useSocket";
 
-const DEPT_COLOR = "#008000";
+const DEPT_COLOR = "#2A533F";
 
 const titles: Record<string, string> = {
   "/scheduling/dashboard":     "nav.dashboard",

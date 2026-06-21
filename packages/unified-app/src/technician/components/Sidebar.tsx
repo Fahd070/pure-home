@@ -8,7 +8,7 @@ import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
 
 function colorAdjust(hex: string, offset: number): string {
-  const n = parseInt((hex || '#ea580c').replace('#', ''), 16);
+  const n = parseInt((hex || '#014245').replace('#', ''), 16);
   const r = Math.min(255, Math.max(0, (n >> 16) + offset));
   const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
   const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
@@ -33,7 +33,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
-  const BG = "#ea580c";
+  const BG = "#014245";
   const BG_HOVER = colorAdjust(BG, -14);
   const BG_ACTIVE = colorAdjust(BG, 50);
   const BORDER = BG_HOVER;
@@ -85,14 +85,14 @@ export default function Sidebar() {
           <div style={{ backgroundColor: BG_ACTIVE }} className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold">PH</div>
           <span className="text-white font-bold text-sm">Pure Home</span>
         </div>
-        <p className="text-orange-100 text-xs truncate">{user?.name}</p>
+        <p className="text-teal-100 text-xs truncate">{user?.name}</p>
       </div>
       <nav className="flex-1 py-2">
         {links.map(l => {
           const badge = l.badgeKey ? (badges[l.badgeKey] || 0) : 0;
           return (
             <NavLink key={l.to} to={l.to}
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isActive ? "font-medium border-e-2 border-orange-200" : "text-orange-100"}`}
+              className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isActive ? "font-medium border-e-2 border-teal-200" : "text-teal-100"}`}
               style={({ isActive }) => ({ backgroundColor: isActive ? BG_ACTIVE : undefined })}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = BG_HOVER; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}>
@@ -105,7 +105,7 @@ export default function Sidebar() {
       </nav>
       <div style={{ borderColor: BORDER }} className="p-3 border-t space-y-1">
         <button onClick={() => i18n.changeLanguage(i18n.language === "ar" ? "en" : "ar")}
-          style={{ backgroundColor: BG_HOVER }} className="w-full text-xs py-1.5 px-3 rounded text-orange-100 hover:opacity-90">
+          style={{ backgroundColor: BG_HOVER }} className="w-full text-xs py-1.5 px-3 rounded text-teal-100 hover:opacity-90">
           {i18n.language === "ar" ? "English" : "عربي"}
         </button>
         <button onClick={() => { logout(); navigate("/"); }} className="w-full text-xs py-1.5 px-3 rounded bg-red-700 hover:bg-red-600">{t("auth.logout")}</button>
