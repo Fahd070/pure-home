@@ -8,7 +8,7 @@ import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
 
 function colorAdjust(hex: string, offset: number): string {
-  const n = parseInt((hex || '#008000').replace('#', ''), 16);
+  const n = parseInt((hex || '#2A533F').replace('#', ''), 16);
   const r = Math.min(255, Math.max(0, (n >> 16) + offset));
   const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
   const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
@@ -34,7 +34,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
-  const BG = "#008000";
+  const BG = "#2A533F";
   const BG_HOVER = colorAdjust(BG, -14);
   const BG_ACTIVE = colorAdjust(BG, 50);
   const BORDER = BG_HOVER;

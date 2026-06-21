@@ -66,6 +66,60 @@ function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: stri
   );
 }
 
+// ── Quick Schedule Sub-modal ─────────────────────────────────────────────────
+function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: string; name: string }; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation();
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [type, setType] = useState("MAINTENANCE");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSave() {
+    if (!scheduledDate) { toast.error(t("common.required")); return; }
+    setLoading(true);
+    try {
+      await api.post("/appointments", { customerId: customer.id, scheduledDate, type });
+      toast.success(t("appointments.created"));
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t("common.error"));
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[75] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-bold text-slate-800">📅 {customer.name}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">✕</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
+            <input type="datetime-local" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
+            <select value={type} onChange={e => setType(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
+              <option value="INSTALLATION">{t("appointments.installation")}</option>
+            </select>
+          </div>
+        </div>
+        <div className="p-4 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
+          <button onClick={handleSave} disabled={loading}
+            className="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 disabled:opacity-50">
+            {loading ? "..." : t("common.save")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Drill-down modal ──────────────────────────────────────────────────────
 function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: string; onClose: () => void }) {
   const { t } = useTranslation();
@@ -75,6 +129,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "customer" | "appointment" } | null>(null);
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
+  const [schedulingCustomer, setSchedulingCustomer] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => { const tm = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(tm); }, [search]);
   useEffect(() => { setPage(1); }, [debouncedSearch]);
@@ -123,6 +178,14 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
 
   return (
     <>
+      {schedulingCustomer && (
+        <QuickScheduleModal
+          customer={schedulingCustomer}
+          onClose={() => setSchedulingCustomer(null)}
+          onSaved={() => { qc.invalidateQueries({ queryKey: [endpoint] }); qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); }}
+        />
+      )}
+
       {editingAppt && (
         <EditApptModal
           appt={editingAppt}
@@ -209,7 +272,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <th className="text-start px-4 py-2 font-medium text-slate-600">{t("common.phone")}</th>
                     <th className="text-start px-4 py-2 font-medium text-slate-600">{t("customers.maintenanceCycle")}</th>
                     <th className="text-start px-4 py-2 font-medium text-slate-600">{t("customers.city")}</th>
-                    <th className="px-4 py-2 w-16"></th>
+                    <th className="px-4 py-2 w-20"></th>
                   </tr></thead>
                   <tbody>{items.map((c: any) => (
                     <tr key={c.id} className="border-b hover:bg-slate-50">
@@ -218,8 +281,12 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                       <td className="px-4 py-2.5 text-xs">{c.maintenanceCycle}</td>
                       <td className="px-4 py-2.5 text-slate-500">{c.address?.city || "—"}</td>
                       <td className="px-4 py-2.5">
-                        <button onClick={() => setConfirmDelete({ id: c.id, type: "customer" })} title={t("dashboard.deleteRecord")}
-                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-red-500 text-xs">🗑</button>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setSchedulingCustomer({ id: c.id, name: c.name })} title="Schedule"
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-100 text-blue-600 text-xs">📅</button>
+                          <button onClick={() => setConfirmDelete({ id: c.id, type: "customer" })} title={t("dashboard.deleteRecord")}
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-red-500 text-xs">🗑</button>
+                        </div>
                       </td>
                     </tr>
                   ))}</tbody>

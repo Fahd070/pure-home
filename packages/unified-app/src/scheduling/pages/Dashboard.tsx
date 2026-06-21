@@ -6,6 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
+const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
 
 function StatCard({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
   const { t } = useTranslation();
@@ -74,6 +75,59 @@ function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: stri
   );
 }
 
+function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: string; name: string }; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation();
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [type, setType] = useState("MAINTENANCE");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSave() {
+    if (!scheduledDate) { toast.error(t("common.required")); return; }
+    setLoading(true);
+    try {
+      await api.post("/appointments", { customerId: customer.id, scheduledDate, type });
+      toast.success(t("appointments.created"));
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || t("common.error"));
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[75] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-bold text-slate-800">📅 {customer.name}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">✕</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
+            <input type="datetime-local" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
+            <select value={type} onChange={e => setType(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+              <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
+              <option value="INSTALLATION">{t("appointments.installation")}</option>
+            </select>
+          </div>
+        </div>
+        <div className="p-4 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
+          <button onClick={handleSave} disabled={loading}
+            className="px-4 py-2 text-sm bg-green-700 text-white rounded-lg hover:bg-green-800 disabled:opacity-50">
+            {loading ? "..." : t("common.save")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: string; onClose: () => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -81,6 +135,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const [page, setPage] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
+  const [schedulingCustomer, setSchedulingCustomer] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => { const tm = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(tm); }, [search]);
 
@@ -104,9 +159,18 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const total = data?.meta?.total || 0;
   const pages = Math.ceil(total / 15) || 1;
   const isApptList = APPT_ENDPOINTS.includes(endpoint);
+  const isCustomerList = CUSTOMER_ENDPOINTS.includes(endpoint);
 
   return (
     <>
+      {schedulingCustomer && (
+        <QuickScheduleModal
+          customer={schedulingCustomer}
+          onClose={() => setSchedulingCustomer(null)}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ["sched-drill", endpoint] }); qc.invalidateQueries({ queryKey: ["sched-dashboard-stats"] }); }}
+        />
+      )}
+
       {editingAppt && (
         <EditApptModal
           appt={editingAppt}
@@ -162,12 +226,19 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <th className="text-start px-4 py-2">{t("common.name")}</th>
                     <th className="text-start px-4 py-2">{t("common.phone")}</th>
                     <th className="text-start px-4 py-2">{t("customers.city")}</th>
+                    <th className="px-4 py-2 w-14"></th>
                   </tr></thead>
                   <tbody>{items.map((c: any) => (
                     <tr key={c.id} className="border-b hover:bg-slate-50">
                       <td className="px-4 py-2 font-medium">{c.name}</td>
                       <td className="px-4 py-2 text-slate-500">{c.phone}</td>
                       <td className="px-4 py-2 text-slate-500">{c.address?.city || "—"}</td>
+                      <td className="px-4 py-2">
+                        {isCustomerList && (
+                          <button onClick={() => setSchedulingCustomer({ id: c.id, name: c.name })} title="Schedule"
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-green-100 text-green-700 text-xs">📅</button>
+                        )}
+                      </td>
                     </tr>
                   ))}</tbody>
                 </table>

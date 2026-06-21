@@ -8,7 +8,7 @@ import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { getSocket } from "../hooks/useSocket";
 
-const DEPT_COLOR = "#ea580c";
+const DEPT_COLOR = "#014245";
 
 const titles: Record<string, string> = {
   "/technician/queue":               "nav.workQueue",
