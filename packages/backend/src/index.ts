@@ -108,10 +108,11 @@ async function ensureSchemaUpdates() {
     // Add work management columns to appointments
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "technicianId" TEXT`);
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "workStatus" TEXT NOT NULL DEFAULT 'WAITING'`);
-    // Convert workStatus TEXT column to the proper WorkStatus enum type so Prisma queries work
-    await run(`ALTER TABLE "appointments" ALTER COLUMN "workStatus" TYPE "WorkStatus" USING "workStatus"::"WorkStatus"`);
-    // Ensure default is set correctly after type change
-    await run(`ALTER TABLE "appointments" ALTER COLUMN "workStatus" SET DEFAULT 'WAITING'::"WorkStatus"`);
+    // workStatus is stored as TEXT (Prisma schema uses String, not a native PG enum).
+    // If a prior migration converted it to the native "WorkStatus" enum type, revert to TEXT.
+    await run(`ALTER TABLE "appointments" ALTER COLUMN "workStatus" DROP DEFAULT`);
+    await run(`ALTER TABLE "appointments" ALTER COLUMN "workStatus" TYPE TEXT USING "workStatus"::TEXT`);
+    await run(`ALTER TABLE "appointments" ALTER COLUMN "workStatus" SET DEFAULT 'WAITING'`);
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "workNotes" TEXT`);
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "serviceDetails" TEXT`);
     await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "completionAmount" DOUBLE PRECISION`);

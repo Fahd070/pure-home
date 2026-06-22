@@ -31,12 +31,6 @@ enum AppointmentStatus {
   PENDING
 }
 
-enum WorkStatus {
-  WAITING
-  IN_PROGRESS
-  COMPLETED
-  POSTPONED
-}
 
 model User {
   id        String   @id @default(uuid())
@@ -112,7 +106,7 @@ model Appointment {
   updatedAt           DateTime          @updatedAt
   technicianId        String?
   technician          User?             @relation("AppointmentTechnician", fields: [technicianId], references: [id])
-  workStatus          WorkStatus        @default(WAITING)
+  workStatus          String            @default("WAITING")
   workNotes           String?
   serviceDetails      String?
   completionAmount    Float?
