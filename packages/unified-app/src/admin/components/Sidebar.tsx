@@ -9,7 +9,7 @@ import { useNotificationSound } from "../../hooks/useNotificationSound";
 import { useSettingsStore } from "../../store/settingsStore";
 
 function colorAdjust(hex: string, offset: number): string {
-  const n = parseInt((hex || '#000080').replace('#', ''), 16);
+  const n = parseInt((hex || '#0A0A2E').replace('#', ''), 16);
   const r = Math.min(255, Math.max(0, (n >> 16) + offset));
   const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
   const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
@@ -54,7 +54,7 @@ export default function Sidebar() {
   const socket = useSocket();
   useNotificationSound(socket);
   const { settings } = useSettingsStore();
-  const BG = settings.primaryColor || "#000080";
+  const BG = settings.primaryColor || "#0A0A2E";
   const BG_HOVER = colorAdjust(BG, -14);
   const BG_ACTIVE = colorAdjust(BG, 50);
   const BORDER = BG_HOVER;

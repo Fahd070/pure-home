@@ -6,13 +6,52 @@ import { useAppStore } from "../store/appStore";
 
 const logoUrl = new URL("../../assets/icon.png", import.meta.url).href;
 
+const DEPT_COLORS = {
+  admin:      "#0A0A2E",
+  scheduling: "#2A533F",
+  technician: "#014245",
+} as const;
+
 const depts = [
-  { id: "admin",      label_ar: "الإدارة",          label_en: "Administration",          color: "border-blue-500 hover:bg-blue-50",    badge: "bg-blue-600",   icon: "🔵" },
-  { id: "scheduling", label_ar: "الجدولة والصيانة", label_en: "Scheduling & Maintenance", color: "border-green-500 hover:bg-green-50",  badge: "bg-green-600",  icon: "🟢" },
-  { id: "technician", label_ar: "الفنيون",          label_en: "Technicians",              color: "border-orange-500 hover:bg-orange-50", badge: "bg-orange-600", icon: "🟠" },
+  { id: "admin"      as const, label_ar: "الإدارة",          label_en: "Administration",          icon: "⊞" },
+  { id: "scheduling" as const, label_ar: "الجدولة والصيانة", label_en: "Scheduling & Maintenance", icon: "📅" },
+  { id: "technician" as const, label_ar: "الفنيون",          label_en: "Technicians",              icon: "🔧" },
 ];
 
 type ServerStatus = "checking" | "online" | "offline";
+
+function DeptCard({ dept, isAr, onClick }: { dept: typeof depts[number]; isAr: boolean; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const color = DEPT_COLORS[dept.id];
+
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-2xl p-5 flex flex-col items-center gap-3 border-2 transition-all shadow-sm"
+      style={{
+        backgroundColor: hovered ? color + "18" : "#ffffff",
+        borderColor: color,
+        boxShadow: hovered ? `0 4px 16px ${color}33` : "0 1px 3px rgba(0,0,0,0.08)",
+        transform: hovered ? "translateY(-2px)" : "none",
+      }}
+    >
+      <div
+        className="w-13 h-13 w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold text-white"
+        style={{ backgroundColor: color }}
+      >
+        {dept.icon}
+      </div>
+      <span className="font-bold text-slate-800 text-sm text-center">
+        {isAr ? dept.label_ar : dept.label_en}
+      </span>
+      <span className="text-slate-400 text-xs text-center">
+        {isAr ? dept.label_en : dept.label_ar}
+      </span>
+    </button>
+  );
+}
 
 export default function DepartmentSelector() {
   const navigate = useNavigate();
@@ -43,26 +82,14 @@ export default function DepartmentSelector() {
 
       <div className="grid grid-cols-3 gap-4 w-full max-w-2xl">
         {depts.map(d => (
-          <button key={d.id} onClick={() => navigate(`/code-entry/${d.id}`)}
-            className={`bg-white rounded-2xl p-6 flex flex-col items-center gap-3 border-2 transition-all shadow-sm hover:shadow-md ${d.color}`}>
-            <span className="text-4xl">{d.icon}</span>
-            <span className="font-bold text-slate-800 text-sm text-center">{isAr ? d.label_ar : d.label_en}</span>
-            <span className="text-slate-500 text-xs text-center">{isAr ? d.label_en : d.label_ar}</span>
-          </button>
+          <DeptCard key={d.id} dept={d} isAr={isAr} onClick={() => navigate(`/code-entry/${d.id}`)} />
         ))}
       </div>
 
-      {/* Server status indicator */}
       <div className="mt-6 flex items-center gap-1.5 text-xs">
-        {serverStatus === "checking" && (
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-        )}
-        {serverStatus === "online" && (
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-        )}
-        {serverStatus === "offline" && (
-          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-        )}
+        {serverStatus === "checking" && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />}
+        {serverStatus === "online"   && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
+        {serverStatus === "offline"  && <span className="w-1.5 h-1.5 rounded-full bg-red-400" />}
         <span className="text-slate-400">
           {serverStatus === "checking"
             ? (isAr ? "جاري الاتصال..." : "Connecting...")
@@ -81,7 +108,6 @@ export default function DepartmentSelector() {
           ⚙ {isAr ? "إعداد الخادم" : "Server Setup"}
         </button>
       </div>
-
     </div>
   );
 }
