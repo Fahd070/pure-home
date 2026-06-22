@@ -5,7 +5,6 @@ import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
 import customerRoutes from './routes/customers';
 import appointmentRoutes from './routes/appointments';
-import taskRoutes from './routes/tasks';
 import technicianRoutes from './routes/technicians';
 import notificationRoutes from './routes/notifications';
 import messageRoutes from './routes/messages';
@@ -78,7 +77,6 @@ app.get('/health', async (_req, res) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/appointments', appointmentRoutes);
-app.use('/api/tasks', taskRoutes);
 app.use('/api/technicians', technicianRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);

@@ -81,7 +81,7 @@ async function generateReminders() {
       where: {
         scheduledDate: { gte: thirtyDaysAgo, lt: todayStart },
         status: { not: 'CANCELLED' },
-        NOT: { task: { status: 'COMPLETED' } }
+        workStatus: { not: 'COMPLETED' }
       },
       include: { customer: true }
     });

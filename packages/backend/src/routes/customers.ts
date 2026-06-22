@@ -49,7 +49,7 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
 
     const includeOpts: any = { address: true };
     if (includeSchedule === 'true') {
-      includeOpts.appointments = { include: { task: true }, orderBy: { scheduledDate: 'desc' as const } };
+      includeOpts.appointments = { orderBy: { scheduledDate: 'desc' as const } };
     }
 
     const customers = await prisma.customer.findMany({
@@ -65,13 +65,13 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
     const enriched = customers.map((c: any) => {
       const appts: any[] = c.appointments || [];
       const completed = appts
-        .filter(a => a.task?.status === 'COMPLETED')
+        .filter(a => a.workStatus === 'COMPLETED')
         .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
       const upcoming = appts
-        .filter(a => new Date(a.scheduledDate) >= now && a.status !== 'CANCELLED' && a.task?.status !== 'COMPLETED')
+        .filter(a => new Date(a.scheduledDate) >= now && a.status !== 'CANCELLED' && a.workStatus !== 'COMPLETED')
         .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
       const overdue = appts.filter(a =>
-        new Date(a.scheduledDate) < now && a.status !== 'CANCELLED' && a.task?.status !== 'COMPLETED'
+        new Date(a.scheduledDate) < now && a.status !== 'CANCELLED' && a.workStatus !== 'COMPLETED'
       );
       const nextMaintenance = upcoming[0]?.scheduledDate || null;
       const daysUntil = nextMaintenance
@@ -91,7 +91,7 @@ router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) =>
   try {
     const customer = await prisma.customer.findUnique({
       where: { id: req.params.id },
-      include: { address: true, appointments: { include: { task: { include: { technician: { select: { id: true, name: true } } } } }, orderBy: { scheduledDate: 'desc' }, take: 10 } },
+      include: { address: true, appointments: { include: { technician: { select: { id: true, name: true } } }, orderBy: { scheduledDate: 'desc' }, take: 10 } },
     });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     res.json({ success: true, data: customer });

@@ -6,9 +6,9 @@ export const NOTIFICATION_EVENTS = [
   "customer:created",
   "appointment:created",
   "appointment:updated",
-  "task:approved",
-  "task:completed",
-  "task:postponed",
+  "appointment:started",
+  "appointment:completed",
+  "appointment:postponed",
 ];
 
 export function playChime(volume: number) {

@@ -211,7 +211,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <td className="px-4 py-2">{displayName}</td>
                         <td className="px-4 py-2 text-slate-500">{displayPhone}</td>
                         <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-2 text-xs">{a.task?.status || a.status}</td>
+                        <td className="px-4 py-2 text-xs">{a.workStatus || a.status}</td>
                         <td className="px-4 py-2">
                           <button onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")}
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-green-100 text-green-600 text-xs">✏️</button>
@@ -282,25 +282,25 @@ export default function SchedDashboard() {
       qc.invalidateQueries({ queryKey: ["sched-dashboard-stats"] });
       qc.invalidateQueries({ queryKey: ["sched-dashboard-activity"] });
     };
-    socket.on("task:completed", refresh); socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh);
-    socket.on("appointment:status", refresh);
+    socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh);
+    socket.on("appointment:status", refresh); socket.on("appointment:completed", refresh); socket.on("appointment:postponed", refresh);
     socket.on("customer:created", refresh); socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
     return () => {
-      socket.off("task:completed", refresh); socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh);
-      socket.off("appointment:status", refresh);
+      socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh);
+      socket.off("appointment:status", refresh); socket.off("appointment:completed", refresh); socket.off("appointment:postponed", refresh);
       socket.off("customer:created", refresh); socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
     };
   }, [socket, qc]);
 
   const statusColor: Record<string, string> = {
     COMPLETED: "text-green-600 bg-green-50", IN_PROGRESS: "text-blue-600 bg-blue-50",
-    POSTPONED: "text-orange-600 bg-orange-50", PENDING_APPROVAL: "text-yellow-600 bg-yellow-50",
-    APPROVED: "text-purple-600 bg-purple-50", NO_TASK: "text-slate-400 bg-slate-50"
+    POSTPONED: "text-orange-600 bg-orange-50", WAITING: "text-yellow-600 bg-yellow-50",
+    NO_APPOINTMENT: "text-slate-400 bg-slate-50"
   };
   const statusLabel: Record<string, string> = {
     COMPLETED: t("tasks.completed"), IN_PROGRESS: t("tasks.inProgress"),
-    POSTPONED: t("tasks.postponed"), PENDING_APPROVAL: t("tasks.pendingApproval"),
-    APPROVED: t("tasks.approved"), NO_TASK: "—"
+    POSTPONED: t("tasks.postponed"), WAITING: t("tasks.waiting") || "Waiting",
+    NO_APPOINTMENT: "—"
   };
 
   const cards = [

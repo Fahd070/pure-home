@@ -8,9 +8,9 @@ const EVENTS: Record<string, { text: string; icon: string; bg: string; roles: Ro
   "customer:created":    { text: "تم إضافة عميل جديد",        icon: "👤", bg: "from-blue-600 to-blue-700",      roles: ["ADMIN", "SCHEDULING"] },
   "appointment:created": { text: "تم جدولة موعد جديد",        icon: "📅", bg: "from-indigo-600 to-indigo-700",  roles: ["ADMIN", "SCHEDULING", "TECHNICIAN"] },
   "appointment:deleted": { text: "تم حذف موعد",               icon: "🗑️", bg: "from-red-600 to-red-700",       roles: ["ADMIN"] },
-  "task:completed":      { text: "تم إكمال مهمة",             icon: "✅", bg: "from-green-600 to-green-700",   roles: ["ADMIN", "SCHEDULING", "TECHNICIAN"] },
-  "task:postponed":      { text: "تم تأجيل مهمة",             icon: "⏸️", bg: "from-orange-500 to-orange-600", roles: ["ADMIN", "SCHEDULING", "TECHNICIAN"] },
-  "task:approved":       { text: "تمت الموافقة على مهمة",     icon: "✔️", bg: "from-purple-600 to-purple-700", roles: ["ADMIN", "TECHNICIAN"] },
+  "appointment:started":    { text: "بدأ الفني العمل",              icon: "🔧", bg: "from-indigo-600 to-indigo-700",  roles: ["ADMIN", "SCHEDULING"] },
+  "appointment:completed":  { text: "تم إتمام الموعد بنجاح",        icon: "✅", bg: "from-green-600 to-green-700",   roles: ["ADMIN", "SCHEDULING", "TECHNICIAN"] },
+  "appointment:postponed":  { text: "تم تأجيل الموعد",              icon: "⏸️", bg: "from-orange-500 to-orange-600", roles: ["ADMIN", "SCHEDULING", "TECHNICIAN"] },
   "call_report:new":     { text: "تم إرسال تقرير مكالمة",     icon: "📞", bg: "from-teal-600 to-teal-700",     roles: ["ADMIN", "SCHEDULING"] },
   "expense:new":         { text: "تم إضافة مصروف جديد",       icon: "💰", bg: "from-amber-500 to-amber-600",   roles: ["ADMIN"] },
 };

@@ -12,15 +12,16 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
       where: { role: 'TECHNICIAN' },
       select: {
         id: true, name: true, email: true, role: true,
-        _count: { select: { tasks: true } },
-        tasks: {
-          where: { status: { in: ['COMPLETED', 'POSTPONED'] } },
+        _count: { select: { assignedAppointments: true } },
+        assignedAppointments: {
+          where: { workStatus: { in: ['COMPLETED', 'POSTPONED'] } },
           select: {
-            id: true, status: true, completedAt: true,
-            notes: true, serviceDetails: true,
+            id: true, workStatus: true, completedAt: true,
+            workNotes: true, serviceDetails: true,
             completionAmount: true, completionPaymentMethod: true,
             completionImage: true,
-            appointment: { include: { customer: { select: { id: true, name: true, phone: true } } } },
+            type: true, scheduledDate: true,
+            customer: { select: { id: true, name: true, phone: true } },
             postponements: { orderBy: { createdAt: 'desc' as const }, take: 1 },
           },
           orderBy: { createdAt: 'desc' as const },
@@ -29,9 +30,9 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
       },
     });
     const result = techs.map((t: any) => {
-      const completedTasksList = t.tasks.filter((x: any) => x.status === 'COMPLETED').slice(0, 20);
-      const postponedTasksList = t.tasks.filter((x: any) => x.status === 'POSTPONED').slice(0, 20);
-      const { tasks, ...rest } = t;
+      const completedTasksList = t.assignedAppointments.filter((x: any) => x.workStatus === 'COMPLETED').slice(0, 20);
+      const postponedTasksList = t.assignedAppointments.filter((x: any) => x.workStatus === 'POSTPONED').slice(0, 20);
+      const { assignedAppointments, ...rest } = t;
       return {
         ...rest,
         completedTasks: completedTasksList.length,
@@ -41,15 +42,14 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
         postponedTasksList,
       };
     });
-    // Strip admin-only fields from SCHEDULING role
     if (!isAdmin) {
       result.forEach((tech: any) => {
-        tech.completedTasksList?.forEach((task: any) => {
-          delete task.completionImage;
-          delete task.completionAmount;
-          delete task.completionPaymentMethod;
+        tech.completedTasksList?.forEach((appt: any) => {
+          delete appt.completionImage;
+          delete appt.completionAmount;
+          delete appt.completionPaymentMethod;
         });
-        tech.postponedTasksList?.forEach((task: any) => { delete task.completionImage; });
+        tech.postponedTasksList?.forEach((appt: any) => { delete appt.completionImage; });
       });
     }
     res.json({ success: true, data: result });

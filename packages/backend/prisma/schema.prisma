@@ -31,9 +31,8 @@ enum AppointmentStatus {
   PENDING
 }
 
-enum TaskStatus {
-  PENDING_APPROVAL
-  APPROVED
+enum WorkStatus {
+  WAITING
   IN_PROGRESS
   COMPLETED
   POSTPONED
@@ -48,18 +47,17 @@ model User {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  customersCreated    Customer[]           @relation("CustomerCreatedBy")
-  appointmentsCreated Appointment[]        @relation("AppointmentCreatedBy")
-  tasks               MaintenanceTask[]    @relation("TaskAssignedTo")
-  taskHistory         TaskHistory[]        @relation("HistoryChangedBy")
-  postponements       PostponementRecord[] @relation("PostponementTechnician")
-  notifications       Notification[]
-  auditLogs           AuditLog[]
-  messages            Message[]
-  sentDirectMessages  DirectMessage[]      @relation("DMSender")
-  callReports         CallReport[]         @relation("CallReportCreatedBy")
-  expenses            Expense[]            @relation("ExpenseByTechnician")
-  urgentVisits        UrgentVisitRecord[]  @relation("UrgentVisitBy")
+  customersCreated     Customer[]           @relation("CustomerCreatedBy")
+  appointmentsCreated  Appointment[]        @relation("AppointmentCreatedBy")
+  assignedAppointments Appointment[]        @relation("AppointmentTechnician")
+  postponements        PostponementRecord[] @relation("PostponementTechnician")
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  messages             Message[]
+  sentDirectMessages   DirectMessage[]      @relation("DMSender")
+  callReports          CallReport[]         @relation("CallReportCreatedBy")
+  expenses             Expense[]            @relation("ExpenseByTechnician")
+  urgentVisits         UrgentVisitRecord[]  @relation("UrgentVisitBy")
   @@map("users")
 }
 
@@ -112,58 +110,34 @@ model Appointment {
   version             Int               @default(1)
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
+  technicianId        String?
+  technician          User?             @relation("AppointmentTechnician", fields: [technicianId], references: [id])
+  workStatus          WorkStatus        @default(WAITING)
+  workNotes           String?
+  serviceDetails      String?
+  completionAmount    Float?
+  completionPaymentMethod String?
+  completionImage     String?           @db.Text
+  startedAt           DateTime?
+  completedAt         DateTime?
   customerId          String?
   customer            Customer?         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   createdById         String?
   createdBy           User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
-  task                MaintenanceTask?
+  postponements       PostponementRecord[]
   urgentVisitRecord   UrgentVisitRecord?
   @@map("appointments")
 }
 
-model MaintenanceTask {
-  id                    String       @id @default(uuid())
-  status                TaskStatus   @default(PENDING_APPROVAL)
-  notes                 String?
-  serviceDetails        String?
-  completionAmount      Float?
-  completionPaymentMethod String?
-  completionImage       String?      @db.Text
-  startedAt             DateTime?
-  completedAt           DateTime?
-  version               Int          @default(1)
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
-  appointmentId         String       @unique
-  appointment           Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  technicianId          String?
-  technician            User?        @relation("TaskAssignedTo", fields: [technicianId], references: [id])
-  history               TaskHistory[]
-  postponements         PostponementRecord[]
-  @@map("maintenance_tasks")
-}
-
-model TaskHistory {
-  id          String     @id @default(uuid())
-  status      TaskStatus
-  notes       String?
-  createdAt   DateTime   @default(now())
-  taskId      String
-  task        MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  changedById String?
-  changedBy   User?      @relation("HistoryChangedBy", fields: [changedById], references: [id])
-  @@map("task_history")
-}
-
 model PostponementRecord {
-  id            String          @id @default(uuid())
+  id            String      @id @default(uuid())
   reason        String
   newDate       DateTime?
-  createdAt     DateTime        @default(now())
-  taskId        String
-  task          MaintenanceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
   requestedById String?
-  requestedBy   User?           @relation("PostponementTechnician", fields: [requestedById], references: [id])
+  requestedBy   User?       @relation("PostponementTechnician", fields: [requestedById], references: [id])
   @@map("postponement_records")
 }
 
@@ -241,14 +215,16 @@ model SystemConfig {
 
 model CallReport {
   id           String   @id @default(uuid())
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
   employeeName String
   callDate     DateTime
   notes        String?
   createdAt    DateTime @default(now())
   createdById  String?
   createdBy    User?    @relation("CallReportCreatedBy", fields: [createdById], references: [id])
+  unregisteredName  String?
+  unregisteredPhone String?
   @@map("call_reports")
 }
 

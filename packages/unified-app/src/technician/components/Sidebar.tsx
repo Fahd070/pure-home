@@ -44,11 +44,10 @@ export default function Sidebar() {
     if (!socket) return;
     const incQueue = () => setQueueBadge(c => { const v = c + 1; localStorage.setItem("badge-queue-tech", String(v)); return v; });
     const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-tech", String(v)); return v; });
-    socket.on("task:approved", incQueue);
-    socket.on("appointment:created", (a: any) => { if (a?.isUrgent) incUrgent(); });
+    const onApptCreated = (a: any) => { if (a?.isUrgent) incUrgent(); else incQueue(); };
+    socket.on("appointment:created", onApptCreated);
     return () => {
-      socket.off("task:approved", incQueue);
-      socket.off("appointment:created", incUrgent);
+      socket.off("appointment:created", onApptCreated);
     };
   }, [socket]);
 
