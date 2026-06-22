@@ -13,7 +13,7 @@ export default function WorkQueue() {
   const qc = useQueryClient();
   const socket = useSocket();
 
-  const { data, isLoading } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks?status=APPROVED,IN_PROGRESS").then(r => r.data.data) });
+  const { data, isLoading } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks?status=APPROVED,PENDING_APPROVAL,IN_PROGRESS").then(r => r.data.data) });
 
   useEffect(() => {
     if (!socket) return;
@@ -33,7 +33,7 @@ export default function WorkQueue() {
   const statusLabel: Record<string, string> = { APPROVED: t("tasks.approved"), IN_PROGRESS: t("tasks.inProgress"), PENDING_APPROVAL: t("tasks.pendingApproval") };
   // Urgent appointment tasks are handled in the dedicated Urgent Appointments page, not here
   const active = (data || []).filter((tk: any) =>
-    ["APPROVED","IN_PROGRESS"].includes(tk.status) && !tk.appointment?.isUrgent
+    ["APPROVED","PENDING_APPROVAL","IN_PROGRESS"].includes(tk.status) && !tk.appointment?.isUrgent
   );
 
   if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;

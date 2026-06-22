@@ -17,7 +17,6 @@ import settingsRoutes from './routes/settings';
 import callReportRoutes from './routes/call-reports';
 import expenseRoutes from './routes/expenses';
 import urgentVisitRoutes from './routes/urgent-visits';
-import customerApprovalRoutes from './routes/customer-approvals';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './prisma';
 
@@ -91,7 +90,5 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/call-reports', callReportRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/urgent-visits', urgentVisitRoutes);
-app.use('/api/customer-approvals', customerApprovalRoutes);
-
 app.use(errorHandler);
 export default app;
