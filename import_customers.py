@@ -26,8 +26,8 @@ except ImportError as e:
 EXCEL_PATH  = r"C:\Users\fahd1\Desktop\عوض-جداول متابعة العملاء.xlsx"
 SHEET_NAME  = "مواعيد الصيانة"
 API_BASE    = "https://wfm-system.onrender.com"
-ADMIN_EMAIL = "admin@wfm.local"
-ADMIN_PASS  = "admin123"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@wfm.local")
+ADMIN_PASS  = os.environ.get("ADMIN_PASS", "")
 DATA_START_ROW = 4   # first row with actual customer data
 YELLOW_RGB  = "FFFFFF00"   # openpyxl RGB for yellow fill
 
@@ -244,6 +244,12 @@ def main(dry_run=False, api_override=None):
     global API_BASE
     if api_override:
         API_BASE = api_override.rstrip('/')
+
+    if not ADMIN_PASS:
+        print("ERROR: ADMIN_PASS environment variable is not set.")
+        print("  Set it before running:  set ADMIN_PASS=yourpassword  (Windows)")
+        print("                          export ADMIN_PASS=yourpassword  (macOS/Linux)")
+        sys.exit(1)
 
     print("=" * 60)
     print("Pure Home — Customer Import")
