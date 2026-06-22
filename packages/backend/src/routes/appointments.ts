@@ -57,7 +57,6 @@ router.get('/', async (req: AuthRequest, res, next) => {
       ...(from ? { gte: new Date(from) } : {}),
       ...(to ? { lte: new Date(to) } : {}),
     };
-    if (urgent === 'true') where.isUrgent = true;
     if (urgent === 'false') where.isUrgent = false;
 
     if (workStatusFilter) {
@@ -68,13 +67,24 @@ router.get('/', async (req: AuthRequest, res, next) => {
 
     if (req.user!.role === 'SCHEDULING') {
       where.visibleToScheduling = true;
+      // Scheduling never sees urgent appointments regardless of query params
+      where.isUrgent = false;
     }
     if (req.user!.role === 'TECHNICIAN') {
-      where.isUrgent = false;
-      where.OR = [
-        { technicianId: req.user!.userId },
-        { technicianId: null },
-      ];
+      if (urgent === 'true') {
+        // Urgent appointments: all technicians can see all of them
+        where.isUrgent = true;
+      } else {
+        // Regular work queue: own or unassigned non-urgent only
+        where.isUrgent = false;
+        where.OR = [
+          { technicianId: req.user!.userId },
+          { technicianId: null },
+        ];
+      }
+    }
+    if (req.user!.role === 'ADMIN') {
+      if (urgent === 'true') where.isUrgent = true;
     }
 
     const appts = await prisma.appointment.findMany({
@@ -106,12 +116,14 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
     const where: any = { id: req.params.id };
     if (req.user!.role === 'SCHEDULING') {
       where.visibleToScheduling = true;
+      where.isUrgent = false;
     }
     if (req.user!.role === 'TECHNICIAN') {
-      where.isUrgent = false;
+      // Can view urgent appointments (all) or their own/unassigned non-urgent appointments
       where.OR = [
-        { technicianId: req.user!.userId },
-        { technicianId: null },
+        { isUrgent: true },
+        { isUrgent: false, technicianId: req.user!.userId },
+        { isUrgent: false, technicianId: null },
       ];
     }
     const appt = await prisma.appointment.findFirst({
