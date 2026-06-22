@@ -36,7 +36,7 @@ async function login(page) {
     const r = await fetch(`${backend}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@wfm.local', password: 'admin123' }),
+      body: JSON.stringify({ email: process.env.ADMIN_EMAIL || 'admin@wfm.local', password: process.env.ADMIN_PASS || '' }),
     });
     return r.json();
   }, BACKEND);
