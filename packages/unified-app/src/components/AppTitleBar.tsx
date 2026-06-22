@@ -1,14 +1,16 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useSettingsStore } from "../store/settingsStore";
 
 export default function AppTitleBar() {
   const { pathname } = useLocation();
   const { t } = useTranslation();
+  const { settings } = useSettingsStore();
 
-  const bg = pathname.startsWith("/admin") ? "#000080"
-    : pathname.startsWith("/scheduling") ? "#008000"
-    : pathname.startsWith("/technician") ? "#8B4513"
+  const bg = pathname.startsWith("/admin") ? (settings.primaryColor || "#0A0A2E")
+    : pathname.startsWith("/scheduling") ? "#2A533F"
+    : pathname.startsWith("/technician") ? "#014245"
     : "#1e293b";
 
   const title = pathname.startsWith("/admin")
