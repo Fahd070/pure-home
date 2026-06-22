@@ -51,17 +51,21 @@ export default function TaskDetail() {
   const [imageCompressing, setImageCompressing] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["task", id],
-    queryFn: () => api.get(`/tasks`).then(r => r.data.data.find((t: any) => t.id === id))
+    queryKey: ["appointment", id],
+    queryFn: () => api.get(`/appointments/${id}`).then(r => r.data.data)
   });
 
   const start = useMutation({
-    mutationFn: () => api.patch(`/tasks/${id}/start`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); qc.invalidateQueries({ queryKey: ["task", id] }); toast.success(t("common.success")); }
+    mutationFn: () => api.patch(`/appointments/${id}/start`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["work-queue"] });
+      qc.invalidateQueries({ queryKey: ["appointment", id] });
+      toast.success(t("common.success"));
+    }
   });
 
   const complete = useMutation({
-    mutationFn: () => api.patch(`/tasks/${id}/complete`, {
+    mutationFn: () => api.patch(`/appointments/${id}/complete`, {
       notes: ".",
       serviceDetails: completeForm.serviceDetails,
       completionAmount: parseFloat(completeForm.amount),
@@ -73,17 +77,17 @@ export default function TaskDetail() {
   });
 
   const postpone = useMutation({
-    mutationFn: () => api.patch(`/tasks/${id}/postpone`, { reason: postponeReason, newDate: postponeDate || undefined }),
+    mutationFn: () => api.patch(`/appointments/${id}/postpone`, { reason: postponeReason, newDate: postponeDate || undefined }),
     onSuccess: () => { toast.success(t("common.success")); navigate("/technician/queue"); }
   });
 
   if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;
   if (!data) return <p className="text-center py-12">{t("common.error")}</p>;
 
-  const task = data;
-  const appt = task.appointment;
-  const customer = appt?.customer;
+  const appt = data;
+  const customer = appt.customer;
   const addr = customer?.address;
+  const workStatus = appt.workStatus;
 
   const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0;
 
@@ -126,8 +130,8 @@ export default function TaskDetail() {
             <h2 className="text-xl font-bold">{customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</h2>
             <p className="text-slate-500">{customer?.phone}</p>
           </div>
-          <span className={`text-xs px-2 py-1 rounded-full font-medium ${task.status === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
-            {task.status.replace("_"," ")}
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${workStatus === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" : "bg-yellow-100 text-yellow-700"}`}>
+            {workStatus}
           </span>
         </div>
         {addr && (
@@ -158,12 +162,12 @@ export default function TaskDetail() {
           <div><span className="text-slate-400">{t("common.date")}: </span>{new Date(appt?.scheduledDate).toLocaleDateString()}</div>
         </div>
         <div className="flex gap-3 pt-2">
-          {task.status === "APPROVED" && (
+          {workStatus === "WAITING" && (
             <button onClick={() => start.mutate()} disabled={start.isPending} className="flex-1 bg-orange-600 text-white py-2.5 rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50">
               {t("tasks.start")}
             </button>
           )}
-          {task.status === "IN_PROGRESS" && (<>
+          {workStatus === "IN_PROGRESS" && (<>
             <button onClick={() => setShowComplete(true)} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700">{t("tasks.complete")}</button>
             <button onClick={() => setShowPostpone(true)} className="flex-1 bg-yellow-500 text-white py-2.5 rounded-lg font-medium hover:bg-yellow-600">{t("tasks.postpone")}</button>
           </>)}

@@ -1,0 +1,79 @@
+{
+  "stats": {
+    "scanned": 402,
+    "created": 249,
+    "updated": 2,
+    "skipped_dup": 140,
+    "skipped_noname": 0,
+    "skipped_nophone": 13,
+    "appt_created": 78,
+    "errors": []
+  },
+  "skipped": [
+    {
+      "row": 38,
+      "reason": "invalid phone: None",
+      "name": "ايسو الطايف"
+    },
+    {
+      "row": 45,
+      "reason": "invalid phone: None",
+      "name": "ثري دوت (انسول) كافي- مكة"
+    },
+    {
+      "row": 50,
+      "reason": "invalid phone: None",
+      "name": "ذوقيات الحمدانية- عبدالغني"
+    },
+    {
+      "row": 81,
+      "reason": "invalid phone: None",
+      "name": "قليزد  النسيم"
+    },
+    {
+      "row": 106,
+      "reason": "invalid phone: None",
+      "name": "لافادو كافي- المروة"
+    },
+    {
+      "row": 119,
+      "reason": "invalid phone: None",
+      "name": "مد كافي مكة"
+    },
+    {
+      "row": 133,
+      "reason": "invalid phone: None",
+      "name": "مطعم بيزا الايطالي- طارق بازياد"
+    },
+    {
+      "row": 296,
+      "reason": "invalid phone: None",
+      "name": "عائلة العفيف"
+    },
+    {
+      "row": 314,
+      "reason": "invalid phone: None",
+      "name": "عبدالله بارباع"
+    },
+    {
+      "row": 328,
+      "reason": "invalid phone: 5672004367.0",
+      "name": "عمر باجسير"
+    },
+    {
+      "row": 335,
+      "reason": "invalid phone: 5340587077.0",
+      "name": "فتوو"
+    },
+    {
+      "row": 347,
+      "reason": "invalid phone: None",
+      "name": "فيصل عبدالرحمن"
+    },
+    {
+      "row": 366,
+      "reason": "invalid phone: None",
+      "name": "محمد الكاف مشرف قليزد"
+    }
+  ]
+}

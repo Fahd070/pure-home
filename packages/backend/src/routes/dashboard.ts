@@ -16,23 +16,22 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart.getTime() + 86400000);
 
-    // Scheduling dept only sees urgent appointments that admin has made visible to them
     const urgentWhere: any = { isUrgent: true };
     if (req.user?.role === 'SCHEDULING') urgentWhere.visibleToScheduling = true;
 
     const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
       prisma.customer.count(),
-      prisma.maintenanceTask.count({ where: { status: 'COMPLETED', appointment: { isUrgent: false } } }),
+      prisma.appointment.count({ where: { workStatus: 'COMPLETED', isUrgent: false } }),
       prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
       prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfNextMonth, lte: endOfNextMonth } } }),
-      prisma.maintenanceTask.count({ where: { status: 'POSTPONED', appointment: { isUrgent: false } } }),
+      prisma.appointment.count({ where: { workStatus: 'POSTPONED', isUrgent: false } }),
       prisma.appointment.count({
         where: {
           isUrgent: false,
           customerId: { not: null },
           scheduledDate: { lt: now },
           status: { not: 'CANCELLED' },
-          task: { status: { notIn: ['COMPLETED'] } }
+          workStatus: { notIn: ['COMPLETED'] }
         }
       }),
       prisma.appointment.count({
@@ -41,7 +40,7 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
           customerId: { not: null },
           scheduledDate: { gte: todayStart, lt: todayEnd },
           status: { not: 'CANCELLED' },
-          NOT: { task: { status: 'COMPLETED' } }
+          workStatus: { not: 'COMPLETED' }
         }
       }),
       prisma.appointment.count({ where: urgentWhere }),
@@ -57,7 +56,7 @@ router.get('/activity', requireRole('ADMIN', 'SCHEDULING'), async (req, res, nex
       where: { isActive: true, activityDismissed: false },
       include: {
         appointments: {
-          include: { task: true },
+          select: { workStatus: true, scheduledDate: true },
           orderBy: { scheduledDate: 'desc' },
           take: 1
         }
@@ -70,7 +69,7 @@ router.get('/activity', requireRole('ADMIN', 'SCHEDULING'), async (req, res, nex
       customerName: c.name,
       phone: c.phone,
       lastAppointment: c.appointments[0] || null,
-      status: c.appointments[0]?.task?.status || 'NO_TASK'
+      status: c.appointments[0]?.workStatus || 'NO_APPOINTMENT'
     }));
     res.json({ success: true, data: activity });
   } catch (e) { next(e); }
@@ -96,7 +95,6 @@ router.delete('/activity', requireRole('ADMIN'), async (req: AuthRequest, res, n
   } catch (e) { next(e); }
 });
 
-// --- Drill-down endpoints for clickable cards ---
 router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
@@ -117,15 +115,13 @@ router.get('/completed-maintenance', requireRole('ADMIN', 'SCHEDULING'), async (
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const where: any = {
-      appointments: { some: { task: { status: 'COMPLETED' } } }
-    };
+    const where: any = { appointments: { some: { workStatus: 'COMPLETED' } } };
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
     const total = await prisma.customer.count({ where });
     const data = await prisma.customer.findMany({
       where, include: {
         address: true,
-        appointments: { where: { task: { status: 'COMPLETED' } }, include: { task: true }, orderBy: { scheduledDate: 'desc' }, take: 5 }
+        appointments: { where: { workStatus: 'COMPLETED' }, orderBy: { scheduledDate: 'desc' }, take: 5 }
       },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { updatedAt: 'desc' }
@@ -145,7 +141,7 @@ router.get('/this-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, n
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } }, task: true },
+      where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
@@ -164,7 +160,7 @@ router.get('/next-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, n
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } }, task: true },
+      where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
@@ -176,13 +172,17 @@ router.get('/postponed', requireRole('ADMIN', 'SCHEDULING'), async (req, res, ne
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const where: any = { appointments: { some: { task: { status: 'POSTPONED' } } } };
+    const where: any = { appointments: { some: { workStatus: 'POSTPONED' } } };
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
     const total = await prisma.customer.count({ where });
     const data = await prisma.customer.findMany({
       where, include: {
         address: true,
-        appointments: { where: { task: { status: 'POSTPONED' } }, include: { task: { include: { postponements: { orderBy: { createdAt: 'desc' }, take: 1 } } } }, orderBy: { scheduledDate: 'desc' }, take: 3 }
+        appointments: {
+          where: { workStatus: 'POSTPONED' },
+          include: { postponements: { orderBy: { createdAt: 'desc' }, take: 1 } },
+          orderBy: { scheduledDate: 'desc' }, take: 3
+        }
       },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit
     });
@@ -200,12 +200,12 @@ router.get('/overdue', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next
       customerId: { not: null },
       scheduledDate: { lt: now },
       status: { not: 'CANCELLED' },
-      task: { status: { notIn: ['COMPLETED'] } }
+      workStatus: { notIn: ['COMPLETED'] }
     };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } }, task: true },
+      where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
@@ -225,12 +225,12 @@ router.get('/today', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) 
       customerId: { not: null },
       scheduledDate: { gte: todayStart, lt: todayEnd },
       status: { not: 'CANCELLED' },
-      NOT: { task: { status: 'COMPLETED' } }
+      workStatus: { not: 'COMPLETED' }
     };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } }, task: true },
+      where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
@@ -247,7 +247,7 @@ router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
     const total = await prisma.appointment.count({ where });
     const data = await prisma.appointment.findMany({
       where,
-      include: { task: { include: { technician: true } } },
+      include: { technician: true },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'desc' }
     });
@@ -255,7 +255,6 @@ router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
   } catch (e) { next(e); }
 });
 
-// Delete customer from dashboard drill-down — ADMIN only
 router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const customer = await prisma.customer.findUnique({
@@ -273,7 +272,6 @@ router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, re
   } catch (e) { next(e); }
 });
 
-// Delete appointment from dashboard drill-down — ADMIN only
 router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
@@ -284,7 +282,6 @@ router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest,
   } catch (e) { next(e); }
 });
 
-// Edit appointment from dashboard drill-down — ADMIN and SCHEDULING
 router.put('/appointment/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { scheduledDate, type, status, notes } = req.body;
@@ -297,7 +294,7 @@ router.put('/appointment/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: A
         ...(notes !== undefined ? { notes } : {}),
         version: { increment: 1 },
       },
-      include: { customer: { include: { address: true } }, task: true },
+      include: { customer: { include: { address: true } }, urgentVisitRecord: true },
     });
     emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
     res.json({ success: true, data: appt });

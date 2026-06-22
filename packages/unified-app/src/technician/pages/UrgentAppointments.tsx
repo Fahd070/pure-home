@@ -31,12 +31,10 @@ export default function TechUrgentAppointments() {
     if (!socket) return;
     const refresh = () => qc.invalidateQueries({ queryKey: ["tech-urgent-appointments"] });
     socket.on("appointment:created", refresh);
-    socket.on("task:approved", refresh);
     socket.on("appointment:deleted", refresh);
     socket.on("customer:deleted", refresh);
     return () => {
       socket.off("appointment:created", refresh);
-      socket.off("task:approved", refresh);
       socket.off("appointment:deleted", refresh);
       socket.off("customer:deleted", refresh);
     };

@@ -101,6 +101,37 @@ async function ensureSchemaUpdates() {
     await run(`DROP CONSTRAINT IF EXISTS "call_reports_customerId_fkey" ON "call_reports"`);
     await run(`ALTER TABLE "call_reports" DROP CONSTRAINT IF EXISTS "call_reports_customerId_fkey"`);
     await run(`ALTER TABLE "call_reports" ADD CONSTRAINT "call_reports_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED`);
+
+    // ── Remove tasks system: migrate data to appointments ────────────────────
+    // Create WorkStatus enum type
+    await run(`DO $$ BEGIN CREATE TYPE "WorkStatus" AS ENUM ('WAITING','IN_PROGRESS','COMPLETED','POSTPONED'); EXCEPTION WHEN duplicate_object THEN null; END $$`);
+    // Add work management columns to appointments
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "technicianId" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "workStatus" TEXT NOT NULL DEFAULT 'WAITING'`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "workNotes" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "serviceDetails" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "completionAmount" DOUBLE PRECISION`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "completionPaymentMethod" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "completionImage" TEXT`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "startedAt" TIMESTAMP(3)`);
+    await run(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "completedAt" TIMESTAMP(3)`);
+    // Copy task data into appointments (runs only while maintenance_tasks still exists)
+    await run(`UPDATE "appointments" a SET "technicianId"=t."technicianId","workStatus"=CASE WHEN t.status IN ('PENDING_APPROVAL','APPROVED') THEN 'WAITING' WHEN t.status='IN_PROGRESS' THEN 'IN_PROGRESS' WHEN t.status='COMPLETED' THEN 'COMPLETED' WHEN t.status='POSTPONED' THEN 'POSTPONED' ELSE 'WAITING' END,"workNotes"=t.notes,"serviceDetails"=t."serviceDetails","completionAmount"=t."completionAmount","completionPaymentMethod"=t."completionPaymentMethod","completionImage"=t."completionImage","startedAt"=t."startedAt","completedAt"=t."completedAt" FROM "maintenance_tasks" t WHERE t."appointmentId"=a.id`);
+    // Add appointmentId to postponement_records and populate it
+    await run(`ALTER TABLE "postponement_records" ADD COLUMN IF NOT EXISTS "appointmentId" TEXT`);
+    await run(`UPDATE "postponement_records" pr SET "appointmentId"=mt."appointmentId" FROM "maintenance_tasks" mt WHERE pr."taskId"=mt.id`);
+    // Drop old FK and taskId column from postponement_records
+    await run(`ALTER TABLE "postponement_records" DROP CONSTRAINT IF EXISTS "postponement_records_taskId_fkey"`);
+    await run(`ALTER TABLE "postponement_records" DROP COLUMN IF EXISTS "taskId"`);
+    // Add FK for appointmentId on postponement_records
+    await run(`ALTER TABLE "postponement_records" ADD CONSTRAINT "postponement_records_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "appointments"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    // Add FK for technicianId on appointments
+    await run(`ALTER TABLE "appointments" ADD CONSTRAINT "appointments_technicianId_fkey" FOREIGN KEY ("technicianId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE`);
+    // Drop task tables (CASCADE handles orphan rows)
+    await run(`DROP TABLE IF EXISTS "task_history" CASCADE`);
+    await run(`DROP TABLE IF EXISTS "maintenance_tasks" CASCADE`);
+    // Drop old TaskStatus enum
+    await run(`DROP TYPE IF EXISTS "TaskStatus"`);
     console.log('  schema updates:  applied');
   } catch (e: any) {
     console.error('  schema updates:  warning —', e?.message || e);

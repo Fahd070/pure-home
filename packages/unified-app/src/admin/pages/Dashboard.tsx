@@ -169,8 +169,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const isCustomerList = CUSTOMER_ENDPOINTS.includes(endpoint);
 
   const taskColors: Record<string, string> = {
-    PENDING_APPROVAL: "bg-yellow-100 text-yellow-700",
-    APPROVED: "bg-blue-100 text-blue-700",
+    WAITING: "bg-yellow-100 text-yellow-700",
     IN_PROGRESS: "bg-indigo-100 text-indigo-700",
     COMPLETED: "bg-green-100 text-green-700",
     POSTPONED: "bg-orange-100 text-orange-700",
@@ -233,7 +232,6 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <th className="px-4 py-2 w-20"></th>
                   </tr></thead>
                   <tbody>{items.map((a: any) => {
-                    const taskStatus: string | undefined = a.task?.status;
                     let loc: any = {};
                     try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
                     const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "Urgent Visit";
@@ -245,13 +243,9 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <td className="px-4 py-2.5">{new Date(a.scheduledDate).toLocaleDateString()}</td>
                         <td className="px-4 py-2.5 text-xs font-medium text-slate-600">{a.type}</td>
                         <td className="px-4 py-2.5">
-                          {taskStatus ? (
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskColors[taskStatus] || "bg-slate-100 text-slate-600"}`}>
-                              {taskStatus.replace(/_/g, " ")}
-                            </span>
-                          ) : (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{a.status}</span>
-                          )}
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskColors[a.workStatus] || "bg-slate-100 text-slate-600"}`}>
+                            {a.workStatus || a.status}
+                          </span>
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1">
@@ -338,12 +332,12 @@ export default function Dashboard() {
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       qc.invalidateQueries({ queryKey: ["dashboard-activity"] });
     };
-    socket.on("task:completed", refresh); socket.on("task:approved", refresh); socket.on("task:postponed", refresh);
     socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh); socket.on("appointment:status", refresh);
+    socket.on("appointment:completed", refresh); socket.on("appointment:postponed", refresh);
     socket.on("customer:created", refresh); socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
     return () => {
-      socket.off("task:completed", refresh); socket.off("task:approved", refresh); socket.off("task:postponed", refresh);
       socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh); socket.off("appointment:status", refresh);
+      socket.off("appointment:completed", refresh); socket.off("appointment:postponed", refresh);
       socket.off("customer:created", refresh); socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
     };
   }, [socket, qc]);
@@ -360,13 +354,13 @@ export default function Dashboard() {
 
   const statusColor: Record<string, string> = {
     COMPLETED: "text-green-600 bg-green-50", IN_PROGRESS: "text-blue-600 bg-blue-50",
-    POSTPONED: "text-orange-600 bg-orange-50", PENDING_APPROVAL: "text-yellow-600 bg-yellow-50",
-    APPROVED: "text-purple-600 bg-purple-50", NO_TASK: "text-slate-400 bg-slate-50"
+    POSTPONED: "text-orange-600 bg-orange-50", WAITING: "text-yellow-600 bg-yellow-50",
+    NO_APPOINTMENT: "text-slate-400 bg-slate-50"
   };
   const statusLabel: Record<string, string> = {
     COMPLETED: t("tasks.completed"), IN_PROGRESS: t("tasks.inProgress"),
-    POSTPONED: t("tasks.postponed"), PENDING_APPROVAL: t("tasks.pendingApproval"),
-    APPROVED: t("tasks.approved"), NO_TASK: "—"
+    POSTPONED: t("tasks.postponed"), WAITING: t("tasks.waiting") || "Waiting",
+    NO_APPOINTMENT: "—"
   };
 
   const cards = [

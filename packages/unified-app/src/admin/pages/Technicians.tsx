@@ -132,26 +132,26 @@ export default function Technicians() {
                   <div className="flex gap-2">
                     <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "اسم العميل" : "Customer"}:</span>
                     <span className="font-semibold text-slate-800 text-sm">
-                      {taskDetail.task.appointment?.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit")}
+                      {taskDetail.task.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit")}
                     </span>
                   </div>
-                  {taskDetail.task.appointment?.customer?.phone && (
+                  {taskDetail.task.customer?.phone && (
                     <div className="flex gap-2">
                       <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "رقم الجوال" : "Phone"}:</span>
-                      <span className="text-slate-700 text-xs">{taskDetail.task.appointment.customer.phone}</span>
+                      <span className="text-slate-700 text-xs">{taskDetail.task.customer.phone}</span>
                     </div>
                   )}
                   <div className="flex gap-2">
                     <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "نوع الخدمة" : "Service Type"}:</span>
                     <span className="text-slate-700 text-xs">
-                      {APPT_TYPE_LABELS[taskDetail.task.appointment?.type || ''] || "—"}
+                      {APPT_TYPE_LABELS[taskDetail.task.type || ''] || "—"}
                     </span>
                   </div>
-                  {taskDetail.task.appointment?.scheduledDate && (
+                  {taskDetail.task.scheduledDate && (
                     <div className="flex gap-2">
                       <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الموعد" : "Appointment Date"}:</span>
                       <span className="text-slate-700 text-xs">
-                        {new Date(taskDetail.task.appointment.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}
+                        {new Date(taskDetail.task.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}
                       </span>
                     </div>
                   )}
@@ -186,13 +186,13 @@ export default function Technicians() {
                       <span className="text-slate-700 text-xs break-words">{taskDetail.task.serviceDetails}</span>
                     </div>
                   )}
-                  {taskDetail.task.notes && (
+                  {taskDetail.task.workNotes && (
                     <div className="flex gap-2">
                       <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "ملاحظات الإتمام" : "Completion Notes"}:</span>
-                      <span className="text-slate-700 text-xs break-words">{taskDetail.task.notes}</span>
+                      <span className="text-slate-700 text-xs break-words">{taskDetail.task.workNotes}</span>
                     </div>
                   )}
-                  {!taskDetail.task.serviceDetails && !taskDetail.task.notes && (
+                  {!taskDetail.task.serviceDetails && !taskDetail.task.workNotes && (
                     <p className="text-xs text-slate-400 italic">{isAr ? "لا توجد تفاصيل مُدخلة" : "No details provided"}</p>
                   )}
                 </div>
@@ -343,14 +343,14 @@ export default function Technicians() {
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <p className="font-medium text-sm">
-                        {task.appointment?.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit")}
+                        {task.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit")}
                       </p>
-                      <p className="text-xs text-slate-400">{task.appointment?.customer?.phone || "—"}</p>
+                      <p className="text-xs text-slate-400">{task.customer?.phone || "—"}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs text-slate-400">
-                        {task.appointment?.scheduledDate
-                          ? new Date(task.appointment.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)
+                        {task.scheduledDate
+                          ? new Date(task.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)
                           : "—"}
                       </span>
                       {modal.type === "completed" && (
@@ -362,10 +362,10 @@ export default function Technicians() {
                   </div>
                   {modal.type === "completed" ? (
                     <div className="space-y-1">
-                      {task.appointment?.type && (
+                      {task.type && (
                         <div className="flex gap-2 text-xs">
                           <span className="text-slate-400 min-w-[90px] shrink-0">{isAr ? "نوع الخدمة" : "Service type"}:</span>
-                          <span className="text-slate-600">{APPT_TYPE_LABELS[task.appointment.type] || task.appointment.type}</span>
+                          <span className="text-slate-600">{APPT_TYPE_LABELS[task.type] || task.type}</span>
                         </div>
                       )}
                       {task.completedAt && (
@@ -386,7 +386,7 @@ export default function Technicians() {
                           label={isAr ? "الموعد الجديد" : "New date"}
                           value={new Date(task.postponements[0].newDate).toLocaleDateString(isAr ? "ar-SA" : undefined)} />
                       )}
-                      <DetailRow label={isAr ? "ملاحظات الفني" : "Technician notes"} value={task.notes} />
+                      <DetailRow label={isAr ? "ملاحظات الفني" : "Technician notes"} value={task.workNotes} />
                     </div>
                   )}
                 </div>
