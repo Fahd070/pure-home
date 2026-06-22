@@ -50,7 +50,7 @@ export default function AdminLayout() {
   const { pathname } = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { settings } = useSettingsStore();
-  const headerColor = settings.primaryColor || "#000080";
+  const headerColor = settings.primaryColor || "#0A0A2E";
 
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
