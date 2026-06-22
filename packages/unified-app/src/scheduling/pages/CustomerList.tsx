@@ -127,23 +127,22 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
   const upcoming = appointments
     .filter((a: any) => a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING")
     .sort((a: any, b: any) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
-  const completed = appointments.filter((a: any) => a.task?.status === "COMPLETED");
+  const completed = appointments.filter((a: any) => a.workStatus === "COMPLETED");
   const nextMaint = upcoming[0];
   const lastMaint = completed[0];
 
   function apptStatusKey(a: any) {
     if (a.status === "CANCELLED") return "appointments.cancelled";
-    if (a.task?.status === "COMPLETED") return "tasks.completed";
-    if (a.task?.status === "IN_PROGRESS") return "tasks.inProgress";
-    if (a.task?.status === "POSTPONED") return "tasks.postponed";
+    if (a.workStatus === "COMPLETED") return "tasks.completed";
+    if (a.workStatus === "IN_PROGRESS") return "tasks.inProgress";
+    if (a.workStatus === "POSTPONED") return "tasks.postponed";
     if (a.status === "SCHEDULED") return "appointments.scheduled";
     if (a.status === "RESCHEDULED") return "appointments.rescheduled";
     return "appointments.pending";
   }
 
   function apptStatusColor(a: any) {
-    const key = apptStatusKey(a).split(".")[1].toUpperCase();
-    return STATUS_COLORS[a.task?.status || a.status] || "bg-slate-100 text-slate-600";
+    return STATUS_COLORS[a.workStatus || a.status] || "bg-slate-100 text-slate-600";
   }
 
   return (
@@ -205,7 +204,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
                         {t(apptStatusKey(a))}
                       </span>
                     </td>
-                    <td className="px-3 py-2">{a.task?.technician?.name || "—"}</td>
+                    <td className="px-3 py-2">{a.technician?.name || "—"}</td>
                     <td className="px-3 py-2">
                       {(a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING") && (
                         <button onClick={() => cancelAppt.mutate(a.id)} disabled={cancelAppt.isPending}
