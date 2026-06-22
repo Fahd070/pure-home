@@ -170,7 +170,7 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
         return res.status(403).json({ success: false, message: 'Forbidden' });
       }
     }
-    if (before.status !== 'APPROVED') {
+    if (before.status !== 'APPROVED' && before.status !== 'PENDING_APPROVAL') {
       return res.status(409).json({ success: false, message: 'Task must be APPROVED before it can be started' });
     }
 

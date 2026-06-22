@@ -127,8 +127,8 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
       return res.status(400).json({ success: false, message: 'customerId is required for non-urgent appointments' });
     }
 
-    // Admin-created appointments are always auto-approved — no manual approval step required
-    const taskStatus = isAdmin ? 'APPROVED' : 'PENDING_APPROVAL';
+    // All appointments create tasks as APPROVED immediately — no manual approval step required
+    const taskStatus = 'APPROVED';
     const appt = await prisma.appointment.create({
       data: {
         customerId: body.customerId || null,

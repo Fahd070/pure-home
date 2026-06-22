@@ -67,8 +67,6 @@ export default function Tasks() {
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
   const socket = useSocket();
-  const [selectedTask, setSelectedTask] = useState<any>(null);
-  const [techId, setTechId] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [imageViewer, setImageViewer] = useState<string | null>(null);
 
@@ -95,16 +93,10 @@ export default function Tasks() {
   }, [socket, qc]);
 
   const { data } = useQuery({ queryKey: ["tasks"], queryFn: () => api.get("/tasks").then(r => r.data.data) });
-  const { data: techs } = useQuery({ queryKey: ["technicians"], queryFn: () => api.get("/technicians").then(r => r.data.data) });
 
   const [postponeModal, setPostponeModal] = useState<{ task: any } | null>(null);
   const [postponeReason, setPostponeReason] = useState("");
   const [postponeDate, setPostponeDate] = useState("");
-
-  const approve = useMutation({
-    mutationFn: ({ id, technicianId }: { id: string; technicianId: string }) => api.patch(`/tasks/${id}/approve`, { technicianId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); toast.success(t("common.success")); setSelectedTask(null); setTechId(""); }
-  });
 
   const startTask = useMutation({
     mutationFn: (id: string) => api.patch(`/tasks/${id}/start`),
@@ -147,9 +139,8 @@ export default function Tasks() {
     IN_PROGRESS: t("tasks.inProgress"), COMPLETED: t("tasks.completed"), POSTPONED: t("tasks.postponed"),
   };
 
-  const pending = (data || []).filter((tk: any) => tk.status === "PENDING_APPROVAL");
-  const others = (data || []).filter((tk: any) => tk.status !== "PENDING_APPROVAL");
-  const activeCount = (data || []).filter((tk: any) => tk.status !== "COMPLETED").length;
+  const allTasks = data || [];
+  const activeCount = allTasks.filter((tk: any) => tk.status !== "COMPLETED").length;
 
   return (
     <div className="space-y-4">
@@ -181,26 +172,6 @@ export default function Tasks() {
         </div>
       )}
 
-      {pending.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-          <h3 className="font-semibold text-yellow-800 mb-3">{t("tasks.pendingApproval")} ({pending.length})</h3>
-          <div className="space-y-2">
-            {pending.map((task: any) => (
-              <div key={task.id} className="bg-white rounded-lg p-3 flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-sm">{task.appointment?.customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</p>
-                  <p className="text-xs text-slate-400">{new Date(task.appointment?.scheduledDate).toLocaleDateString()} — {task.appointment?.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</p>
-                </div>
-                <button onClick={() => { setSelectedTask(task); setTechId(techs?.[0]?.id || ""); }}
-                  className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700">
-                  {t("tasks.approve")}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[480px]">
@@ -213,7 +184,7 @@ export default function Tasks() {
               </tr>
             </thead>
             <tbody>
-              {others.map((task: any) => {
+              {allTasks.map((task: any) => {
                 const isExpanded = expandedId === task.id;
                 const customer = task.appointment?.customer;
                 const postponement = task.postponements?.[0];
@@ -299,28 +270,6 @@ export default function Tasks() {
           </table>
         </div>
       </div>
-
-      {selectedTask && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold mb-4">{t("tasks.approve")}</h3>
-            <p className="text-sm text-slate-600 mb-3">{selectedTask.appointment?.customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">{t("tasks.selectTechnician")}</label>
-              <select value={techId} onChange={e => setTechId(e.target.value)} className="w-full border rounded-lg px-3 py-2">
-                {(techs || []).map((tk: any) => <option key={tk.id} value={tk.id}>{tk.name}</option>)}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => approve.mutate({ id: selectedTask.id, technicianId: techId })} disabled={!techId || approve.isPending}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-                {approve.isPending ? t("common.loading") : t("common.save")}
-              </button>
-              <button onClick={() => setSelectedTask(null)} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {postponeModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
