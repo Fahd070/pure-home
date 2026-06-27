@@ -1,4 +1,5 @@
 <div align="center">
+<img src="packages/unified-app/assets/icon.png" width="110" alt="Golden Pizza Logo" />
 
 # Pure Home
 
