@@ -47,3 +47,7 @@ config/local.*
 
 # Vercel deployment metadata — NEVER commit
 .vercel/
+
+# Customer import script output — contains real customer names/PII, never commit
+import_report.json
+__pycache__/
