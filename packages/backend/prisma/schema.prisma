@@ -115,7 +115,11 @@ model Appointment {
   startedAt           DateTime?
   completedAt         DateTime?
   customerId          String?
-  customer            Customer?         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // Recorded decision: SET NULL (not Cascade) so appointment history survives a
+  // customer deletion. Production's raw-SQL startup helper had been silently
+  // re-asserting CASCADE on every boot -- confirmed via read-only metadata query
+  // before this change (see migration 20260627000000_appointments_customer_fk_set_null).
+  customer            Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   createdById         String?
   createdBy           User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
   postponements       PostponementRecord[]
