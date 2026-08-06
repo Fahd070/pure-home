@@ -1,21 +1,18 @@
-name: Backend Tests
+name: Production Validation
 
+# No path filters: this is the required status check gating merges to main (see
+# docs/CI-DEPLOYMENT-GATE.md), so it must run on every PR targeting main and every
+# push to main -- a path-filtered required check that sometimes doesn't run at all
+# leaves affected PRs permanently stuck as "waiting for status" in GitHub's UI.
 on:
   pull_request:
-    paths:
-      - 'packages/backend/**'
-      - 'package.json'
-      - 'package-lock.json'
+    branches: [main]
   push:
     branches: [main]
-    paths:
-      - 'packages/backend/**'
-      - 'package.json'
-      - 'package-lock.json'
 
 jobs:
-  test:
-    name: Regression suite (disposable Postgres)
+  validate:
+    name: Production Validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -56,14 +53,21 @@ jobs:
         working-directory: packages/backend
         run: npx prisma generate --schema=prisma/schema.prisma
 
-      - name: Typecheck
+      - name: Prisma migrate deploy (disposable test database)
+        working-directory: packages/backend
+        run: npx prisma migrate deploy --schema=prisma/schema.prisma
+
+      - name: Backend typecheck
         working-directory: packages/backend
         run: npx tsc --noEmit
 
-      - name: Build
+      - name: Backend production build
         working-directory: packages/backend
         run: npm run build
 
-      - name: Run regression suite
+      - name: Backend regression suite
         working-directory: packages/backend
         run: npm test
+
+      - name: Web production build
+        run: npm run build:web
