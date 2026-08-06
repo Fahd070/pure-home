@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToAll } from '../socket';
-import { SOCKET_EVENTS } from '../constants';
+import { emitToRoles } from '../socket';
+import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 
 const router = Router();
 router.use(authenticate);
@@ -264,9 +264,9 @@ router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, re
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     const apptIds = customer.appointments.map((a: any) => a.id);
     await prisma.customer.delete({ where: { id: req.params.id } });
-    emitToAll(SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
     if (apptIds.length > 0) {
-      emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
+      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
     }
     res.json({ success: true });
   } catch (e) { next(e); }
@@ -277,7 +277,7 @@ router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest,
     const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
     await prisma.appointment.delete({ where: { id: req.params.id } });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: [req.params.id] });
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: [req.params.id] });
     res.json({ success: true });
   } catch (e) { next(e); }
 });
@@ -296,7 +296,8 @@ router.put('/appointment/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: A
       },
       include: { customer: { include: { address: true } }, urgentVisitRecord: true },
     });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    // No technician subscriber for this event name -- confirmed via frontend audit.
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });

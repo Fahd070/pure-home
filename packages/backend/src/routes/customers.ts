@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToAll, emitToRole } from '../socket';
+import { emitToRole, emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
@@ -196,9 +196,10 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
       before: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: req.params.id, userId: req.user!.userId, payload: { id: req.params.id, name: customer.name } });
-    emitToAll(SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
+    // Non-sensitive (id only); all three roles' UIs subscribe to refresh on this.
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
     if (apptIds.length > 0) {
-      emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
+      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
     }
     res.json({ success: true });
   } catch (e) { next(e); }
@@ -226,9 +227,9 @@ router.delete('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => 
       userId: req.user!.userId,
       payload: { bulk: true, count: result.count, ids: customers.map(c => c.id) },
     });
-    emitToAll(SOCKET_EVENTS.CUSTOMERS_BULK_DELETED, { count: result.count });
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMERS_BULK_DELETED, { count: result.count });
     if (apptIds.length > 0) {
-      emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, bulk: true });
+      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, bulk: true });
     }
     res.json({ success: true, data: { count: result.count } });
   } catch (e) { next(e); }

@@ -3,8 +3,14 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToAll } from '../socket';
+import { emitToRoles } from '../socket';
+import { SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
+
+// Call reports contain customer name/phone/notes -- no technician UI subscribes to
+// these events, matching the permission baseline ("must not receive full customer
+// lists"/private customer data).
+const CALL_REPORT_ROOMS = [SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING];
 
 const router = Router();
 router.use(authenticate);
@@ -98,7 +104,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
       after: { id, customerId: body.customerId, employeeName: body.employeeName, callDate: body.callDate },
     });
 
-    emitToAll('call_report:new', report);
+    emitToRoles(CALL_REPORT_ROOMS, 'call_report:new', report);
     res.status(201).json({ success: true, data: report });
   } catch (e) { next(e); }
 });
@@ -108,7 +114,7 @@ router.delete('/bulk', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReque
     const { ids } = req.body as { ids?: string[] };
     if (Array.isArray(ids) && ids.length > 0) {
       await prisma.callReport.deleteMany({ where: { id: { in: ids } } });
-      emitToAll('call_report:deleted', { ids });
+      emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { ids });
     }
     res.json({ success: true });
   } catch (e) { next(e); }
@@ -117,7 +123,7 @@ router.delete('/bulk', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReque
 router.delete('/all', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     await prisma.$executeRawUnsafe(`DELETE FROM "call_reports"`);
-    emitToAll('call_report:deleted', { all: true });
+    emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { all: true });
     res.json({ success: true });
   } catch (e) { next(e); }
 });
@@ -129,7 +135,7 @@ router.delete('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
     );
     if (!rows.length) return res.status(404).json({ success: false, message: 'Not found' });
     await prisma.$executeRawUnsafe(`DELETE FROM "call_reports" WHERE id = $1`, req.params.id);
-    emitToAll('call_report:deleted', { ids: [req.params.id] });
+    emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { ids: [req.params.id] });
     res.json({ success: true });
   } catch (e) { next(e); }
 });

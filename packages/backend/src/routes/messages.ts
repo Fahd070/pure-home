@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToAll } from '../socket';
-import { SOCKET_EVENTS } from '../constants';
+import { emitToRoles } from '../socket';
+import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 
 const router = Router();
 router.use(authenticate);
@@ -35,7 +35,7 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
 router.delete('/:id', requireRole('ADMIN'), async (req, res, next) => {
   try {
     await prisma.auditLog.delete({ where: { id: req.params.id } });
-    emitToAll(SOCKET_EVENTS.AUDIT_DELETED, { id: req.params.id });
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.AUDIT_DELETED, { id: req.params.id });
     res.json({ success: true });
   } catch (e) { next(e); }
 });
@@ -43,7 +43,7 @@ router.delete('/:id', requireRole('ADMIN'), async (req, res, next) => {
 router.delete('/', requireRole('ADMIN'), async (req, res, next) => {
   try {
     await prisma.auditLog.deleteMany({});
-    emitToAll(SOCKET_EVENTS.AUDIT_DELETED, { all: true });
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.AUDIT_DELETED, { all: true });
     res.json({ success: true });
   } catch (e) { next(e); }
 });

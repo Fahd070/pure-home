@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToRole, emitToAll } from '../socket';
+import { emitToRole } from '../socket';
 import { SOCKET_ROOMS, SOCKET_EVENTS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 

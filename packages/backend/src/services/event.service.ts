@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../prisma';
-import { emitToAll } from '../socket';
 
 export const EVENT_TYPES = {
   APPOINTMENT_STARTED:  'APPOINTMENT_STARTED',
@@ -29,6 +28,11 @@ export interface EventOptions {
 }
 
 export async function emitEvent(opts: EventOptions) {
+  // Persists to the event_logs audit trail only. No socket broadcast here: this
+  // generic 'event' channel had no frontend subscribers (verified across the app) and
+  // was broadcasting full, unfiltered payloads -- including customer/appointment PII --
+  // to every connected socket regardless of role. The role-scoped, per-feature socket
+  // events (emitted separately by each route) are what the UI actually listens to.
   const event = await prisma.eventLog.create({
     data: {
       eventType: opts.type,
@@ -37,14 +41,6 @@ export async function emitEvent(opts: EventOptions) {
       userId: opts.userId,
       payload: opts.payload as Prisma.InputJsonValue,
     },
-  });
-  emitToAll('event', {
-    id: event.id,
-    type: opts.type,
-    entityType: opts.entityType,
-    entityId: opts.entityId,
-    payload: opts.payload,
-    timestamp: event.createdAt.toISOString(),
   });
   return event;
 }

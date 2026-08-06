@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToAll } from '../socket';
+import { emitToRole } from '../socket';
 import { SOCKET_EVENTS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
@@ -80,7 +80,8 @@ router.put('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, 
       payload: { dept: body.dept },
     });
 
-    emitToAll(SOCKET_EVENTS.CONFIG_UPDATED, { type: 'access-codes', updatedDepts: [body.dept] });
+    // Admin-only configuration event -- only the Access Codes admin page subscribes.
+    emitToRole('ADMIN', SOCKET_EVENTS.CONFIG_UPDATED, { type: 'access-codes', updatedDepts: [body.dept] });
 
     res.json({ success: true, data: { dept: body.dept } });
   } catch (e) {

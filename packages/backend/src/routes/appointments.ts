@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToAll, emitToRole } from '../socket';
+import { emitToRole, emitToRoles, emitToTechnician } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
@@ -39,6 +39,22 @@ function apptFields(a: any) {
     visibleToScheduling: a.visibleToScheduling, createdByRole: a.createdByRole,
     technicianId: a.technicianId, workStatus: a.workStatus,
   };
+}
+
+// Routes an appointment:created event exactly the way GET /appointments already filters
+// visibility: SCHEDULING never sees urgent or scheduling-hidden appointments; a technician
+// only sees their own assignment or the shared unassigned pool (never another technician's
+// pre-assigned job).
+function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToScheduling: boolean) {
+  emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+  if (!isUrgent && visibleToScheduling) {
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+  }
+  if (appt.technicianId) {
+    emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+  } else {
+    emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+  }
 }
 
 const WORK_INCLUDE = {
@@ -182,12 +198,7 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
       after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_CREATED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
-    if (isUrgent && !visibleToScheduling) {
-      emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-    } else {
-      emitToAll(SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-    }
+    broadcastAppointmentCreated(appt, isUrgent, visibleToScheduling);
     res.status(201).json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -221,7 +232,8 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       labelAr: `تم تحديث موعد العميل '${custNameUpdAr}'`,
       after: apptFields(updated),
     });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
+    // No technician subscriber for this event name -- confirmed via frontend audit.
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }
 });
@@ -235,7 +247,7 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
       data: { visibleToScheduling: true, adminApproved: true, version: { increment: 1 } },
       include: { customer: { include: { address: true } }, technician: true },
     });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, updated);
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }
@@ -278,7 +290,7 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
     });
     const eventType = status === 'CANCELLED' ? EVENT_TYPES.APPOINTMENT_UPDATED : EVENT_TYPES.SCHEDULE_CHANGED;
     await emitEvent({ type: eventType, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -324,7 +336,9 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
       before: apptFields(before), after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_STARTED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_STARTED, appt);
+    // Only the owning technician's job -- other technicians must not see it start.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STARTED, appt);
+    if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_STARTED, appt);
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -389,7 +403,9 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     const sanitized = { ...appt, completionAmount: undefined, completionPaymentMethod: undefined };
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_COMPLETED, appt);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
-    emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
+    // Only the owning technician -- was previously routed to the whole TECHNICIAN role,
+    // meaning every other technician received it too.
+    if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -439,7 +455,11 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       before: apptFields(before), after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_POSTPONED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_POSTPONED, appt);
+    const postponedSanitized = { ...appt, completionAmount: undefined, completionPaymentMethod: undefined };
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_POSTPONED, appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
+    // Only the owning technician -- other technicians have no reason to see this job.
+    if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -460,7 +480,8 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
       labelAr: `تم حذف موعد العميل '${custNameAr}' بواسطة الإدارة`,
       before: apptFields(appt),
     });
-    emitToAll(SOCKET_EVENTS.APPOINTMENT_DELETED, { id: req.params.id });
+    // Non-sensitive (id only); all three roles' UIs subscribe to this event to refresh.
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { id: req.params.id });
     res.json({ success: true });
   } catch (e) { next(e); }
 });
