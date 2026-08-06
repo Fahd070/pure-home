@@ -207,6 +207,30 @@ model SystemConfig {
   @@map("system_configs")
 }
 
+// No @relation to User: the underlying table (created by ensureUserSettingsTable() in
+// index.ts, historically unmanaged by Prisma) has never had a foreign key on userId,
+// only a unique index -- preserved as-is here rather than introducing a new constraint.
+model UserSettings {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  theme                String   @default("light")
+  fontSize             String   @default("medium")
+  interfaceScale       String   @default("normal")
+  background           String   @default("day")
+  highContrast         Boolean  @default(false)
+  improvedReadability  Boolean  @default(false)
+  notificationsEnabled Boolean  @default(true)
+  soundEnabled         Boolean  @default(true)
+  soundVolume          Int      @default(70)
+  primaryColor         String?
+  secondaryColor       String?
+  buttonColor          String?
+  cardColor            String?
+  updatedAt            DateTime @default(now())
+  createdAt            DateTime @default(now())
+  @@map("user_settings")
+}
+
 model CallReport {
   id           String   @id @default(uuid())
   customerId   String?
