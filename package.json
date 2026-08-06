@@ -15,7 +15,8 @@
     "build:all": "npm run build:backend && npm run build:web",
     "db:generate": "npm run db:generate --workspace=packages/backend",
     "db:migrate": "npm run db:migrate --workspace=packages/backend",
-    "db:seed": "npm run db:seed --workspace=packages/backend"
+    "db:seed": "npm run db:seed --workspace=packages/backend",
+    "test:backend": "npm run test --workspace=packages/backend"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
