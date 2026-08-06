@@ -48,7 +48,7 @@ describe('Customer core flow', () => {
     expect(res.body.data.address.city).toBe('Riyadh');
   });
 
-  it('updates the customer and increments its version', async () => {
+  it('updates the customer with the current version: succeeds and increments version', async () => {
     const id = createdCustomerIds[0];
     const res = await request(ts.baseUrl)
       .put(`/api/customers/${id}`)
@@ -59,25 +59,38 @@ describe('Customer core flow', () => {
     expect(res.body.data.version).toBe(2);
   });
 
-  // KNOWN PRE-EXISTING DEFECT (discovered by this suite, not fixed -- out of this
-  // task's scope, which is test infrastructure only): `customerSchema` in
-  // src/routes/customers.ts never declares a `version` field, so
-  // `customerSchema.partial().parse(req.body)` silently strips `version` from the
-  // request body before the `before.version !== version` conflict check ever runs.
-  // The check is therefore dead code -- PUT /api/customers/:id never returns 409,
-  // regardless of a stale version being submitted. Reproduced directly above: the
-  // "stale" update below returns 200, not 409. Skipped rather than asserting a
-  // business rule the current code does not actually enforce; see the Issue #5
-  // final report ("existing application defects discovered but deliberately not
-  // fixed") for this exact finding.
-  it.skip('rejects a stale-version update with a 409 conflict (BLOCKED: version check is dead code, see comment above)', async () => {
+  // Regression test for a previously-confirmed defect: customerSchema.partial() did
+  // not declare `version`, so Zod silently stripped it before the conflict check ran,
+  // making PUT /api/customers/:id never return 409 regardless of a stale version.
+  // Fixed via customerUpdateSchema (src/routes/customers.ts) which explicitly includes
+  // `version` for the update path only. This test proves the conflict check is now live.
+  it('rejects a stale-version update with a 409 conflict, and does not overwrite the customer', async () => {
     const id = createdCustomerIds[0];
+    // Current version is 2 (from the previous test); resubmitting the old version (1)
+    // must be rejected rather than silently applied.
     const res = await request(ts.baseUrl)
       .put(`/api/customers/${id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Stale Update', version: 1 });
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('CONFLICT');
+    expect(res.body.currentVersion).toBe(2);
+    expect(res.body.yourVersion).toBe(1);
+
+    const readBack = await request(ts.baseUrl).get(`/api/customers/${id}`).set('Authorization', `Bearer ${adminToken}`);
+    expect(readBack.body.data.name).toBe('Updated Name');
+    expect(readBack.body.data.version).toBe(2);
+  });
+
+  it('a representative update with no version field still succeeds unconditionally (unchanged, opt-in behavior)', async () => {
+    const id = createdCustomerIds[0];
+    const res = await request(ts.baseUrl)
+      .put(`/api/customers/${id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ notes: 'Updated without a version field' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.notes).toBe('Updated without a version field');
+    expect(res.body.data.version).toBe(3);
   });
 
   it('rejects invalid input (malformed phone number)', async () => {

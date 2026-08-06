@@ -23,6 +23,12 @@ const customerSchema = z.object({
   installationDate: z.string().optional(),
   address: addressSchema,
 });
+// PUT-only: adds the optimistic-concurrency `version` field on top of the partial
+// create schema. Kept separate from customerSchema so POST /api/customers is
+// unaffected -- version is never a create-time input.
+const customerUpdateSchema = customerSchema.partial().extend({
+  version: z.number().int().optional(),
+});
 
 function conflict(res: any, current: number, yours: number) {
   return res.status(409).json({
@@ -127,7 +133,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
 
 router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const body = customerSchema.partial().parse(req.body);
+    const body = customerUpdateSchema.parse(req.body);
     const { address, version, installationDate, ...rest } = body as any;
 
     const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
