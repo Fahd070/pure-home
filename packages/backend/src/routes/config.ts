@@ -7,36 +7,13 @@ import { emitToAll } from '../socket';
 import { SOCKET_EVENTS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
+import { resolveAccessCode, ACCESS_CODE_DB_KEYS, type Dept } from '../services/accessCode.service';
 
 const router = Router();
 router.use(authenticate);
 
-const CODE_KEYS = {
-  admin:      'ACCESS_CODE_ADMIN',
-  scheduling: 'ACCESS_CODE_SCHEDULING',
-  technician: 'ACCESS_CODE_TECHNICIAN',
-} as const;
-
-type Dept = keyof typeof CODE_KEYS;
-
-function envFallback(dept: Dept): string {
-  if (dept === 'admin')      return process.env.ADMIN_CODE      || '9012';
-  if (dept === 'scheduling') return process.env.SCHEDULING_CODE || '9013';
-  return                            process.env.TECHNICIAN_CODE  || '9014';
-}
-
-async function getStoredCode(dept: Dept): Promise<string> {
-  try {
-    const key = CODE_KEYS[dept];
-    const record = await prisma.systemConfig.findUnique({ where: { key } });
-    return record?.value || envFallback(dept);
-  } catch {
-    return envFallback(dept);
-  }
-}
-
 async function upsertCode(dept: Dept, newCode: string, userId: string): Promise<void> {
-  const key = CODE_KEYS[dept];
+  const key = ACCESS_CODE_DB_KEYS[dept];
   const now = new Date();
   const id = randomUUID();
   await prisma.$executeRaw`
@@ -49,11 +26,18 @@ async function upsertCode(dept: Dept, newCode: string, userId: string): Promise<
 router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
     const [admin, scheduling, technician] = await Promise.all([
-      getStoredCode('admin'),
-      getStoredCode('scheduling'),
-      getStoredCode('technician'),
+      resolveAccessCode('admin'),
+      resolveAccessCode('scheduling'),
+      resolveAccessCode('technician'),
     ]);
-    res.json({ success: true, data: { admin, scheduling, technician } });
+    res.json({
+      success: true,
+      data: {
+        admin: admin ?? null,
+        scheduling: scheduling ?? null,
+        technician: technician ?? null,
+      },
+    });
   } catch (e) { next(e); }
 });
 
@@ -70,7 +54,11 @@ router.put('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, 
       return res.status(400).json({ success: false, error: 'MISMATCH', message: 'New code and confirmation do not match' });
     }
 
-    const stored = await getStoredCode(body.dept);
+    const stored = await resolveAccessCode(body.dept);
+
+    if (!stored) {
+      return res.status(503).json({ success: false, error: 'NOT_CONFIGURED', message: 'No access code is currently configured for this department.' });
+    }
 
     if (body.currentCode !== stored) {
       return res.status(400).json({ success: false, error: 'WRONG_CURRENT', message: 'Current code is incorrect' });

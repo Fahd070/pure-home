@@ -3,6 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../prisma';
+import { resolveAccessCode, type Dept } from '../services/accessCode.service';
 
 const router = Router();
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
@@ -14,27 +15,6 @@ const codeLoginSchema = z.object({
 const DEPT_ROLE: Record<string, string> = {
   admin: 'ADMIN', scheduling: 'SCHEDULING', technician: 'TECHNICIAN',
 };
-
-async function getAccessCodes(): Promise<{ admin: string; scheduling: string; technician: string }> {
-  try {
-    const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['ACCESS_CODE_ADMIN', 'ACCESS_CODE_SCHEDULING', 'ACCESS_CODE_TECHNICIAN'] } }
-    });
-    const m: Record<string, string> = {};
-    for (const c of configs) m[c.key] = c.value;
-    return {
-      admin:      m['ACCESS_CODE_ADMIN']      || process.env.ADMIN_CODE      || '9012',
-      scheduling: m['ACCESS_CODE_SCHEDULING'] || process.env.SCHEDULING_CODE || '9013',
-      technician: m['ACCESS_CODE_TECHNICIAN'] || process.env.TECHNICIAN_CODE || '9014',
-    };
-  } catch {
-    return {
-      admin:      process.env.ADMIN_CODE      || '9012',
-      scheduling: process.env.SCHEDULING_CODE || '9013',
-      technician: process.env.TECHNICIAN_CODE || '9014',
-    };
-  }
-}
 
 router.post('/login', async (req, res, next) => {
   try {
@@ -52,19 +32,20 @@ router.post('/code-login', async (req, res, next) => {
   try {
     const { code, dept } = codeLoginSchema.parse(req.body);
 
-    const codes = await getAccessCodes();
-    const codeMap: Record<string, string> = {
-      [codes.admin]:      'ADMIN',
-      [codes.scheduling]: 'SCHEDULING',
-      [codes.technician]: 'TECHNICIAN',
-    };
+    const expectedCode = await resolveAccessCode(dept as Dept);
 
-    const codeRole = codeMap[code];
-    const expectedRole = DEPT_ROLE[dept];
+    if (!expectedCode) {
+      return res.status(503).json({
+        success: false,
+        error: 'NOT_CONFIGURED',
+        message: 'This department has no access code configured. Contact an administrator.',
+      });
+    }
 
-    if (!codeRole || codeRole !== expectedRole) {
+    if (code !== expectedCode) {
       return res.status(401).json({ success: false, message: 'Invalid code' });
     }
+    const codeRole = DEPT_ROLE[dept];
 
     const where: any = { role: codeRole as any };
     if (codeRole === 'TECHNICIAN') where.email = process.env.TECHNICIAN_EMAIL || 'tech1@wfm.local';
