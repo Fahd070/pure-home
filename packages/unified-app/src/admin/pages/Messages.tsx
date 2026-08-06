@@ -29,34 +29,44 @@ export default function Messages() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["activity-feed"],
-    queryFn: () => api.get("/messages").then(r => r.data.data)
+    queryFn: () => api.get("/messages").then(r => r.data)
   });
+  const activity: any[] = data?.data || [];
+  const activityTotal: number = data?.meta?.total ?? activity.length;
 
   const deleteOne = useMutation({
     mutationFn: (id: string) => api.delete("/messages/" + id),
     onSuccess: (_, id) => {
-      qc.setQueryData(["activity-feed"], (old: any[]) => (old || []).filter((item: any) => item.id !== id));
+      qc.setQueryData(["activity-feed"], (old: any) => ({ ...old, data: (old?.data || []).filter((item: any) => item.id !== id) }));
       toast.success(t("messages.deleted"));
     }
   });
 
   const deleteAllMut = useMutation({
-    mutationFn: () => api.delete("/messages"),
+    mutationFn: () => api.delete("/messages", { data: { confirm: true, expectedCount: activityTotal } }),
     onSuccess: () => {
-      qc.setQueryData(["activity-feed"], []);
+      qc.setQueryData(["activity-feed"], { data: [], meta: { total: 0 } });
       setConfirmDeleteAll(false);
       toast.success(t("messages.deletedAll"));
+    },
+    onError: (err: any) => {
+      if (err?.response?.status === 409) {
+        qc.invalidateQueries({ queryKey: ["activity-feed"] });
+        toast.error(t("messages.countChanged"));
+      } else {
+        toast.error(t("common.error"));
+      }
     }
   });
 
   useEffect(() => {
     if (!socket) return;
     socket.on("audit:new", () => qc.invalidateQueries({ queryKey: ["activity-feed"] }));
-    socket.on("audit:deleted", (data: any) => {
-      if (data.all) {
-        qc.setQueryData(["activity-feed"], []);
+    socket.on("audit:deleted", (evt: any) => {
+      if (evt.all) {
+        qc.setQueryData(["activity-feed"], { data: [], meta: { total: 0 } });
       } else {
-        qc.setQueryData(["activity-feed"], (old: any[]) => (old || []).filter((item: any) => item.id !== data.id));
+        qc.setQueryData(["activity-feed"], (old: any) => ({ ...old, data: (old?.data || []).filter((item: any) => item.id !== evt.id) }));
       }
     });
     return () => { socket.off("audit:new"); socket.off("audit:deleted"); };
@@ -72,7 +82,7 @@ export default function Messages() {
         <h2 className="text-base font-semibold text-slate-700">{t("messages.systemActivityLog")}</h2>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-400">{t("messages.liveUpdates")}</span>
-          {(data || []).length > 0 && (
+          {activity.length > 0 && (
             <button onClick={() => setConfirmDeleteAll(true)}
               className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">
               {t("messages.deleteAll")}
@@ -83,7 +93,7 @@ export default function Messages() {
 
       {isLoading ? (
         <p className="text-center py-12 text-slate-400">{t("messages.loadingActivity")}</p>
-      ) : !data?.length ? (
+      ) : !activity.length ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center text-slate-400">
           <p className="text-3xl mb-2">📋</p>
           <p>{t("messages.noActivity")}</p>
@@ -91,7 +101,7 @@ export default function Messages() {
         </div>
       ) : (
         <div className="space-y-2">
-          {(data || []).map((log: any) => (
+          {activity.map((log: any) => (
             <div key={log.id} className="group bg-white rounded-xl shadow-sm p-4 flex items-start gap-3">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${ROLE_BG[log.user?.role] || "bg-slate-400"}`}>
                 {log.user?.name?.[0] || "?"}
@@ -125,7 +135,7 @@ export default function Messages() {
       {confirmDeleteAll && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl space-y-4">
-            <p className="font-semibold text-slate-800">{t("messages.deleteAllConfirm")}</p>
+            <p className="font-semibold text-slate-800">{t("messages.deleteAllConfirmCount", { count: activityTotal })}</p>
             <div className="flex gap-3">
               <button onClick={() => deleteAllMut.mutate()} disabled={deleteAllMut.isPending}
                 className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">

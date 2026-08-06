@@ -43,10 +43,12 @@ export default function CallReports() {
     queryFn: () => api.get("/customers", { params: { limit: 500 } }).then(r => r.data.data || []),
   });
 
-  const { data, isLoading } = useQuery({
+  const { data: reportsResp, isLoading } = useQuery({
     queryKey: ["call-reports"],
-    queryFn: () => api.get("/call-reports", { params: { limit: 200 } }).then(r => r.data.data || []),
+    queryFn: () => api.get("/call-reports", { params: { limit: 200 } }).then(r => r.data),
   });
+  const data: any[] = reportsResp?.data || [];
+  const reportsTotal: number = reportsResp?.meta?.total ?? data.length;
 
   const createMutation = useMutation({
     mutationFn: (body: any) => api.post("/call-reports", body),
@@ -64,9 +66,10 @@ export default function CallReports() {
   const deleteMutation = useMutation({
     mutationFn: ({ type, ids }: { type: ConfirmType; ids?: string[] }) => {
       if (type === "single" || type === "selected") {
-        return api.delete("/call-reports/bulk", { data: { ids } });
+        const uniqueIds = Array.from(new Set(ids || []));
+        return api.delete("/call-reports/bulk", { data: { confirm: true, ids: uniqueIds, expectedCount: uniqueIds.length } });
       }
-      return api.delete("/call-reports/all");
+      return api.delete("/call-reports/all", { data: { confirm: true, expectedCount: reportsTotal } });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["call-reports"] });
@@ -74,7 +77,15 @@ export default function CallReports() {
       setConfirm(null);
       toast.success(t("callReports.deleted"));
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (err: any) => {
+      if (err?.response?.status === 409) {
+        qc.invalidateQueries({ queryKey: ["call-reports"] });
+        setConfirm(null);
+        toast.error(t("callReports.countChanged"));
+      } else {
+        toast.error(t("common.error"));
+      }
+    },
   });
 
   function handleSubmit(e: React.FormEvent) {
@@ -155,9 +166,9 @@ export default function CallReports() {
   const selectedCount = selected.size;
 
   const confirmMsg = confirm?.type === "all"
-    ? t("callReports.confirmDeleteAll")
+    ? t("callReports.confirmDeleteAllCount", { count: reportsTotal })
     : confirm?.type === "selected"
-      ? t("callReports.confirmDeleteSelected")
+      ? t("callReports.confirmDeleteSelectedCount", { count: selectedCount })
       : t("callReports.deleteConfirm");
 
   return (
