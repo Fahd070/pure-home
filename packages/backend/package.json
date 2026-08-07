@@ -10,7 +10,8 @@
     "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
     "db:seed": "ts-node prisma/seed.ts",
     "pretest": "ts-node tests/helpers/checkTestDb.ts && npx prisma migrate deploy --schema=prisma/schema.prisma",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backup:verify": "ts-node scripts/verify-backup-restore.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

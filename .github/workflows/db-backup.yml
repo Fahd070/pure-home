@@ -16,9 +16,27 @@ on:
 
 jobs:
   backup:
-    name: pg_dump → artifact
+    name: pg_dump → artifact → restore verification
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    # Isolated, disposable target for restore verification (Issue #8) -- this is a
+    # bare empty database. It never receives production credentials; only the backup
+    # archive produced two steps earlier is ever restored into it, over localhost,
+    # inside this job's own throwaway runner.
+    services:
+      restore_target:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: wfm_restore_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Install PostgreSQL client
@@ -85,6 +103,28 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
+      # ── Restore the backup just created into the disposable service above, and ──
+      # ── run structural + logical verification (Issue #8). Runs after the artifact ──
+      # ── is already uploaded, so a failed restore never costs the backup itself. ──
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        run: npm install --workspace=packages/backend --no-audit --no-fund
+
+      - name: Generate Prisma client
+        working-directory: packages/backend
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: Verify backup restores cleanly
+        working-directory: packages/backend
+        env:
+          RESTORE_TEST_DATABASE_URL: postgresql://postgres:test@localhost:5433/wfm_restore_test
+        run: npm run backup:verify -- "$GITHUB_WORKSPACE/${{ env.BACKUP_FILE }}"
+
       # ── Print summary to the workflow log ───────────────────────────────────
       - name: Summary
         run: |
@@ -100,3 +140,4 @@ jobs:
           echo "| Retention | 90 days |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Expires | ${EXPIRES} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Trigger | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Restore verified | ✅ Yes — restored into an isolated disposable database and validated |" >> "$GITHUB_STEP_SUMMARY"
