@@ -1,11 +1,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRoles } from '../socket';
 import { SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
+import {
+  bulkDeleteAllSchema,
+  bulkDeleteByIdsSchema,
+  StaleCountError,
+  sendStaleCountConflict,
+  isTransactionConflict,
+  sendTransactionConflict,
+} from '../services/bulkDelete.service';
+
+// Well above the largest page this UI ever loads (call-reports lists are fetched
+// with limit: 200), while still bounding a malformed/crafted request.
+const MAX_BULK_DELETE_IDS = 500;
 
 // Call reports contain customer name/phone/notes -- no technician UI subscribes to
 // these events, matching the permission baseline ("must not receive full customer
@@ -109,23 +122,83 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
   } catch (e) { next(e); }
 });
 
+// Explicit, bounded ID list. expectedCount must match the de-duplicated ID count --
+// duplicates in the submitted list can never inflate or confuse what's expected.
 router.delete('/bulk', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const { ids } = req.body as { ids?: string[] };
-    if (Array.isArray(ids) && ids.length > 0) {
-      await prisma.callReport.deleteMany({ where: { id: { in: ids } } });
-      emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { ids });
+    const body = bulkDeleteByIdsSchema(MAX_BULK_DELETE_IDS).parse(req.body);
+    const uniqueIds = Array.from(new Set(body.ids));
+    if (uniqueIds.length !== body.expectedCount) {
+      return sendStaleCountConflict(res, new StaleCountError(uniqueIds.length, body.expectedCount));
     }
-    res.json({ success: true });
-  } catch (e) { next(e); }
+
+    const outcome = await prisma.$transaction(
+      async (tx) => {
+        const toDelete = await tx.callReport.findMany({ where: { id: { in: uniqueIds } }, select: { id: true } });
+        const result = await tx.callReport.deleteMany({ where: { id: { in: uniqueIds } } });
+        if (result.count !== uniqueIds.length) {
+          // Some of the submitted IDs no longer matched a real row -- roll back
+          // rather than silently deleting a partial, unreviewed subset.
+          throw new StaleCountError(result.count, uniqueIds.length);
+        }
+        return { deletedCount: result.count, ids: toDelete.map((r) => r.id) };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+
+    await writeAudit({
+      action: 'DELETE', entityType: 'call_report', entityId: 'bulk',
+      userId: req.user!.userId,
+      label: `Bulk delete: ${outcome.deletedCount} call reports deleted`,
+      labelAr: `حذف جماعي: تم حذف ${outcome.deletedCount} تقرير مكالمة`,
+      before: { count: outcome.deletedCount, ids: outcome.ids },
+    });
+    emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { ids: outcome.ids });
+    res.json({ success: true, data: { deletedCount: outcome.deletedCount } });
+  } catch (e) {
+    if (e instanceof StaleCountError) return sendStaleCountConflict(res, e);
+    if (isTransactionConflict(e)) return sendTransactionConflict(res);
+    next(e);
+  }
 });
 
+// CRITICAL: deletes every call report in the system. ADMIN or SCHEDULING (an existing,
+// consistently-applied business rule across this entire route file), confirm:true, and
+// an expectedCount checked against the real count inside the same transaction as the
+// delete.
 router.delete('/all', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    await prisma.$executeRawUnsafe(`DELETE FROM "call_reports"`);
-    emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { all: true });
-    res.json({ success: true });
-  } catch (e) { next(e); }
+    const { expectedCount } = bulkDeleteAllSchema.parse(req.body);
+
+    const outcome = await prisma.$transaction(
+      async (tx) => {
+        const actualCount = await tx.callReport.count();
+        if (actualCount !== expectedCount) {
+          throw new StaleCountError(actualCount, expectedCount);
+        }
+        if (actualCount === 0) return { deletedCount: 0 };
+        const result = await tx.callReport.deleteMany();
+        return { deletedCount: result.count };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+
+    if (outcome.deletedCount > 0) {
+      await writeAudit({
+        action: 'DELETE', entityType: 'call_report', entityId: 'all',
+        userId: req.user!.userId,
+        label: `All call reports deleted (${outcome.deletedCount} records)`,
+        labelAr: `تم حذف جميع تقارير المكالمات (${outcome.deletedCount} سجل)`,
+        before: { count: outcome.deletedCount },
+      });
+      emitToRoles(CALL_REPORT_ROOMS, 'call_report:deleted', { all: true });
+    }
+    res.json({ success: true, data: { deletedCount: outcome.deletedCount } });
+  } catch (e) {
+    if (e instanceof StaleCountError) return sendStaleCountConflict(res, e);
+    if (isTransactionConflict(e)) return sendTransactionConflict(res);
+    next(e);
+  }
 });
 
 router.delete('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {

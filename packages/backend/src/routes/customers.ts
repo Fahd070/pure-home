@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRole, emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
+import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransactionConflict, sendTransactionConflict } from '../services/bulkDelete.service';
 
 const router = Router();
 router.use(authenticate);
@@ -211,34 +213,64 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
   } catch (e) { next(e); }
 });
 
+// CRITICAL: deletes every customer in the system (and, via schema-level cascade,
+// every Address and CallReport attached to them -- appointments are preserved with
+// customerId set to null, per the SET NULL fix). Requires ADMIN, an explicit
+// confirm:true, a typed "DELETE" phrase (the highest-risk tier -- an unconditional
+// wipe of a major production table), and an expectedCount that must match the real
+// count computed inside the same transaction as the delete, so a stale/reviewed
+// number can never authorize deleting more than the caller actually saw.
+const deleteAllCustomersSchema = bulkDeleteAllSchema.extend({
+  confirmPhrase: z.literal('DELETE'),
+});
+
 router.delete('/', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const customers = await prisma.customer.findMany({ select: { id: true, name: true } });
-    if (customers.length === 0) return res.json({ success: true, data: { count: 0 } });
-    const apptRecords = await prisma.appointment.findMany({
-      where: { customerId: { in: customers.map(c => c.id) } },
-      select: { id: true },
-    });
-    const apptIds = apptRecords.map((a: any) => a.id);
-    const result = await prisma.customer.deleteMany();
-    await writeAudit({
-      action: 'DELETE', entityType: 'customer', entityId: 'bulk',
-      userId: req.user!.userId,
-      label: `Bulk delete: ${result.count} customers permanently deleted`,
-      labelAr: `حذف جماعي: تم حذف ${result.count} عميل بشكل نهائي`,
-      before: { count: result.count, customers: customers.map(c => ({ id: c.id, name: c.name })) },
-    });
-    await emitEvent({
-      type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: 'bulk',
-      userId: req.user!.userId,
-      payload: { bulk: true, count: result.count, ids: customers.map(c => c.id) },
-    });
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMERS_BULK_DELETED, { count: result.count });
-    if (apptIds.length > 0) {
-      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, bulk: true });
+    const { expectedCount } = deleteAllCustomersSchema.parse(req.body);
+
+    const outcome = await prisma.$transaction(
+      async (tx) => {
+        const customers = await tx.customer.findMany({ select: { id: true, name: true } });
+        if (customers.length !== expectedCount) {
+          throw new StaleCountError(customers.length, expectedCount);
+        }
+        if (customers.length === 0) {
+          return { deletedCount: 0, customers: [] as { id: string; name: string }[], apptIds: [] as string[] };
+        }
+        const apptRecords = await tx.appointment.findMany({
+          where: { customerId: { in: customers.map((c) => c.id) } },
+          select: { id: true },
+        });
+        const result = await tx.customer.deleteMany();
+        return { deletedCount: result.count, customers, apptIds: apptRecords.map((a) => a.id) };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+
+    if (outcome.deletedCount > 0) {
+      await writeAudit({
+        action: 'DELETE', entityType: 'customer', entityId: 'bulk',
+        userId: req.user!.userId,
+        label: `Bulk delete: ${outcome.deletedCount} customers permanently deleted`,
+        labelAr: `حذف جماعي: تم حذف ${outcome.deletedCount} عميل بشكل نهائي`,
+        before: { count: outcome.deletedCount, customers: outcome.customers },
+      });
+      await emitEvent({
+        type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: 'bulk',
+        userId: req.user!.userId,
+        payload: { bulk: true, count: outcome.deletedCount, ids: outcome.customers.map((c) => c.id) },
+      });
+      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMERS_BULK_DELETED, { count: outcome.deletedCount });
+      if (outcome.apptIds.length > 0) {
+        emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: outcome.apptIds, bulk: true });
+      }
     }
-    res.json({ success: true, data: { count: result.count } });
-  } catch (e) { next(e); }
+    res.json({ success: true, data: { deletedCount: outcome.deletedCount } });
+  } catch (e) {
+    if (e instanceof StaleCountError) return sendStaleCountConflict(res, e);
+    if (isTransactionConflict(e)) return sendTransactionConflict(res);
+    next(e);
+  }
 });
 
 export default router;

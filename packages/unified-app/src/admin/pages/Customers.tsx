@@ -175,9 +175,11 @@ export default function Customers() {
   }
 
   const deleteAllCustomers = useMutation({
-    mutationFn: () => api.delete("/customers"),
+    mutationFn: () => api.delete("/customers", {
+      data: { confirm: true, confirmPhrase: deleteAllConfirmText, expectedCount: data?.meta?.total ?? 0 },
+    }),
     onSuccess: (res) => {
-      const count = res.data.data.count;
+      const count = res.data.data.deletedCount;
       qc.invalidateQueries({ queryKey: ["customers"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       qc.invalidateQueries({ queryKey: ["dashboard-activity"] });
@@ -185,7 +187,16 @@ export default function Customers() {
       setShowDeleteAll(false);
       setDeleteAllConfirmText("");
     },
-    onError: () => toast.error(t("common.error"))
+    onError: (err: any) => {
+      if (err?.response?.status === 409) {
+        // The list changed since this dialog opened (e.g. another session added a
+        // customer) -- refresh so the displayed count is accurate before retrying.
+        qc.invalidateQueries({ queryKey: ["customers"] });
+        toast.error(t("customers.countChanged"));
+      } else {
+        toast.error(t("common.error"));
+      }
+    }
   });
 
   return (
