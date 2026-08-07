@@ -22,6 +22,11 @@ export default function CodeEntry() {
 
   const info = dept ? DEPT_INFO[dept] : null;
   if (!info) { navigate("/"); return null; }
+  // Captured here (where `info` is narrowed non-null) rather than read from
+  // `info.route` inside handleSubmit below -- TS control-flow narrowing does
+  // not persist into nested closures, so a fresh, already-non-null binding
+  // sidesteps that without a non-null assertion.
+  const targetRoute = info.route;
 
   const accentMap: Record<string, string> = { blue: "focus:ring-blue-500 border-blue-300", green: "focus:ring-green-500 border-green-300", orange: "focus:ring-orange-500 border-orange-300" };
   const btnMap: Record<string, string> = { blue: "bg-blue-600 hover:bg-blue-700", green: "bg-green-600 hover:bg-green-700", orange: "bg-orange-600 hover:bg-orange-700" };
@@ -36,7 +41,7 @@ export default function CodeEntry() {
       if (dept === "admin")      setAdminAuth(user, token);
       if (dept === "scheduling") setSchedulingAuth(user, token);
       if (dept === "technician") setTechnicianAuth(user, token);
-      navigate(info.route);
+      navigate(targetRoute);
     } catch (err: any) {
       if (err.response?.status === 401) {
         setError(isAr ? "رمز الدخول غير صحيح" : "Wrong access code");

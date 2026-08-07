@@ -61,7 +61,7 @@ export default function AccessCodes() {
       toast(t("accessCodes.codesUpdatedRemotely"), { icon: "🔄" });
     };
     socket.on("config:updated", onConfigUpdated);
-    return () => socket.off("config:updated", onConfigUpdated);
+    return () => { socket.off("config:updated", onConfigUpdated); };
   }, [socket, qc, t]);
 
   const updateCode = useMutation({

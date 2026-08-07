@@ -55,9 +55,14 @@ router.post('/code-login', async (req, res, next) => {
 
     const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '8h' });
 
+    // Fire-and-forget: login must never be slowed or blocked by the audit write.
+    // The catch here only adds observability (a failed audit write should be
+    // visible in server logs, never silently lost) -- login itself is unaffected.
     prisma.auditLog.create({
       data: { action: `Login: ${user.name} (${user.role})`, entityType: 'auth', entityId: user.id, userId: user.id }
-    }).catch(() => {});
+    }).catch((e) => {
+      console.error(`[audit] Failed to write login audit entry for role ${user.role}:`, e?.message);
+    });
 
     res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } } });
   } catch (e) { next(e); }

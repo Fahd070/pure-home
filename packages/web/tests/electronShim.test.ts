@@ -28,7 +28,13 @@ describe('electronShim printToPDF (web print path)', () => {
     // Strip // line-comments first -- the file legitimately documents the OLD,
     // now-removed document.write() pattern in a comment explaining the fix; only an
     // actual (non-comment) call site would be a real regression.
+    // Normalize CRLF -> LF first: without this, a trailing \r survives the split
+    // (since `.` never matches a line terminator), leaving `$` unable to reach the
+    // true end of that line-string, so the comment-strip regex silently fails to
+    // match at all on a CRLF checkout (e.g. this repo's core.autocrlf=true) and the
+    // raw, unstripped comment text leaks through -- independent of platform/git config.
     const codeOnly = source
+      .replace(/\r\n/g, '\n')
       .split('\n')
       .map((line) => line.replace(/\/\/.*$/, ''))
       .join('\n');
