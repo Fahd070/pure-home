@@ -3,9 +3,27 @@ import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
+import { writeAudit } from '../services/audit.service';
 
 const router = Router();
 router.use(authenticate);
+
+// Same field selections as the canonical delete routes' own customerFields()/apptFields()
+// (packages/backend/src/routes/customers.ts, appointments.ts) -- kept local here rather
+// than imported so this file's audit snapshot matches theirs without coupling to their
+// internals.
+function customerAuditFields(c: any) {
+  return { id: c.id, name: c.name, phone: c.phone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version };
+}
+function appointmentAuditFields(a: any) {
+  return {
+    id: a.id, type: a.type, status: a.status, scheduledDate: a.scheduledDate,
+    notes: a.notes, version: a.version, customerId: a.customerId,
+    isUrgent: a.isUrgent, adminApproved: a.adminApproved,
+    visibleToScheduling: a.visibleToScheduling, createdByRole: a.createdByRole,
+    technicianId: a.technicianId, workStatus: a.workStatus,
+  };
+}
 
 router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
@@ -264,6 +282,12 @@ router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, re
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     const apptIds = customer.appointments.map((a: any) => a.id);
     await prisma.customer.delete({ where: { id: req.params.id } });
+    await writeAudit({
+      action: 'DELETE', entityType: 'customer', entityId: req.params.id, userId: req.user!.userId,
+      label: `Customer '${customer.name}' was deleted`,
+      labelAr: `تم حذف العميل '${customer.name}'`,
+      before: customerAuditFields(customer),
+    });
     emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
     if (apptIds.length > 0) {
       emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
@@ -274,9 +298,17 @@ router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, re
 
 router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+    const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
     await prisma.appointment.delete({ where: { id: req.params.id } });
+    const custName = appt.customer?.name || 'Urgent Visit';
+    const custNameAr = appt.customer?.name || 'زيارة عاجلة';
+    await writeAudit({
+      action: 'DELETE', entityType: 'appointment', entityId: req.params.id, userId: req.user!.userId,
+      label: `Appointment for '${custName}' was deleted by Admin`,
+      labelAr: `تم حذف موعد العميل '${custNameAr}' بواسطة الإدارة`,
+      before: appointmentAuditFields(appt),
+    });
     emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: [req.params.id] });
     res.json({ success: true });
   } catch (e) { next(e); }
