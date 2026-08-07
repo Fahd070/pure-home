@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022","module": "ESNext","moduleResolution": "bundler","jsx": "react-jsx",
-    "strict": true,"skipLibCheck": true,"baseUrl": ".","paths": {"@/*": ["src/*"]},"types": ["node"]
+    "strict": true,"skipLibCheck": true,"baseUrl": ".","paths": {"@/*": ["src/*"]},"types": ["node"],
+    "noEmit": true
   },
   "include": ["src/**/*"]
 }

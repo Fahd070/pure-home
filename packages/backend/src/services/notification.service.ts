@@ -5,7 +5,21 @@ import { SOCKET_EVENTS } from '../constants';
 
 const REMINDER_DAYS = [10, 7, 3, 1];
 
-async function generateReminders() {
+// Guards against two overlapping runs (a slow run still in progress when the next
+// hourly tick fires, or the hourly tick landing close to the startup delay call).
+// Without this, each reminder's duplicate-check (findFirst then createMany, not in
+// a transaction) is a time-of-check-to-time-of-use race: both runs could see "not
+// yet created" and both insert a duplicate notification for the same appointment/day.
+let isRunning = false;
+
+// Exported for the overlap-guard regression test only; startNotificationCron()
+// remains the real entry point used by index.ts.
+export async function generateReminders() {
+  if (isRunning) {
+    console.log('[cron] Previous reminder run still in progress; skipping this tick.');
+    return;
+  }
+  isRunning = true;
   try {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -111,6 +125,8 @@ async function generateReminders() {
     }
   } catch (e) {
     console.error('[cron] Reminder error:', e);
+  } finally {
+    isRunning = false;
   }
 }
 

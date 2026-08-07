@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import type { AxiosResponse } from "axios";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -68,7 +69,7 @@ export default function AdminCallReports() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: ({ type, ids }: { type: ConfirmType; ids?: string[] }) => {
+    mutationFn: ({ type, ids }: { type: ConfirmType; ids?: string[] }): Promise<AxiosResponse> => {
       if (type === "single" || type === "selected") {
         const uniqueIds = Array.from(new Set(ids || []));
         return api.delete("/call-reports/bulk", { data: { confirm: true, ids: uniqueIds, expectedCount: uniqueIds.length } });

@@ -36,6 +36,19 @@ async function verifySchemaIsMigrated() {
   }
 }
 
+// Safety net for errors that escape Express's own request-scoped try/catch +
+// errorHandler (e.g. an unawaited promise in a cron job or socket handler).
+// Deliberately logs only and never calls process.exit(): Render owns this
+// process's lifecycle (restarts, health checks) -- forcing an exit here would
+// fight that rather than let a single unexpected error take down the whole
+// service for the other five employees mid-request.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+
 const PORT = parseInt(process.env.PORT || '3001');
 const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 

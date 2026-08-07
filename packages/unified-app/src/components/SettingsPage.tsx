@@ -161,7 +161,7 @@ export default function SettingsPage({ api, socket }: Props) {
       syncMsg.current = setTimeout(() => setSyncStatus("idle"), 2500);
     };
     socket.on("settings:updated", onUpdated);
-    return () => socket.off("settings:updated", onUpdated);
+    return () => { socket.off("settings:updated", onUpdated); };
   }, [socket, loadFromServer]);
 
   const save = useCallback((patch: Partial<UserSettings>) => {
