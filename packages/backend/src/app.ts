@@ -41,6 +41,13 @@ const isAllowedOrigin = (origin: string | undefined): boolean => {
 };
 
 const app = express();
+// Render terminates TLS at its own load balancer and forwards requests to this
+// service over HTTP through exactly one proxy hop, setting X-Forwarded-For/
+// X-Forwarded-Proto. Trusting exactly 1 hop (not `true`) means Express reads
+// the client IP from the right-most-but-one entry in X-Forwarded-For -- the
+// address Render's own proxy appended -- and ignores any further-left entries
+// a client could forge, which is what express-rate-limit relies on for req.ip.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: (origin, cb) => isAllowedOrigin(origin) ? cb(null, true) : cb(new Error('CORS: origin not allowed')),
