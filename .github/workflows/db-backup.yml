@@ -39,6 +39,13 @@ jobs:
           --health-retries 10
 
     steps:
+      # Required so the restore-verification steps below (Issue #8) have repository
+      # files to work with -- this job originally only ran pg_dump against a remote
+      # URL and never checked out the repo. Without this, $GITHUB_WORKSPACE is empty,
+      # which is why actions/setup-node's npm cache step below could not find any
+      # lockfile at all ("Dependencies lock file is not found").
+      - uses: actions/checkout@v4
+
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
@@ -131,6 +138,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Install backend dependencies
         run: npm install --workspace=packages/backend --no-audit --no-fund
