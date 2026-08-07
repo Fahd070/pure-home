@@ -42,7 +42,27 @@ jobs:
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client
+          sudo apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release
+
+          # Ubuntu's default "postgresql-client" package trails behind the PostgreSQL
+          # major version Supabase actually runs (production is 17.x; Ubuntu's default
+          # package is 16.x, which pg_dump/pg_restore refuse to use against a newer
+          # server: "pg_dump: error: aborting because of server version mismatch").
+          # Add the official PGDG apt repository so we install matching v17 client
+          # tools instead of relying on whatever Ubuntu ships by default.
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+
+          # Put the v17 binaries ahead of any other postgresql-client version on PATH
+          # for this and all subsequent steps, and print the resolved version so a
+          # future mismatch is visible in the log rather than silent.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          echo "Resolved: $(pg_dump --version)"
+          echo "Resolved: $(pg_restore --version)"
+          echo "Resolved: $(psql --version)"
 
       # ── Create the backup ────────────────────────────────────────────────────
       - name: Create pg_dump
