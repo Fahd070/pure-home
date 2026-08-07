@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import { escapeHtml as esc } from "../../utils/htmlEscape";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -61,9 +62,9 @@ function buildPdfHtml(customers: any[], filters: any, isAr: boolean, t: any, tot
   const rows = customers.map((c, i) => `
     <tr>
       <td>${i + 1}</td>
-      <td>${c.name}</td>
-      <td>${c.phone}</td>
-      <td>${c.address?.city || "—"}</td>
+      <td>${esc(c.name)}</td>
+      <td>${esc(c.phone)}</td>
+      <td>${esc(c.address?.city) || "—"}</td>
       <td>${new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
       <td>${c.installationDate ? new Date(c.installationDate).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</td>
       <td>${formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</td>
@@ -102,7 +103,7 @@ tr:nth-child(even){background:#f9f9f9}
 <div class="hdr">
   <div class="brand">Pure Home</div>
   <div class="rtitle">${isAr ? "تقرير العملاء" : "Customer Report"}</div>
-  <div class="meta">${isAr ? "تاريخ التقرير" : "Date"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)} &nbsp;|&nbsp; ${isAr ? "الفلاتر" : "Filters"}: ${filterSummary} &nbsp;|&nbsp; ${isAr ? "الإجمالي" : "Total"}: ${total}</div>
+  <div class="meta">${isAr ? "تاريخ التقرير" : "Date"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)} &nbsp;|&nbsp; ${isAr ? "الفلاتر" : "Filters"}: ${esc(filterSummary)} &nbsp;|&nbsp; ${isAr ? "الإجمالي" : "Total"}: ${total}</div>
 </div>
 <table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
 <div class="grand-total"><span>${isAr ? "إجمالي المبالغ" : "Total Amount"}</span><span>${grandTotal.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span></div>
@@ -129,15 +130,15 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
   <div class="brand">Pure Home</div>
   <div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
 </div>
-<div class="cname">${c.name}</div>
+<div class="cname">${esc(c.name)}</div>
 <span class="badge badge-${c.alertLevel || "ok"}">${c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قادم قريباً" : "Upcoming Soon") : (isAr ? "طبيعي" : "OK")}</span>
 <div class="section">
   <div class="sec-title">${isAr ? "معلومات التواصل" : "Contact Info"}</div>
   <div class="grid">
-    <div class="item"><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${c.phone}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${c.address?.city || "—"}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${c.address?.district || "—"}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${c.address?.street || "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${esc(c.phone)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${esc(c.address?.city) || "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${esc(c.address?.district) || "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${esc(c.address?.street) || "—"}</div></div>
   </div>
 </div>
 <div class="section">
@@ -149,7 +150,7 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
     <div class="item"><div class="lbl">${isAr ? "الصيانة القادمة" : "Next Maintenance"}</div><div class="val">${c.nextMaintenance ? new Date(c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
   </div>
 </div>
-${c.notes ? `<div class="section"><div class="sec-title">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${c.notes}</p></div>` : ""}
+${c.notes ? `<div class="section"><div class="sec-title">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
 <div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
 </body></html>`;
 }
@@ -189,12 +190,12 @@ function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, tota
     : ["#", "Customer", "Phone", "Service Type", "Date", "Technician", "Payment", "Amount (SAR)"];
   const tableRows = rows.map((r, i) => `<tr>
     <td style="text-align:center;color:#888">${i + 1}</td>
-    <td>${r.customerName}</td>
-    <td>${r.customerPhone}</td>
-    <td>${typeLabels[r.appointmentType] || r.appointmentType}</td>
+    <td>${esc(r.customerName)}</td>
+    <td>${esc(r.customerPhone)}</td>
+    <td>${esc(typeLabels[r.appointmentType] || r.appointmentType)}</td>
     <td style="white-space:nowrap">${new Date(r.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
-    <td>${r.technicianName}</td>
-    <td>${payLabels[r.paymentMethod] || r.paymentMethod}</td>
+    <td>${esc(r.technicianName)}</td>
+    <td>${esc(payLabels[r.paymentMethod] || r.paymentMethod)}</td>
     <td style="text-align:center;font-weight:600;font-family:monospace">${Number(r.amount).toFixed(2)}</td>
   </tr>`).join("");
   return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
@@ -316,12 +317,12 @@ export default function Reports() {
           const amt = apptAmount(a);
           return `<tr>
           <td>${i + 1}</td>
-          <td>${a.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit")}</td>
-          <td>${a.customer?.phone || "—"}</td>
+          <td>${esc(a.customer?.name) || (isAr ? "زيارة عاجلة" : "Urgent Visit")}</td>
+          <td>${esc(a.customer?.phone) || "—"}</td>
           <td>${new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
           <td>${a.type === "INSTALLATION" ? (isAr ? "تركيب" : "Installation") : (isAr ? "صيانة" : "Maintenance")}</td>
-          <td>${a.status}</td>
-          <td>${apptSourceLabel(a.createdByRole)}</td>
+          <td>${esc(a.status)}</td>
+          <td>${esc(apptSourceLabel(a.createdByRole))}</td>
           <td style="text-align:center;font-weight:600;font-family:monospace">${amt != null ? amt.toFixed(2) : "—"}</td>
         </tr>`;
         }).join("");

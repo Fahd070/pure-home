@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import { escapeHtml as esc } from "../../utils/htmlEscape";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING:  "bg-yellow-100 text-yellow-700",
@@ -35,17 +36,17 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 <div class="hdr">
   <div class="brand">Pure Home</div>
   <div class="title">${isAr ? "فاتورة مصروف" : "Expense Invoice"}</div>
-  <div class="inv-id">${isAr ? "رقم الفاتورة" : "Invoice ID"}: ${expense.id}</div>
+  <div class="inv-id">${isAr ? "رقم الفاتورة" : "Invoice ID"}: ${esc(expense.id)}</div>
 </div>
 <div class="section">
   <div class="sec-title">${isAr ? "تفاصيل المصروف" : "Expense Details"}</div>
   <div class="grid">
-    <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${expense.technician?.name || "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${esc(expense.technician?.name) || "—"}</div></div>
     <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val">${new Date(expense.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${isAr ? (catAr[expense.category] || expense.category) : expense.category}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${esc(isAr ? (catAr[expense.category] || expense.category) : expense.category)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${esc(isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status))}</div></div>
     <div class="item"><div class="lbl">${isAr ? "طريقة الدفع" : "Payment Method"}</div><div class="val">—</div></div>
-    ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${expense.description}</div></div>` : ""}
+    ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${esc(expense.description)}</div></div>` : ""}
   </div>
 </div>
 <div class="amount-box">
@@ -67,16 +68,16 @@ function buildAllInvoicesPdfHtml(expenses: any[], isAr: boolean) {
       <div class="hdr">
         <div class="brand">Pure Home</div>
         <div class="title">${isAr ? "فاتورة مصروف" : "Expense Invoice"}</div>
-        <div class="inv-id">${isAr ? "رقم الفاتورة" : "Invoice ID"}: ${expense.id}</div>
+        <div class="inv-id">${isAr ? "رقم الفاتورة" : "Invoice ID"}: ${esc(expense.id)}</div>
       </div>
       <div class="section">
         <div class="sec-title">${isAr ? "تفاصيل المصروف" : "Expense Details"}</div>
         <div class="grid">
-          <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${expense.technician?.name || "—"}</div></div>
+          <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${esc(expense.technician?.name) || "—"}</div></div>
           <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val">${new Date(expense.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
-          <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${isAr ? (catAr[expense.category] || expense.category) : expense.category}</div></div>
-          <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status)}</div></div>
-          ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${expense.description}</div></div>` : ""}
+          <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${esc(isAr ? (catAr[expense.category] || expense.category) : expense.category)}</div></div>
+          <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${esc(isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status))}</div></div>
+          ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${esc(expense.description)}</div></div>` : ""}
         </div>
       </div>
       <div class="amount-box">
@@ -123,17 +124,17 @@ function buildExpensePdfHtml(expenses: any[], isAr: boolean, period: string) {
   const rows = expenses.map((e, i) => `
     <tr>
       <td style="text-align:center;color:#888">${i + 1}</td>
-      <td>${e.technician?.name || "—"}</td>
-      <td>${isAr ? (catAr[e.category] || e.category) : e.category}</td>
+      <td>${esc(e.technician?.name) || "—"}</td>
+      <td>${esc(isAr ? (catAr[e.category] || e.category) : e.category)}</td>
       <td style="text-align:center;font-weight:600;font-family:monospace">${e.amount.toFixed(2)}</td>
       <td style="white-space:nowrap">${new Date(e.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
-      <td style="color:#666;font-size:9px">${e.description || "—"}</td>
-      <td><span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:bold;background:${e.status==="APPROVED"?"#dcfce7":e.status==="REJECTED"?"#fee2e2":"#fef3c7"};color:${e.status==="APPROVED"?"#166534":e.status==="REJECTED"?"#991b1b":"#92400e"}">${isAr ? (statusAr[e.status] || e.status) : (statusEn[e.status] || e.status)}</span></td>
+      <td style="color:#666;font-size:9px">${esc(e.description) || "—"}</td>
+      <td><span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:bold;background:${e.status==="APPROVED"?"#dcfce7":e.status==="REJECTED"?"#fee2e2":"#fef3c7"};color:${e.status==="APPROVED"?"#166534":e.status==="REJECTED"?"#991b1b":"#92400e"}">${esc(isAr ? (statusAr[e.status] || e.status) : (statusEn[e.status] || e.status))}</span></td>
     </tr>`).join("");
 
   const catRows = Object.entries(byCategory).map(([cat, amt]) => `
     <tr>
-      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:10px">${isAr ? (catAr[cat] || cat) : cat}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:10px">${esc(isAr ? (catAr[cat] || cat) : cat)}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #eee;font-weight:600;font-family:monospace;font-size:10px;text-align:${dir==="rtl"?"left":"right"}">${amt.toFixed(2)} ${isAr ? "ريال" : "SAR"}</td>
     </tr>`).join("");
 

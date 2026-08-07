@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import { escapeHtml as esc } from "../../utils/htmlEscape";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -59,14 +60,14 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 .ftr{margin-top:20px;border-top:1px solid #eee;padding-top:8px;color:#999;font-size:9px;text-align:center}
 </style></head><body>
 <div class="hdr"><div class="brand">Pure Home</div><div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
-<div class="cname">${c.name}</div>
+<div class="cname">${esc(c.name)}</div>
 <span class="badge badge-${c.alertLevel || "ok"}">${c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قادم قريباً" : "Upcoming Soon") : (isAr ? "طبيعي" : "OK")}</span>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات التواصل" : "Contact Info"}</div>
 <div class="grid">
-<div><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${c.phone}</div></div>
-<div><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${c.address?.city || "—"}</div></div>
-<div><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${c.address?.district || "—"}</div></div>
-<div><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${c.address?.street || "—"}</div></div>
+<div><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${esc(c.phone)}</div></div>
+<div><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${esc(c.address?.city) || "—"}</div></div>
+<div><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${esc(c.address?.district) || "—"}</div></div>
+<div><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${esc(c.address?.street) || "—"}</div></div>
 </div></div>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات الصيانة" : "Maintenance Info"}</div>
 <div class="grid">
@@ -75,7 +76,7 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 <div><div class="lbl">${isAr ? "آخر صيانة" : "Last Maintenance"}</div><div class="val">${c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
 <div><div class="lbl">${isAr ? "الصيانة القادمة" : "Next Maintenance"}</div><div class="val">${c.nextMaintenance ? new Date(c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
 </div></div>
-${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${c.notes}</p></div>` : ""}
+${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
 <div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
 </body></html>`;
   const filePath = await (window as any).electron.printToPDF(html, `customer-${c.id}-${Date.now()}.pdf`);
