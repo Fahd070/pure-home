@@ -77,13 +77,18 @@ async function main() {
   if (objectCount < 5) fail(`Archive contains only ${objectCount} objects -- suspiciously low, refusing to proceed.`);
   step(`Archive valid: ${objectCount} objects listed.`);
 
-  // 5. Restore into the disposable target. The target is expected to be a freshly
-  // created, empty database (owned by the caller's setup, e.g. a fresh docker
-  // container) -- no --clean/--if-exists here, so ANY non-zero exit is unambiguously
-  // a real restore error, not a benign "object already absent" warning.
+  // 5. Restore into the disposable target. The backup is scoped to --schema=public
+  // (WFM's exclusive schema), so the archive includes its own `CREATE SCHEMA public`
+  // statement -- and every fresh Postgres database already has a "public" schema by
+  // default, so a plain restore fails with "schema already exists" even though the
+  // target has none of WFM's own tables yet. --clean --if-exists is the correct,
+  // standard fix (not error suppression): --if-exists makes every DROP idempotent
+  // regardless of whether the object already existed, so the restore is safe and
+  // fully deterministic whether the target is brand new or already holds a prior
+  // restore -- and any OTHER failure still exits non-zero and is treated as fatal.
   step('Restoring into disposable target database...');
   try {
-    execFileSync('pg_restore', ['--no-acl', '--no-owner', '--dbname', targetUrl, backupFile], { stdio: 'pipe' });
+    execFileSync('pg_restore', ['--no-acl', '--no-owner', '--clean', '--if-exists', '--dbname', targetUrl, backupFile], { stdio: 'pipe' });
   } catch (e: any) {
     const stderr = e?.stderr?.toString?.() || e.message;
     fail(`pg_restore failed -- restore did not complete cleanly:\n${stderr}`);
