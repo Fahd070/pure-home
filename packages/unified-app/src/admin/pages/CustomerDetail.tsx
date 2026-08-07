@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import { escapeHtml as esc } from "../../utils/htmlEscape";
 
 function formatCycle(cycle: string, freq: number, isAr: boolean) {
   const n = Number(freq) || 1;
@@ -32,8 +33,8 @@ export default function CustomerDetail() {
       <tr>
         <td>${new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
         <td>${a.type === "INSTALLATION" ? (isAr ? "تركيب" : "Installation") : (isAr ? "صيانة" : "Maintenance")}</td>
-        <td>${a.status}</td>
-        <td>${a.task?.technician?.name || "—"}</td>
+        <td>${esc(a.status)}</td>
+        <td>${esc(a.task?.technician?.name) || "—"}</td>
       </tr>`).join("");
 
     const html = `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
@@ -54,22 +55,22 @@ tr:nth-child(even){background:#f9f9f9}
 .ftr{margin-top:20px;border-top:1px solid #eee;padding-top:8px;color:#999;font-size:9px;text-align:center}
 </style></head><body>
 <div class="hdr"><div class="brand">Pure Home</div><div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
-<div class="cname">${c.name}</div>
+<div class="cname">${esc(c.name)}</div>
 <span class="${c.isActive ? "active-badge" : "inactive-badge"}">${c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive")}</span>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات التواصل" : "Contact Info"}</div>
 <div class="grid">
-<div><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${c.phone}</div></div>
-<div><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${addr?.city || "—"}</div></div>
-<div><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${addr?.district || "—"}</div></div>
-<div><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${addr?.street || "—"}</div></div>
-${addr?.buildingNo ? `<div><div class="lbl">${isAr ? "رقم المبنى" : "Building"}</div><div class="val">${addr.buildingNo}${addr.floorNo ? ` — ${isAr ? "طابق" : "Floor"} ${addr.floorNo}` : ""}</div></div>` : ""}
+<div><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${esc(c.phone)}</div></div>
+<div><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${esc(addr?.city) || "—"}</div></div>
+<div><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${esc(addr?.district) || "—"}</div></div>
+<div><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${esc(addr?.street) || "—"}</div></div>
+${addr?.buildingNo ? `<div><div class="lbl">${isAr ? "رقم المبنى" : "Building"}</div><div class="val">${esc(addr.buildingNo)}${addr.floorNo ? ` — ${isAr ? "طابق" : "Floor"} ${esc(addr.floorNo)}` : ""}</div></div>` : ""}
 </div></div>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات الصيانة" : "Maintenance Info"}</div>
 <div class="grid">
 <div><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val">${new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
 <div><div class="lbl">${isAr ? "دورة الصيانة" : "Cycle"}</div><div class="val">${formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr)}</div></div>
 </div></div>
-${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${c.notes}</p></div>` : ""}
+${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
 ${(c.appointments || []).length > 0 ? `
 <div class="sec"><div class="sec-t">${isAr ? "سجل المواعيد" : "Appointment History"}</div>
 <table><thead><tr>
