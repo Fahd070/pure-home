@@ -69,5 +69,22 @@ jobs:
         working-directory: packages/backend
         run: npm test
 
+      - name: Web regression suite
+        working-directory: packages/web
+        run: npm test
+
       - name: Web production build
         run: npm run build:web
+
+      - name: Unified-app (Electron) TypeScript check
+        working-directory: packages/unified-app
+        run: npx tsc -b
+
+      - name: Unified-app (Electron) renderer/main/preload build
+        # electron-vite only -- not the full `npm run build`, which also invokes
+        # electron-builder's NSIS/Windows installer packaging + native module
+        # rebuild + code signing. That step is platform-specific and impractical
+        # on this Linux runner; the JS bundling step below is what would actually
+        # catch a code-level break, and runs cross-platform in a few seconds.
+        working-directory: packages/unified-app
+        run: npx electron-vite build

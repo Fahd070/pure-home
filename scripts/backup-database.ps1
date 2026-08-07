@@ -61,6 +61,7 @@ Write-Host "Output: $backupFile"
 
 & pg_dump $DirectUrl `
     --format=custom `
+    --schema=public `
     --no-acl `
     --no-owner `
     --compress=9 `
