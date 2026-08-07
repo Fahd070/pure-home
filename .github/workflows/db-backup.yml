@@ -26,7 +26,7 @@ jobs:
     # inside this job's own throwaway runner.
     services:
       restore_target:
-        image: postgres:15
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: wfm_restore_test
@@ -84,12 +84,21 @@ jobs:
           TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
           FILENAME="wfm-backup-${TIMESTAMP}.dump"
 
+          # WFM owns every application table exclusively in the "public" schema
+          # (confirmed: no @@schema/multi-schema use in prisma/schema.prisma, no
+          # raw SQL referencing any other schema anywhere in the backend, and WFM
+          # does not use Supabase Vault). Scoping to --schema=public is a positive
+          # inclusion of exactly what WFM owns, and excludes Supabase-managed
+          # platform internals (auth, storage, realtime, vault/supabase_vault,
+          # extensions, etc.) that a standalone restore-verification database
+          # cannot and should not attempt to recreate.
           pg_dump \
             "$SUPABASE_DIRECT_URL" \
             --format=custom \
             --no-acl \
             --no-owner \
             --compress=9 \
+            --schema=public \
             --file="${FILENAME}"
 
           echo "BACKUP_FILE=${FILENAME}" >> "$GITHUB_ENV"
