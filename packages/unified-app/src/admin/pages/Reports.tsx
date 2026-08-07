@@ -378,7 +378,7 @@ tr:nth-child(even){background:#f9f9f9}
     if (!allAppts.length) return;
     setGeneratingAppts("excel");
     try {
-      const XLSX = await import("xlsx");
+      const { downloadExcelWorkbook } = await import("../../utils/excelExport");
       function apptRow(a: any) {
         const amt = apptAmount(a);
         return {
@@ -396,22 +396,13 @@ tr:nth-child(even){background:#f9f9f9}
         const total = list.reduce((s: number, a: any) => s + (apptAmount(a) ?? 0), 0);
         return { [isAr ? "النوع" : "Kind"]: label, [isAr ? "المصدر" : "Source"]: "", [isAr ? "العميل" : "Customer"]: "", [isAr ? "الجوال" : "Phone"]: "", [isAr ? "التاريخ" : "Date"]: "", [isAr ? "نوع الخدمة" : "Service Type"]: "", [isAr ? "الحالة" : "Status"]: isAr ? "الإجمالي" : "TOTAL", [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: total };
       }
-      const apptCols = [{ wch: 10 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }];
+      const apptCols = [10, 18, 30, 14, 14, 16, 16, 14];
       const regularRows = [...regularAppts.map(apptRow), totalRow(isAr ? "الإجمالي - العادية" : "Total - Regular", regularAppts)];
       const urgentRows  = [...urgentAppts.map(apptRow), totalRow(isAr ? "الإجمالي - العاجلة" : "Total - Urgent", urgentAppts)];
-      const wsRegular = XLSX.utils.json_to_sheet(regularRows);
-      wsRegular['!cols'] = apptCols;
-      const wsUrgent = XLSX.utils.json_to_sheet(urgentRows);
-      wsUrgent['!cols'] = apptCols;
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, wsRegular, isAr ? "المواعيد العادية" : "Regular");
-      XLSX.utils.book_append_sheet(wb, wsUrgent,  isAr ? "المواعيد العاجلة" : "Urgent");
-      const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `appointments-${Date.now()}.xlsx`; a.click();
-      URL.revokeObjectURL(url);
+      await downloadExcelWorkbook([
+        { name: isAr ? "المواعيد العادية" : "Regular", rows: regularRows, colWidths: apptCols },
+        { name: isAr ? "المواعيد العاجلة" : "Urgent", rows: urgentRows, colWidths: apptCols },
+      ], `appointments-${Date.now()}.xlsx`);
       toast.success(t("reports.savedTo"));
     } catch {
       toast.error(t("common.error"));
@@ -434,7 +425,7 @@ tr:nth-child(even){background:#f9f9f9}
     if (!customers.length) return;
     setGenerating("excel");
     try {
-      const XLSX = await import("xlsx");
+      const { downloadExcelWorkbook } = await import("../../utils/excelExport");
       const customerExcelTotal = customers.reduce((s: number, c: any) => s + (Number(c.totalAmount) || 0), 0);
       const rows = [
         ...customers.map((c: any) => ({
@@ -464,31 +455,25 @@ tr:nth-child(even){background:#f9f9f9}
           [isAr ? "المبلغ الإجمالي (ريال)" : "Total Amount (SAR)"]: customerExcelTotal,
         },
       ];
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [
-        { wch: 28 }, // Name
-        { wch: 14 }, // Phone
-        { wch: 16 }, // City
-        { wch: 18 }, // District
-        { wch: 14 }, // Reg Date
-        { wch: 16 }, // Install Date
-        { wch: 20 }, // Cycle
-        { wch: 14 }, // Last Maint
-        { wch: 14 }, // Next Maint
-        { wch: 10 }, // Days Until
-        { wch: 18 }, // Maintenance Status
-        { wch: 10 }, // Alert
-        { wch: 30 }, // Notes
-        { wch: 18 }, // Total Amount
+      const colWidths = [
+        28, // Name
+        14, // Phone
+        16, // City
+        18, // District
+        14, // Reg Date
+        16, // Install Date
+        20, // Cycle
+        14, // Last Maint
+        14, // Next Maint
+        10, // Days Until
+        18, // Maintenance Status
+        10, // Alert
+        30, // Notes
+        18, // Total Amount
       ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, isAr ? "العملاء" : "Customers");
-      const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `customers-${Date.now()}.xlsx`; a.click();
-      URL.revokeObjectURL(url);
+      await downloadExcelWorkbook([
+        { name: isAr ? "العملاء" : "Customers", rows, colWidths },
+      ], `customers-${Date.now()}.xlsx`);
       toast.success(t("reports.savedTo"));
     } catch {
       toast.error(t("common.error"));
@@ -528,7 +513,7 @@ tr:nth-child(even){background:#f9f9f9}
         setSalesLast(period);
         toast.success(`${t("reports.savedTo")}: ${filePath}`);
       } else {
-        const XLSX = await import("xlsx");
+        const { downloadExcelWorkbook } = await import("../../utils/excelExport");
         const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
         const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
         const excelRows = [
@@ -548,16 +533,9 @@ tr:nth-child(even){background:#f9f9f9}
             [isAr ? "طريقة الدفع" : "Payment"]: "", [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: totalAmount,
           },
         ];
-        const ws = XLSX.utils.json_to_sheet(excelRows);
-        ws['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 14 }];
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, isAr ? "المبيعات" : "Sales");
-        const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-        const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `sales-${period}-${Date.now()}.xlsx`; a.click();
-        URL.revokeObjectURL(url);
+        await downloadExcelWorkbook([
+          { name: isAr ? "المبيعات" : "Sales", rows: excelRows, colWidths: [28, 14, 16, 14, 20, 16, 14] },
+        ], `sales-${period}-${Date.now()}.xlsx`);
         setSalesLast(period);
         toast.success(isAr ? "تم التنزيل" : "Downloaded");
       }

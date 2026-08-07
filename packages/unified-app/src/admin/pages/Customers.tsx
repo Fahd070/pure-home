@@ -145,7 +145,7 @@ export default function Customers() {
     try {
       const { data: resp } = await api.get("/customers", { params: { limit: 2000, includeSchedule: true } });
       const all: any[] = resp.data || [];
-      const XLSX = await import("xlsx");
+      const { downloadExcelWorkbook } = await import("../../utils/excelExport");
       const rows = all.map((c: any) => ({
         [isAr ? "الاسم" : "Name"]: c.name,
         [isAr ? "الجوال" : "Phone"]: c.phone,
@@ -160,15 +160,9 @@ export default function Customers() {
         [isAr ? "الحالة" : "Status"]: c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive"),
         [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
       }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, isAr ? "العملاء" : "Customers");
-      const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `customers-${new Date().toISOString().slice(0,10)}.xlsx`; a.click();
-      URL.revokeObjectURL(url);
+      await downloadExcelWorkbook([
+        { name: isAr ? "العملاء" : "Customers", rows },
+      ], `customers-${new Date().toISOString().slice(0,10)}.xlsx`);
       toast.success(t("reports.savedTo"));
     } catch {
       toast.error(t("common.error"));
