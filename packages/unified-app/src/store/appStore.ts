@@ -1,7 +1,15 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-const RENDER_URL = "https://wfm-system.onrender.com";
+// For the web build (packages/web, deployed as a static site on Render/Vercel),
+// VITE_API_URL is inlined by Vite at build time and is the actual source of
+// truth -- render.yaml already declares it. For the Electron desktop app,
+// there is no build-time VITE_API_URL configured (each employee's PC can
+// point at a different backend at runtime via Settings -> Server Setup,
+// which calls setServerUrl() and persists the override to localStorage) --
+// this constant is only ever that build's *initial* default, never a hard
+// requirement, so the fallback below is intentional and safe in both cases.
+const RENDER_URL = import.meta.env.VITE_API_URL || "https://wfm-system.onrender.com";
 
 export interface AuthUser { id: string; name: string; email: string; role: string; }
 interface DeptAuth { user: AuthUser; token: string; }
