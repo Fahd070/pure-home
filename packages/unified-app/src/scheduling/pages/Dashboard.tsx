@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import RowActionButton from "../../components/RowActionButton";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
 const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
@@ -213,8 +214,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
                         <td className="px-4 py-2 text-xs">{a.workStatus || a.status}</td>
                         <td className="px-4 py-2">
-                          <button onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")}
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-green-100 text-green-600 text-xs">✏️</button>
+                          <RowActionButton variant="edit" theme="green" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
                         </td>
                       </tr>
                     );
