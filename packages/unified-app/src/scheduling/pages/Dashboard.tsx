@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
+import { combineManualDateTime, splitToManualParts } from "../../utils/dateTimeInput";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
 const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
@@ -20,15 +21,24 @@ function StatCard({ label, value, color, onClick }: { label: string; value: numb
   );
 }
 
-function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: string, data: any) => void; onClose: () => void }) {
+export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: string, data: any) => void; onClose: () => void }) {
   const { t } = useTranslation();
+  const initialParts = splitToManualParts(appt.scheduledDate);
   const [form, setForm] = useState({
-    scheduledDate: appt.scheduledDate ? new Date(appt.scheduledDate).toISOString().slice(0,16) : "",
+    manualDate: initialParts.date,
+    manualTime: initialParts.time,
     type: appt.type || "MAINTENANCE",
     status: appt.status || "SCHEDULED",
     notes: appt.notes || "",
   });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  function handleSave() {
+    const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+    if (!scheduledDate) { toast.error(t("dashboard.invalidDateTime")); return; }
+    onSave(appt.id, { scheduledDate, type: form.type, status: form.status, notes: form.notes });
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -37,10 +47,17 @@ function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: stri
           <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">✕</button>
         </div>
         <div className="p-4 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
-            <input type="datetime-local" value={form.scheduledDate} onChange={e => set("scheduledDate", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
+              <input type="text" inputMode="numeric" placeholder="15/06/2026" value={form.manualDate} onChange={e => set("manualDate", e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
+              <input type="text" inputMode="numeric" placeholder="14:30" value={form.manualTime} onChange={e => set("manualTime", e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
@@ -67,7 +84,7 @@ function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: stri
         </div>
         <div className="p-4 border-t flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
-          <button onClick={() => onSave(appt.id, form)} className="px-4 py-2 text-sm bg-green-700 text-white rounded-lg hover:bg-green-800">
+          <button onClick={handleSave} className="px-4 py-2 text-sm bg-green-700 text-white rounded-lg hover:bg-green-800">
             {t("common.save")}
           </button>
         </div>
