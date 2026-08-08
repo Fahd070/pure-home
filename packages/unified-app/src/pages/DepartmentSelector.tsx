@@ -13,9 +13,9 @@ const DEPT_COLORS = {
 } as const;
 
 const depts = [
-  { id: "admin"      as const, label_ar: "الإدارة",          label_en: "Administration",          icon: "⊞" },
-  { id: "scheduling" as const, label_ar: "الجدولة والصيانة", label_en: "Scheduling & Maintenance", icon: "📅" },
-  { id: "technician" as const, label_ar: "الفنيون",          label_en: "Technicians",              icon: "🔧" },
+  { id: "admin"      as const, label_ar: "الإدارة",          label_en: "Administration" },
+  { id: "scheduling" as const, label_ar: "الجدولة والصيانة", label_en: "Scheduling & Maintenance" },
+  { id: "technician" as const, label_ar: "الفنيون",          label_en: "Technicians" },
 ];
 
 type ServerStatus = "checking" | "online" | "offline";
@@ -29,7 +29,7 @@ function DeptCard({ dept, isAr, onClick }: { dept: typeof depts[number]; isAr: b
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="rounded-2xl p-5 flex flex-col items-center gap-3 border-2 transition-all shadow-sm"
+      className="rounded-2xl px-5 py-7 flex flex-col items-center justify-center gap-2 border-2 transition-all shadow-sm"
       style={{
         backgroundColor: hovered ? color + "18" : "#ffffff",
         borderColor: color,
@@ -37,12 +37,6 @@ function DeptCard({ dept, isAr, onClick }: { dept: typeof depts[number]; isAr: b
         transform: hovered ? "translateY(-2px)" : "none",
       }}
     >
-      <div
-        className="w-13 h-13 w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold text-white"
-        style={{ backgroundColor: color }}
-      >
-        {dept.icon}
-      </div>
       <span className="font-bold text-slate-800 text-sm text-center">
         {isAr ? dept.label_ar : dept.label_en}
       </span>
