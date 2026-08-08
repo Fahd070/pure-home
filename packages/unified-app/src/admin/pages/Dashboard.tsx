@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import RowActionButton from "../../components/RowActionButton";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
 const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
@@ -249,10 +250,8 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1">
-                            <button onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")}
-                              className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-100 text-blue-600 text-xs">✏️</button>
-                            <button onClick={() => setConfirmDelete({ id: a.id, type: "appointment" })} title={t("dashboard.deleteRecord")}
-                              className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-red-500 text-xs">🗑</button>
+                            <RowActionButton variant="edit" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
+                            <RowActionButton variant="delete" onClick={() => setConfirmDelete({ id: a.id, type: "appointment" })} title={t("dashboard.deleteRecord")} />
                           </div>
                         </td>
                       </tr>
@@ -278,8 +277,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <div className="flex items-center gap-1">
                           <button onClick={() => setSchedulingCustomer({ id: c.id, name: c.name })} title="Schedule"
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-100 text-blue-600 text-xs">📅</button>
-                          <button onClick={() => setConfirmDelete({ id: c.id, type: "customer" })} title={t("dashboard.deleteRecord")}
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-red-500 text-xs">🗑</button>
+                          <RowActionButton variant="delete" onClick={() => setConfirmDelete({ id: c.id, type: "customer" })} title={t("dashboard.deleteRecord")} />
                         </div>
                       </td>
                     </tr>
