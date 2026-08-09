@@ -32,15 +32,18 @@ export default function AppointmentAcceptance() {
     onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.approveExportError")),
   });
 
-  // The same appointment:status event Modification #5 already emits both when
-  // Scheduling exports (so this list picks up new pending items live) and when
-  // an appointment is approved from elsewhere -- e.g. a second Admin's tab, or
-  // this page's own approval, which already invalidates via onSuccess above.
+  // appointment:status: Modification #5's export-to-technicians/approve-export
+  // actions on an existing appointment (still relevant for any legacy
+  // appointment created before the approval-flow fix below). appointment:created:
+  // a Scheduling-created normal appointment now starts directly in this pending
+  // state at creation time (the approval-flow fix), so this list must also pick
+  // up a brand-new appointment live, not just a status change on an existing one.
   useEffect(() => {
     if (!socket) return;
     const refresh = () => qc.invalidateQueries({ queryKey: ["pending-export-approval"] });
     socket.on("appointment:status", refresh);
-    return () => { socket.off("appointment:status", refresh); };
+    socket.on("appointment:created", refresh);
+    return () => { socket.off("appointment:status", refresh); socket.off("appointment:created", refresh); };
   }, [socket, qc]);
 
   const appointments: any[] = data || [];

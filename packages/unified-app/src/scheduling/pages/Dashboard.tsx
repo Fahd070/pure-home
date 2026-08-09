@@ -194,6 +194,14 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const isApptList = APPT_ENDPOINTS.includes(endpoint);
   const isCustomerList = CUSTOMER_ENDPOINTS.includes(endpoint);
 
+  // Dashboard parity fix: matches the Admin Dashboard's DrillModal exactly.
+  const taskColors: Record<string, string> = {
+    WAITING: "bg-yellow-100 text-yellow-700",
+    IN_PROGRESS: "bg-indigo-100 text-indigo-700",
+    COMPLETED: "bg-green-100 text-green-700",
+    POSTPONED: "bg-orange-100 text-orange-700",
+  };
+
   return (
     <>
       {schedulingCustomer && (
@@ -238,6 +246,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <th className="text-start px-4 py-2">{t("appointments.customer")}</th>
                     <th className="text-start px-4 py-2">{t("common.phone")}</th>
                     <th className="text-start px-4 py-2">{t("common.date")}</th>
+                    <th className="text-start px-4 py-2">{t("appointments.type")}</th>
                     <th className="text-start px-4 py-2">{t("common.status")}</th>
                     <th className="px-4 py-2 w-20"></th>
                   </tr></thead>
@@ -251,7 +260,12 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <td className="px-4 py-2">{displayName}</td>
                         <td className="px-4 py-2 text-slate-500">{displayPhone}</td>
                         <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-2 text-xs">{a.workStatus || a.status}</td>
+                        <td className="px-4 py-2 text-xs font-medium text-slate-600">{a.type}</td>
+                        <td className="px-4 py-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskColors[a.workStatus] || "bg-slate-100 text-slate-600"}`}>
+                            {a.workStatus || a.status}
+                          </span>
+                        </td>
                         <td className="px-4 py-2">
                           <div className="flex gap-1 items-center">
                             <RowActionButton variant="edit" theme="green" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
@@ -351,20 +365,22 @@ export default function SchedDashboard() {
     NO_APPOINTMENT: "—"
   };
 
+  // Dashboard parity fix: card set, order, and responsive grid now match the
+  // Admin Dashboard exactly (both consume the same GET /dashboard/stats).
   const cards = [
     { label: t("dashboard.customers"),           key: "total",          endpoint: "customers-list",        color: "border-blue-500" },
     { label: t("dashboard.completedMaintenance"), key: "completed",      endpoint: "completed-maintenance", color: "border-green-500" },
     { label: t("dashboard.thisMonth"),            key: "thisMonth",      endpoint: "this-month",            color: "border-indigo-500" },
     { label: t("dashboard.nextMonth"),            key: "nextMonth",      endpoint: "next-month",            color: "border-purple-500" },
     { label: t("dashboard.dueToday"),             key: "todayCount",     endpoint: "today",                 color: "border-orange-500" },
-    { label: t("dashboard.overdueMaintenance"),   key: "pendingApproval",endpoint: "overdue",               color: "border-red-500" },
     { label: t("dashboard.suspendedPostponed"),   key: "pending",        endpoint: "postponed",             color: "border-yellow-500" },
+    { label: t("dashboard.overdueMaintenance"),   key: "pendingApproval",endpoint: "overdue",               color: "border-red-500" },
     { label: t("dashboard.urgentAppointments"),   key: "urgentCount",    endpoint: "urgent",                color: "border-rose-500" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {cards.map(c => (
           <StatCard key={c.key} label={c.label} value={stats?.[c.key]} color={c.color}
             onClick={() => setModal({ title: c.label, endpoint: c.endpoint })} />

@@ -1,6 +1,14 @@
 // Modification #10: GET /appointments/pending-export-approval and the reused
 // Modification #5 PATCH /appointments/:id/approve-export action, as consumed by
-// the new Admin "Appointment Acceptance" page.
+// the Admin "Appointment Acceptance" page. UPDATED for the approval-flow fix:
+// a Scheduling-created normal appointment now starts DIRECTLY in the pending
+// (visibleToTechnician=false, adminApproved=false) state at creation time --
+// it lands in this page's list automatically, with no separate manual export
+// action required. Tests that used to call the export action just to reach
+// "pending" no longer need to; the one test that specifically regression-tests
+// the export ACTION itself uses a constructed legacy ("created before this fix
+// shipped") appointment instead, since that's the only way to still reach the
+// old (visibleToTechnician=true, adminApproved=false) precondition today.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { startTestServer, stopTestServer, TestServer } from './helpers/testServer';
@@ -40,6 +48,8 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
     await stopTestServer(ts.server);
   });
 
+  // Already pending immediately (the approval-flow fix): visibleToTechnician
+  // and adminApproved both start false -- no export step needed to reach it.
   async function createSchedulingAppointment(overrides: Record<string, any> = {}) {
     const res = await request(ts.baseUrl)
       .post('/api/appointments')
@@ -55,9 +65,28 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
     return res.body.data.id;
   }
 
-  async function exportAppointment(id: string) {
-    const res = await request(ts.baseUrl).patch(`/api/appointments/${id}/export-to-technicians`).set('Authorization', `Bearer ${schedToken}`).send({});
-    expect(res.status).toBe(200);
+  async function createAdminAppointment(overrides: Record<string, any> = {}) {
+    const res = await request(ts.baseUrl)
+      .post('/api/appointments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        customerId,
+        type: 'MAINTENANCE',
+        scheduledDate: new Date(Date.now() + 86400000).toISOString(),
+        ...overrides,
+      });
+    createdAppointmentIds.push(res.body.data.id);
+    return res.body.data.id;
+  }
+
+  // Simulates a LEGACY appointment still in the pre-fix "created and
+  // immediately technician-visible, never yet exported" state -- the only way
+  // a Scheduling appointment reaches (visibleToTechnician=true,
+  // adminApproved=false) today, since creation itself no longer produces it.
+  async function createLegacyUnexportedAppointment(overrides: Record<string, any> = {}) {
+    const id = await createSchedulingAppointment(overrides);
+    await prisma.appointment.update({ where: { id }, data: { visibleToTechnician: true } });
+    return id;
   }
 
   // Route-ordering sanity check: this must not be swallowed by GET /:id.
@@ -67,28 +96,27 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  // 5, 6, 7. Exactly the pending-exported appointments, nothing else
-  it('a pending exported appointment appears; an ordinary appointment and an already-approved one do not', async () => {
+  // 5, 6, 7. Exactly the pending appointments, nothing else. "ordinary" is now
+  // an Admin-created appointment -- a Scheduling-created one is never
+  // "ordinary" (non-pending) anymore, which is exactly the fix.
+  it('a pending Scheduling-created appointment appears; an Admin-created appointment and an already-approved one do not', async () => {
     const pendingId = await createSchedulingAppointment();
-    await exportAppointment(pendingId);
 
-    const ordinaryId = await createSchedulingAppointment();
+    const adminCreatedId = await createAdminAppointment();
 
     const approvedId = await createSchedulingAppointment();
-    await exportAppointment(approvedId);
     await request(ts.baseUrl).patch(`/api/appointments/${approvedId}/approve-export`).set('Authorization', `Bearer ${adminToken}`).send({});
 
     const res = await request(ts.baseUrl).get('/api/appointments/pending-export-approval').set('Authorization', `Bearer ${adminToken}`);
     const ids = res.body.data.map((a: any) => a.id);
     expect(ids).toContain(pendingId);
-    expect(ids).not.toContain(ordinaryId);
+    expect(ids).not.toContain(adminCreatedId);
     expect(ids).not.toContain(approvedId);
   });
 
   // 8-11. Decision-relevant fields present
   it('a pending item includes customer, service type, scheduled date, location, and notes', async () => {
     const id = await createSchedulingAppointment({ notes: 'Gate code 9012' });
-    await exportAppointment(id);
     const res = await request(ts.baseUrl).get('/api/appointments/pending-export-approval').set('Authorization', `Bearer ${adminToken}`);
     const found = res.body.data.find((a: any) => a.id === id);
     expect(found).toBeTruthy();
@@ -103,7 +131,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
   // 12, 13, 14, 15. Approve from this flow uses the exact Modification #5 action
   it('Admin approving removes the item from the pending list and sets adminApproved=true, visibleToTechnician=true', async () => {
     const id = await createSchedulingAppointment();
-    await exportAppointment(id);
 
     let list = await request(ts.baseUrl).get('/api/appointments/pending-export-approval').set('Authorization', `Bearer ${adminToken}`);
     expect(list.body.data.map((a: any) => a.id)).toContain(id);
@@ -120,7 +147,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
   // 16, 17. Technician visibility before/after
   it('Technician cannot see the appointment before approval, and can see it after', async () => {
     const id = await createSchedulingAppointment();
-    await exportAppointment(id);
 
     const before = await request(ts.baseUrl).get(`/api/appointments/${id}`).set('Authorization', `Bearer ${techToken}`);
     expect(before.status).toBe(404);
@@ -134,7 +160,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
   // 18. Scheduling visibility preserved throughout
   it('Scheduling continues to see the appointment before and after approval', async () => {
     const id = await createSchedulingAppointment();
-    await exportAppointment(id);
     const duringPending = await request(ts.baseUrl).get(`/api/appointments/${id}`).set('Authorization', `Bearer ${schedToken}`);
     expect(duringPending.status).toBe(200);
 
@@ -146,7 +171,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
   // 19, 20. Only Admin may use the pending-list endpoint or the approval action
   it('Scheduling cannot call GET pending-export-approval or PATCH approve-export', async () => {
     const id = await createSchedulingAppointment();
-    await exportAppointment(id);
     const listRes = await request(ts.baseUrl).get('/api/appointments/pending-export-approval').set('Authorization', `Bearer ${schedToken}`);
     expect(listRes.status).toBe(403);
     const approveRes = await request(ts.baseUrl).patch(`/api/appointments/${id}/approve-export`).set('Authorization', `Bearer ${schedToken}`).send({});
@@ -155,7 +179,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
 
   it('Technician cannot call GET pending-export-approval or PATCH approve-export', async () => {
     const id = await createSchedulingAppointment();
-    await exportAppointment(id);
     const listRes = await request(ts.baseUrl).get('/api/appointments/pending-export-approval').set('Authorization', `Bearer ${techToken}`);
     expect(listRes.status).toBe(403);
     const approveRes = await request(ts.baseUrl).patch(`/api/appointments/${id}/approve-export`).set('Authorization', `Bearer ${techToken}`).send({});
@@ -170,7 +193,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
   // 21. Duplicate/stale approval handled safely
   it('a second (stale) approval attempt is rejected safely and does not corrupt state', async () => {
     const id = await createSchedulingAppointment();
-    await exportAppointment(id);
     await request(ts.baseUrl).patch(`/api/appointments/${id}/approve-export`).set('Authorization', `Bearer ${adminToken}`).send({});
     const secondAttempt = await request(ts.baseUrl).patch(`/api/appointments/${id}/approve-export`).set('Authorization', `Bearer ${adminToken}`).send({});
     expect(secondAttempt.status).toBe(409);
@@ -200,8 +222,11 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
     expect(res.body.data.find((a: any) => a.id === id)).toBeTruthy();
   });
 
-  it('the Modification #5 export action still works end-to-end outside this page (regression)', async () => {
-    const id = await createSchedulingAppointment();
+  // The export action itself is unchanged and still fully functional for a
+  // legacy appointment still in the pre-fix "never exported" state (its only
+  // reachable precondition today -- a fresh appointment is already pending).
+  it('the Modification #5 export action still works end-to-end on a legacy never-exported appointment (regression)', async () => {
+    const id = await createLegacyUnexportedAppointment();
     const res = await request(ts.baseUrl).patch(`/api/appointments/${id}/export-to-technicians`).set('Authorization', `Bearer ${schedToken}`).send({});
     expect(res.status).toBe(200);
     expect(res.body.data.visibleToTechnician).toBe(false);
@@ -210,7 +235,6 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
 
   it('the Modification #8 completion/confirmation workflow still works after an export approval (regression)', async () => {
     const id = await createSchedulingAppointment({ technicianId: users.technician.id });
-    await exportAppointment(id);
     await request(ts.baseUrl).patch(`/api/appointments/${id}/approve-export`).set('Authorization', `Bearer ${adminToken}`).send({});
 
     await request(ts.baseUrl).patch(`/api/appointments/${id}/start`).set('Authorization', `Bearer ${techToken}`).send({});
