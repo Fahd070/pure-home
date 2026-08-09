@@ -225,6 +225,18 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
                         )}
                       </td>
                     </tr>
+                    {a.workStatus === "COMPLETED" && (
+                      <tr className="border-b bg-slate-50/70">
+                        <td colSpan={5} className="px-3 py-1.5 text-xs text-slate-600">
+                          {a.actualCompletionDate && (
+                            <span className="me-3"><span className="font-medium">{t("tasks.completionDate")}:</span> {new Date(a.actualCompletionDate).toLocaleDateString()}</span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${a.maintenanceConfirmed ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                            {a.maintenanceConfirmed ? t("appointments.operationConfirmed") : t("appointments.awaitingMaintenanceConfirmation")}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
                     {a.nextMaintenanceNote && (
                       <tr className="border-b bg-blue-50/50">
                         <td colSpan={5} className="px-3 py-1.5 text-xs text-blue-700">

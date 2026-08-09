@@ -36,7 +36,11 @@ describe('Technician completion modal: Next Maintenance Note field', () => {
   });
 
   it('does not require the note -- isCompleteValid is unaffected by it', () => {
-    expect(taskDetailSrc).toMatch(/const isCompleteValid = completeForm\.serviceDetails\.trim\(\) && completeForm\.amount && parseFloat\(completeForm\.amount\) >= 0;/);
+    // Modification #8 added a required actualCompletionDate check to this same
+    // line -- asserting only that nextMaintenanceNote specifically is absent
+    // from it, not the line's exact full text (see maintenanceConfirmation.test.ts
+    // for the full current isCompleteValid assertion).
+    expect(taskDetailSrc).toMatch(/const isCompleteValid = completeForm\.serviceDetails\.trim\(\) && completeForm\.amount && parseFloat\(completeForm\.amount\) >= 0/);
     expect(taskDetailSrc).not.toMatch(/isCompleteValid[^;]*nextMaintenanceNote/);
   });
 

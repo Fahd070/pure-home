@@ -24,6 +24,17 @@ export default function Appointments() {
     onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.exportError")),
   });
 
+  // Modification #8: Scheduling reviews and explicitly confirms a Technician's
+  // completion report. Never auto-approved.
+  const confirmOperationMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/appointments/${id}/confirm-operation`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      toast.success(t("appointments.confirmOperationSuccess"));
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.confirmOperationError")),
+  });
+
   useEffect(() => {
     if (!socket) return;
     const refresh = () => qc.invalidateQueries({ queryKey: ["appointments"] });
@@ -58,6 +69,7 @@ export default function Appointments() {
                 <th className="text-start px-4 py-3">{t("appointments.type")}</th>
                 <th className="text-start px-4 py-3">{t("common.status")}</th>
                 <th className="text-start px-4 py-3">{t("appointments.export")}</th>
+                <th className="text-start px-4 py-3">{t("appointments.confirmOperation")}</th>
               </tr>
             </thead>
             <tbody>
@@ -90,6 +102,22 @@ export default function Appointments() {
                           disabled={exportMutation.isPending}
                           className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 transition-colors">
                           {t("appointments.export")}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.workStatus !== "COMPLETED" ? (
+                        <span className="text-slate-300 text-xs">—</span>
+                      ) : a.maintenanceConfirmed ? (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700 whitespace-nowrap">
+                          {t("appointments.operationConfirmed")}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={e => { e.stopPropagation(); confirmOperationMutation.mutate(a.id); }}
+                          disabled={confirmOperationMutation.isPending}
+                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 transition-colors">
+                          {t("appointments.confirmOperation")}
                         </button>
                       )}
                     </td>

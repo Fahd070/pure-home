@@ -18,6 +18,18 @@ export default function AppointmentDetail() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["appointment", id] }); qc.invalidateQueries({ queryKey: ["appointments"] }); toast.success(t("common.success")); }
   });
 
+  // Modification #8: Scheduling reviews and explicitly confirms a Technician's
+  // completion report. Never auto-approved by viewing this page.
+  const confirmOperation = useMutation({
+    mutationFn: () => api.patch(`/appointments/${id}/confirm-operation`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointment", id] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      toast.success(t("appointments.confirmOperationSuccess"));
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.confirmOperationError")),
+  });
+
   if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;
   if (!data) return <p className="text-center py-12">{t("common.error")}</p>;
 
@@ -39,6 +51,37 @@ export default function AppointmentDetail() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
             <p className="font-medium text-blue-700 mb-1">{t("tasks.nextMaintenanceNote")}</p>
             <p className="text-slate-700">{a.nextMaintenanceNote}</p>
+          </div>
+        )}
+        {a.workStatus === "COMPLETED" && (
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">{t("appointments.completionReport")}</p>
+              <span className={`text-xs px-2 py-1 rounded-full font-medium ${a.maintenanceConfirmed ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                {a.maintenanceConfirmed ? t("appointments.operationConfirmed") : t("appointments.awaitingMaintenanceConfirmation")}
+              </span>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1.5">
+              {a.actualCompletionDate && (
+                <div><span className="text-slate-400">{t("tasks.completionDate")}: </span>{new Date(a.actualCompletionDate).toLocaleDateString()}</div>
+              )}
+              {a.serviceDetails && (
+                <div><span className="text-slate-400">{t("tasks.serviceDetails")}: </span>{a.serviceDetails}</div>
+              )}
+              {a.completionImage && (
+                <div>
+                  <p className="text-slate-400 mb-1">{t("tasks.completionPhoto")}:</p>
+                  <img src={a.completionImage} alt="" className="w-20 h-20 object-cover rounded-lg border" />
+                </div>
+              )}
+            </div>
+            {!a.maintenanceConfirmed && (
+              <button onClick={() => confirmOperation.mutate()} disabled={confirmOperation.isPending}
+                style={{ backgroundColor: "#008000" }}
+                className="w-full text-white py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                {confirmOperation.isPending ? t("common.loading") : t("appointments.confirmOperation")}
+              </button>
+            )}
           </div>
         )}
         <div className="border-t pt-3">

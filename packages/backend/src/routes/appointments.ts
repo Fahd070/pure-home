@@ -39,6 +39,11 @@ function apptFields(a: any) {
     isUrgent: a.isUrgent, adminApproved: a.adminApproved,
     visibleToScheduling: a.visibleToScheduling, visibleToTechnician: a.visibleToTechnician,
     createdByRole: a.createdByRole, technicianId: a.technicianId, workStatus: a.workStatus,
+    // Modification #8: a workflow/state boolean, same category as the other
+    // approval flags above -- unlike actualCompletionDate/serviceDetails/etc,
+    // which stay out of the audit snapshot (established convention: completion
+    // *content* is never audited here, only workflow state).
+    maintenanceConfirmed: a.maintenanceConfirmed,
   };
 }
 
@@ -486,6 +491,10 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       // Never required, regardless of role -- unlike serviceDetails/amount/method
       // below, which are only required for a non-admin (technician) completion.
       nextMaintenanceNote: z.string().max(2000).optional(),
+      // Modification #8: the ACTUAL operation date (not completedAt, which stays
+      // the submission timestamp below). Required for a non-admin completion,
+      // same as serviceDetails/amount/method.
+      actualCompletionDate: z.string().refine(v => !isNaN(Date.parse(v)), { message: 'Invalid completion date' }).optional(),
       version: z.number().int().optional(),
     }).parse(req.body);
     const isAdmin = req.user!.role === 'ADMIN';
@@ -497,6 +506,19 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       if (!body.serviceDetails?.trim()) return res.status(400).json({ success: false, message: 'Service details are required' });
       if (body.completionAmount == null || body.completionAmount < 0) return res.status(400).json({ success: false, message: 'Amount is required' });
       if (!body.completionPaymentMethod) return res.status(400).json({ success: false, message: 'Payment method is required' });
+      if (!body.actualCompletionDate) return res.status(400).json({ success: false, message: 'Completion date is required' });
+    }
+
+    let actualCompletionDate: Date | null = null;
+    if (body.actualCompletionDate) {
+      actualCompletionDate = new Date(body.actualCompletionDate);
+      // End of today (server time) -- the actual operation cannot have happened
+      // in the future, but "today" itself must remain a valid entry.
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      if (actualCompletionDate.getTime() > endOfToday.getTime()) {
+        return res.status(400).json({ success: false, message: 'Completion date cannot be in the future' });
+      }
     }
 
     const before = await prisma.appointment.findFirst({
@@ -522,6 +544,11 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
         completionPaymentMethod: body.completionPaymentMethod,
         completionImage: body.completionImage ?? null,
         nextMaintenanceNote: trimmedNextMaintenanceNote,
+        actualCompletionDate,
+        // Modification #8: every completion submission starts a fresh Maintenance
+        // review cycle -- the Technician can never self-confirm it, regardless of
+        // whether this appointment was ever previously completed/confirmed.
+        maintenanceConfirmed: false,
         version: { increment: 1 },
       },
       include: { technician: true, customer: true },
@@ -546,6 +573,47 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     // meaning every other technician received it too.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
     res.json({ success: true, data: appt });
+  } catch (e) { next(e); }
+});
+
+// Modification #8: Scheduling/Maintenance explicitly reviews and confirms a
+// Technician's completion report (actual completion date + non-financial
+// completion details). Distinct action from the Technician's own completion
+// submission -- never auto-approved, never confirmable by the Technician.
+router.patch('/:id/confirm-operation', requireRole('SCHEDULING'), async (req: AuthRequest, res, next) => {
+  try {
+    const before = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+
+    if (before.workStatus !== 'COMPLETED') {
+      return res.status(409).json({ success: false, error: 'NOT_COMPLETED', message: 'This appointment has not been completed by a Technician yet.' });
+    }
+    // Idempotent-safe: a duplicate confirmation click gets a clear 409, not a
+    // silent no-op or a corrupted double-increment.
+    if (before.maintenanceConfirmed) {
+      return res.status(409).json({ success: false, error: 'ALREADY_CONFIRMED', message: 'This operation has already been confirmed.' });
+    }
+
+    const appt = await prisma.appointment.update({
+      where: { id: req.params.id },
+      data: { maintenanceConfirmed: true, version: { increment: 1 } },
+      include: { technician: true, customer: true },
+    });
+    const custName = appt.customer?.name || 'Urgent Visit';
+    const custNameAr = appt.customer?.name || 'زيارة عاجلة';
+    await writeAudit({
+      action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
+      label: `Completion for '${custName}' confirmed by Scheduling`,
+      labelAr: `تم تأكيد إكمال '${custNameAr}' بواسطة الجدولة`,
+      before: apptFields(before), after: apptFields(appt),
+    });
+    // completionAmount is never touched by this action, but the response/socket
+    // still goes through the standard SCHEDULING-safe sanitizer for consistency
+    // and defense in depth (Modification #6 privacy rule).
+    const schedSafeAppt = stripCompletionAmount(appt);
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    res.json({ success: true, data: schedSafeAppt });
   } catch (e) { next(e); }
 });
 

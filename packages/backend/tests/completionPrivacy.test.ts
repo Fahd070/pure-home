@@ -81,7 +81,9 @@ describe('Modification #6: Next Maintenance Note + completion amount privacy', (
     const completeRes = await request(ts.baseUrl)
       .patch(`/api/appointments/${id}/complete`)
       .set('Authorization', `Bearer ${techToken}`)
-      .send({ serviceDetails: 'Serviced units', completionAmount: 300, completionPaymentMethod: 'CASH', ...completeBody });
+      // Modification #8: actualCompletionDate is now required for a Technician
+      // completion -- included here so this pre-#8 helper keeps working.
+      .send({ serviceDetails: 'Serviced units', completionAmount: 300, completionPaymentMethod: 'CASH', actualCompletionDate: new Date().toISOString().slice(0, 10), ...completeBody });
     return { id, completeRes };
   }
 
@@ -215,7 +217,7 @@ describe('Modification #6: Next Maintenance Note + completion amount privacy', (
     await request(ts.baseUrl)
       .patch(`/api/appointments/${id}/complete`)
       .set('Authorization', `Bearer ${techToken}`)
-      .send({ serviceDetails: 'x', completionAmount: 500, completionPaymentMethod: 'CASH' });
+      .send({ serviceDetails: 'x', completionAmount: 500, completionPaymentMethod: 'CASH', actualCompletionDate: new Date().toISOString().slice(0, 10) });
 
     const payload = await received;
     expect(payload.completionAmount).toBeUndefined();

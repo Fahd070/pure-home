@@ -87,7 +87,7 @@ describe('Appointment core flow', () => {
     const res = await request(ts.baseUrl)
       .patch(`/api/appointments/${appointmentId}/complete`)
       .set('Authorization', `Bearer ${tech1Token}`)
-      .send({ serviceDetails: 'Serviced 3 units', completionAmount: 250, completionPaymentMethod: 'CASH' });
+      .send({ serviceDetails: 'Serviced 3 units', completionAmount: 250, completionPaymentMethod: 'CASH', actualCompletionDate: new Date().toISOString().slice(0, 10) });
     expect(res.status).toBe(200);
     expect(res.body.data.workStatus).toBe('COMPLETED');
     expect(res.body.data.completionAmount).toBe(250);
