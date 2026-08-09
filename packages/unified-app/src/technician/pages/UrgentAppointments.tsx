@@ -7,12 +7,21 @@ import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 
-type PaymentMethod = "CASH" | "BANK_TRANSFER";
+type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
+type PaymentGroup = "" | "CASH" | "BANK_TRANSFER";
+type TransferType = "" | "COMMERCIAL" | "PERSONAL";
 type ServiceType = "INSTALLATION" | "MAINTENANCE" | "VISIT_ONLY";
 
+// Visit Only / Bank Transfer subtype fix: paymentGroup is the top-level
+// Cash/Bank Transfer choice; transferType only matters (and is only shown)
+// when paymentGroup is Bank Transfer, resolving to one of the two required
+// subtypes. Visit Only needs neither -- see resolvePaymentMethod() below.
 const EMPTY_RECORD = {
   customerName: "", customerPhone: "", customerDetails: "", serviceNotes: "",
-  serviceType: "MAINTENANCE" as ServiceType, paymentMethod: "CASH" as PaymentMethod, amount: "",
+  serviceType: "MAINTENANCE" as ServiceType,
+  paymentGroup: "CASH" as PaymentGroup,
+  transferType: "" as TransferType,
+  amount: "",
 };
 
 export default function TechUrgentAppointments() {
@@ -56,17 +65,62 @@ export default function TechUrgentAppointments() {
     onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
   });
 
+  const isVisitOnly = record.serviceType === "VISIT_ONLY";
+
+  // Resolves the final 3-way value the backend accepts, or null when no
+  // payment method applies (Visit Only) -- never trusts a stale
+  // paymentGroup/transferType combination left over from switching modes.
+  function resolvePaymentMethod(): PaymentMethod | null {
+    if (isVisitOnly) return null;
+    if (record.paymentGroup === "CASH") return "CASH";
+    if (record.paymentGroup === "BANK_TRANSFER" && record.transferType === "COMMERCIAL") return "BANK_TRANSFER_COMMERCIAL";
+    if (record.paymentGroup === "BANK_TRANSFER" && record.transferType === "PERSONAL") return "BANK_TRANSFER_PERSONAL";
+    return null;
+  }
+
+  // Visit Only: payment method/amount are not required at all. Otherwise:
+  // a payment group must be chosen, and Bank Transfer additionally requires
+  // its subtype -- both enforced again server-side (never trust the client).
+  const paymentValid = isVisitOnly || resolvePaymentMethod() !== null;
+  const amountValid = isVisitOnly || (!!record.amount.trim() && !isNaN(parseFloat(record.amount)) && parseFloat(record.amount) >= 0);
+  const isRecordValid = !!record.customerName.trim() && !!record.customerPhone.trim() && paymentValid && amountValid;
+
+  function selectServiceType(st: ServiceType) {
+    setRecord(r => {
+      if (st === "VISIT_ONLY") {
+        // Amount automatically becomes 0; any previously-selected payment
+        // method/transfer subtype is cleared, not just hidden.
+        return { ...r, serviceType: st, amount: "0", paymentGroup: "", transferType: "" };
+      }
+      if (r.serviceType === "VISIT_ONLY") {
+        // Coming back from Visit Only: normal validation resumes. Nothing
+        // stale to restore -- the user re-enters amount/payment fresh.
+        return { ...r, serviceType: st, amount: "", paymentGroup: "", transferType: "" };
+      }
+      return { ...r, serviceType: st };
+    });
+  }
+
+  function selectPaymentGroup(pg: PaymentGroup) {
+    // Always clears transferType, whether entering or leaving Bank Transfer --
+    // a subtype must be re-selected every time Bank Transfer is (re)chosen.
+    setRecord(r => ({ ...r, paymentGroup: pg, transferType: "" }));
+  }
+
   function handleSubmitRecord(e: React.FormEvent) {
     e.preventDefault();
     if (!submitModal) return;
-    if (!record.customerName.trim() || !record.customerPhone.trim() || !record.amount) {
+    if (!isRecordValid) {
       toast.error(t("urgentAppts.requiredFieldsMissing"));
       return;
     }
-    const amount = parseFloat(record.amount);
-    if (isNaN(amount) || amount < 0) {
-      toast.error(isAr ? "المبلغ غير صحيح" : "Invalid amount");
-      return;
+    const paymentMethod = resolvePaymentMethod();
+    if (!isVisitOnly) {
+      const amount = parseFloat(record.amount);
+      if (isNaN(amount) || amount < 0) {
+        toast.error(isAr ? "المبلغ غير صحيح" : "Invalid amount");
+        return;
+      }
     }
     submitMutation.mutate({
       appointmentId: submitModal.appt.id,
@@ -75,14 +129,19 @@ export default function TechUrgentAppointments() {
       customerDetails: record.customerDetails || undefined,
       serviceNotes: record.serviceNotes || undefined,
       serviceType: record.serviceType,
-      paymentMethod: record.paymentMethod,
-      amount,
+      ...(paymentMethod ? { paymentMethod } : {}),
+      amount: isVisitOnly ? 0 : parseFloat(record.amount),
     });
   }
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
     BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer",
+  };
+
+  const TRANSFER_TYPE_LABELS: Record<string, string> = {
+    COMMERCIAL: t("urgentAppts.commercialTransfer"),
+    PERSONAL: t("urgentAppts.personalTransfer"),
   };
 
   const SERVICE_TYPE_LABELS: Record<string, string> = {
@@ -199,32 +258,47 @@ export default function TechUrgentAppointments() {
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.serviceType")} *</label>
                 <div className="flex gap-2">
                   {(["INSTALLATION","MAINTENANCE","VISIT_ONLY"] as ServiceType[]).map(st => (
-                    <button key={st} type="button" onClick={() => setRecord(r => ({ ...r, serviceType: st }))}
+                    <button key={st} type="button" onClick={() => selectServiceType(st)}
                       className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${record.serviceType === st ? "bg-orange-500 text-white border-orange-500" : "hover:bg-slate-50"}`}>
                       {SERVICE_TYPE_LABELS[st]}
                     </button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.paymentMethod")} *</label>
-                <div className="flex gap-2">
-                  {(["CASH","BANK_TRANSFER"] as PaymentMethod[]).map(pm => (
-                    <button key={pm} type="button" onClick={() => setRecord(r => ({ ...r, paymentMethod: pm }))}
-                      className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${record.paymentMethod === pm ? "bg-orange-500 text-white border-orange-500" : "hover:bg-slate-50"}`}>
-                      {PAYMENT_LABELS[pm]}
-                    </button>
-                  ))}
+              {!isVisitOnly && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.paymentMethod")} *</label>
+                  <div className="flex gap-2">
+                    {(["CASH","BANK_TRANSFER"] as PaymentGroup[]).map(pg => (
+                      <button key={pg} type="button" onClick={() => selectPaymentGroup(pg)}
+                        className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${record.paymentGroup === pg ? "bg-orange-500 text-white border-orange-500" : "hover:bg-slate-50"}`}>
+                        {PAYMENT_LABELS[pg]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+              {!isVisitOnly && record.paymentGroup === "BANK_TRANSFER" && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.transferType")} *</label>
+                  <div className="flex gap-2">
+                    {(["COMMERCIAL","PERSONAL"] as Array<"COMMERCIAL" | "PERSONAL">).map(tt => (
+                      <button key={tt} type="button" onClick={() => setRecord(r => ({ ...r, transferType: tt }))}
+                        className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${record.transferType === tt ? "bg-orange-500 text-white border-orange-500" : "hover:bg-slate-50"}`}>
+                        {TRANSFER_TYPE_LABELS[tt]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.amount")} * (SAR)</label>
-                <input type="number" step="0.01" min="0" required value={record.amount}
+                <input type="number" step="0.01" min="0" required value={record.amount} disabled={isVisitOnly}
                   onChange={e => setRecord(r => ({ ...r, amount: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-slate-100 disabled:text-slate-400" />
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="submit" disabled={submitMutation.isPending || !record.customerName.trim() || !record.customerPhone.trim() || !record.amount}
+                <button type="submit" disabled={submitMutation.isPending || !isRecordValid}
                   className="flex-1 bg-orange-500 text-white py-2 rounded-lg text-sm hover:bg-orange-600 disabled:opacity-50">
                   {submitMutation.isPending ? "..." : t("urgentAppts.submitRecord")}
                 </button>

@@ -518,7 +518,14 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     const body = z.object({
       serviceDetails: z.string().max(2000).optional(),
       completionAmount: z.number().optional(),
-      completionPaymentMethod: z.enum(['CASH','BANK_TRANSFER']).optional(),
+      // Bank Transfer subtype fix: BANK_TRANSFER is no longer a valid bare
+      // value -- it is replaced by the two required subtypes below, so a
+      // submission of the old bare "BANK_TRANSFER" string now correctly fails
+      // Zod validation (400) instead of silently accepting a transfer with no
+      // subtype. completionPaymentMethod stays a plain Prisma String column
+      // (see schema.prisma), so this is a validation-layer change only --
+      // no migration.
+      completionPaymentMethod: z.enum(['CASH','BANK_TRANSFER_COMMERCIAL','BANK_TRANSFER_PERSONAL']).optional(),
       completionImage: z.string().max(5_000_000).optional(),
       // Modification #6: optional note for the customer's next maintenance visit.
       // Never required, regardless of role -- unlike serviceDetails/amount/method

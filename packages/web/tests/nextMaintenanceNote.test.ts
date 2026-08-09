@@ -51,7 +51,8 @@ describe('Technician completion modal: Next Maintenance Note field', () => {
   it('preserves the existing required fields (serviceDetails, amount, paymentMethod) unchanged', () => {
     expect(taskDetailSrc).toMatch(/serviceDetails:\s*completeForm\.serviceDetails/);
     expect(taskDetailSrc).toMatch(/completionAmount:\s*parseFloat\(completeForm\.amount\)/);
-    expect(taskDetailSrc).toMatch(/completionPaymentMethod:\s*completeForm\.paymentMethod/);
+    // Bank Transfer subtype fix (Part D): resolved via resolvePaymentMethod().
+    expect(taskDetailSrc).toMatch(/completionPaymentMethod:\s*resolvePaymentMethod\(\)/);
   });
 });
 

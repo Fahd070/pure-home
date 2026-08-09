@@ -118,7 +118,8 @@ export default function UrgentAppointments() {
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
-    BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer",
+    BANK_TRANSFER_COMMERCIAL: isAr ? "تحويل بنكي (تجاري)" : "Bank Transfer (Commercial)",
+    BANK_TRANSFER_PERSONAL: isAr ? "تحويل بنكي (خاص)" : "Bank Transfer (Personal)",
   };
 
   const SERVICE_LABELS: Record<string, string> = {
@@ -318,12 +319,15 @@ export default function UrgentAppointments() {
                         {v.serviceType ? (SERVICE_LABELS[v.serviceType] || v.serviceType) : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          v.paymentMethod === "CASH" ? "bg-green-100 text-green-700" :
-                          v.paymentMethod === "BANK_TRANSFER" ? "bg-blue-100 text-blue-700" :
-                          "bg-slate-100 text-slate-600"}`}>
-                          {PAYMENT_LABELS[v.paymentMethod] || v.paymentMethod}
-                        </span>
+                        {v.paymentMethod ? (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            v.paymentMethod === "CASH" ? "bg-green-100 text-green-700" :
+                            "bg-blue-100 text-blue-700"}`}>
+                            {PAYMENT_LABELS[v.paymentMethod] || v.paymentMethod}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{v.amount != null ? `${v.amount.toFixed(2)}` : "—"}</td>
                       <td className="px-4 py-3 text-slate-600">{v.submittedBy?.name || "—"}</td>

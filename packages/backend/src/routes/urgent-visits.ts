@@ -9,6 +9,13 @@ import { writeAudit } from '../services/audit.service';
 const router = Router();
 router.use(authenticate);
 
+// Bank Transfer subtype fix: BANK_TRANSFER is no longer a valid bare value --
+// replaced by the two required subtypes, so a submission of the old bare
+// "BANK_TRANSFER" string now correctly fails validation instead of silently
+// accepting a transfer with no subtype (matches the identical change in
+// appointments.ts's completionPaymentMethod).
+// Visit Only fix: paymentMethod/amount are optional at the schema level and
+// enforced conditionally below, since VISIT_ONLY genuinely needs neither.
 const visitSchema = z.object({
   appointmentId:   z.string().uuid(),
   customerName:    z.string().min(1).max(200),
@@ -16,8 +23,8 @@ const visitSchema = z.object({
   customerDetails: z.string().max(1000).optional(),
   serviceNotes:    z.string().max(2000).optional(),
   serviceType:     z.enum(['INSTALLATION','MAINTENANCE','VISIT_ONLY']),
-  paymentMethod:   z.enum(['CASH','BANK_TRANSFER']),
-  amount:          z.number().min(0),
+  paymentMethod:   z.enum(['CASH','BANK_TRANSFER_COMMERCIAL','BANK_TRANSFER_PERSONAL']).optional(),
+  amount:          z.number().min(0).optional(),
   customerInfo:    z.string().max(1000).optional(),
   serviceDetails:  z.string().max(2000).optional(),
   notes:           z.string().max(2000).optional(),
@@ -27,6 +34,18 @@ const visitSchema = z.object({
 router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) => {
   try {
     const body = visitSchema.parse(req.body);
+    const isVisitOnly = body.serviceType === 'VISIT_ONLY';
+
+    // Visit Only: amount/payment method are not required and never trusted
+    // from the payload -- normalized below regardless of what was submitted,
+    // so "VISIT_ONLY + amount 500" or "VISIT_ONLY + BANK_TRANSFER" can never
+    // reach the database. For a normal (non-Visit-Only) visit, both remain
+    // required exactly as before.
+    if (!isVisitOnly) {
+      if (!body.paymentMethod) return res.status(400).json({ success: false, message: 'Payment method is required' });
+      if (body.amount == null) return res.status(400).json({ success: false, message: 'Amount is required' });
+    }
+
     const appt = await prisma.appointment.findUnique({
       where: { id: body.appointmentId },
     });
@@ -42,6 +61,15 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
       return res.status(409).json({ success: false, message: 'Record already submitted for this appointment' });
     }
 
+    // UrgentVisitRecord.paymentMethod is a required (NOT NULL) String column
+    // (see schema.prisma) -- no schema change was needed or made; an empty
+    // string is the smallest-footprint way to represent "not applicable"
+    // within that existing contract, and every display site already treats a
+    // falsy paymentMethod as "no payment method" (see admin/pages/
+    // UrgentAppointments.tsx).
+    const normalizedAmount = isVisitOnly ? 0 : body.amount!;
+    const normalizedPaymentMethod = isVisitOnly ? '' : body.paymentMethod!;
+
     const record = await prisma.urgentVisitRecord.create({
       data: {
         appointmentId:   body.appointmentId,
@@ -50,8 +78,8 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
         customerDetails: body.customerDetails,
         serviceNotes:    body.serviceNotes,
         serviceType:     body.serviceType,
-        paymentMethod:   body.paymentMethod,
-        amount:          body.amount,
+        paymentMethod:   normalizedPaymentMethod,
+        amount:          normalizedAmount,
         customerInfo:    body.customerInfo,
         serviceDetails:  body.serviceDetails,
         notes:           body.notes,
@@ -61,7 +89,7 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
     });
     await writeAudit({
       action: 'CREATE', entityType: 'urgent_visit', entityId: record.id, userId: req.user!.userId,
-      label: `Urgent visit completed for customer '${body.customerName}' — Payment: ${body.paymentMethod} — Amount: ${body.amount}`,
+      label: `Urgent visit completed for customer '${body.customerName}' — Payment: ${normalizedPaymentMethod || 'N/A (Visit Only)'} — Amount: ${normalizedAmount}`,
       after: { id: record.id, customerName: body.customerName, paymentMethod: record.paymentMethod, appointmentId: record.appointmentId },
     });
     emitToRole(SOCKET_ROOMS.ADMIN, 'urgent_visit:submitted', record);
