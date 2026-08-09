@@ -217,7 +217,7 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
     const completeRes = await request(ts.baseUrl)
       .patch(`/api/appointments/${id}/complete`)
       .set('Authorization', `Bearer ${techToken}`)
-      .send({ serviceDetails: 'x', completionAmount: 100, completionPaymentMethod: 'CASH', actualCompletionDate: new Date().toISOString().slice(0, 10) });
+      .send({ serviceDetails: 'x', completionAmount: 100, completionPaymentMethod: 'CASH', actualCompletionDate: new Date().toISOString().slice(0, 10), technicianName: 'Ahmed' });
     expect(completeRes.status).toBe(200);
     expect(completeRes.body.data.maintenanceConfirmed).toBe(false);
 

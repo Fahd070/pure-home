@@ -212,7 +212,7 @@ describe('Modification #9: pending Technician task details', () => {
     const completeRes = await request(ts.baseUrl)
       .patch(`/api/appointments/${id}/complete`)
       .set('Authorization', `Bearer ${techToken}`)
-      .send({ serviceDetails: 'Replaced filter', completionAmount: 200, completionPaymentMethod: 'CASH', actualCompletionDate: dateStr });
+      .send({ serviceDetails: 'Replaced filter', completionAmount: 200, completionPaymentMethod: 'CASH', actualCompletionDate: dateStr, technicianName: 'Ahmed' });
     expect(completeRes.status).toBe(200);
     expect(completeRes.body.data.workStatus).toBe('COMPLETED');
     expect(completeRes.body.data.actualCompletionDate).toBeTruthy();

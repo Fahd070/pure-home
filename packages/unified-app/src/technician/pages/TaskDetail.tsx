@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
@@ -11,6 +12,20 @@ type PaymentMethod = "CASH" | "BANK_TRANSFER";
 
 const ACCEPTED_IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMG_PX = 1200;
+
+// Modification #13: one Unicode letter "word" (Latin or Arabic), optionally
+// joined by a single internal hyphen/apostrophe -- matches the backend's
+// FIRST_NAME_RE in routes/appointments.ts exactly (duplicated deliberately,
+// same convention as PHONE_RE between AddCustomer.tsx and customers.ts).
+// Exported (alongside firstNameOf below) so permanent tests can exercise the
+// exact production logic directly rather than re-implementing it.
+export const FIRST_NAME_RE = /^[\p{L}]+(?:['-][\p{L}]+)*$/u;
+
+export function firstNameOf(fullName?: string | null): string {
+  const trimmed = (fullName || "").trim();
+  if (!trimmed) return "";
+  return trimmed.split(/\s+/)[0];
+}
 
 async function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,7 +49,7 @@ async function compressImage(file: File): Promise<string> {
   });
 }
 
-const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod, nextMaintenanceNote: "", actualCompletionDate: "" };
+const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod, nextMaintenanceNote: "", actualCompletionDate: "", technicianName: "" };
 
 // Modification #8: today's date in the local YYYY-MM-DD form a native date
 // input expects, used both to default the field and to cap it via `max` so a
@@ -51,6 +66,7 @@ export default function TaskDetail() {
   const isAr = i18n.language === "ar";
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const [showComplete, setShowComplete] = useState(false);
   const [showPostpone, setShowPostpone] = useState(false);
   const [completeForm, setCompleteForm] = useState({ ...EMPTY_COMPLETE });
@@ -80,6 +96,7 @@ export default function TaskDetail() {
       completionAmount: parseFloat(completeForm.amount),
       completionPaymentMethod: completeForm.paymentMethod,
       actualCompletionDate: completeForm.actualCompletionDate,
+      technicianName: completeForm.technicianName.trim(),
       ...(completionImage ? { completionImage } : {}),
       ...(completeForm.nextMaintenanceNote.trim() ? { nextMaintenanceNote: completeForm.nextMaintenanceNote } : {}),
     }),
@@ -100,7 +117,13 @@ export default function TaskDetail() {
   const addr = customer?.address;
   const workStatus = appt.workStatus;
 
-  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate;
+  const trimmedTechnicianName = completeForm.technicianName.trim();
+  const technicianNameValid = !!trimmedTechnicianName && FIRST_NAME_RE.test(trimmedTechnicianName);
+  const technicianNameError = trimmedTechnicianName && !technicianNameValid
+    ? t("tasks.technicianNameFirstOnly")
+    : null;
+
+  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate && technicianNameValid;
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
@@ -201,7 +224,7 @@ export default function TaskDetail() {
             </button>
           )}
           {workStatus === "IN_PROGRESS" && (<>
-            <button onClick={() => { setCompleteForm(f => ({ ...f, actualCompletionDate: todayDateInputValue() })); setShowComplete(true); }} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700">{t("tasks.complete")}</button>
+            <button onClick={() => { setCompleteForm(f => ({ ...f, actualCompletionDate: todayDateInputValue(), technicianName: firstNameOf(user?.name) })); setShowComplete(true); }} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700">{t("tasks.complete")}</button>
             <button onClick={() => setShowPostpone(true)} className="flex-1 bg-yellow-500 text-white py-2.5 rounded-lg font-medium hover:bg-yellow-600">{t("tasks.postpone")}</button>
           </>)}
         </div>
@@ -218,6 +241,14 @@ export default function TaskDetail() {
               {isAr ? "جميع الحقول إلزامية لإتمام المهمة" : "All fields are required to complete the task"}
             </p>
             <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.technicianName")} *</label>
+                <input type="text" required value={completeForm.technicianName}
+                  onChange={e => setCompleteForm(f => ({ ...f, technicianName: e.target.value }))}
+                  placeholder={isAr ? "مثال: أحمد" : "e.g. Ahmed"}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${technicianNameError ? "border-red-400" : ""}`} />
+                {technicianNameError && <p className="text-red-500 text-xs mt-1">{technicianNameError}</p>}
+              </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.serviceDetails")} *</label>
                 <textarea value={completeForm.serviceDetails} onChange={e => setCompleteForm(f => ({ ...f, serviceDetails: e.target.value }))} rows={3} required
