@@ -15,7 +15,6 @@ export default function SchedAddCustomer() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "", phone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
-    installationDate: "",
     city: "", district: "", street: "", postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -37,14 +36,13 @@ export default function SchedAddCustomer() {
     setLoading(true);
     try {
       const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo,
-        name, phone, maintenanceCycle, maintenanceFrequency, notes, installationDate } = form;
+        name, phone, maintenanceCycle, maintenanceFrequency, notes } = form;
 
       await api.post("/customers", {
         name, phone,
         maintenanceCycle,
         maintenanceFrequency: Number(maintenanceFrequency),
         notes: notes || undefined,
-        installationDate: installationDate || undefined,
         address: {
           city, district, street,
           postalCode: postalCode || undefined,
@@ -97,15 +95,6 @@ export default function SchedAddCustomer() {
           <div>
             <label className="block text-sm font-medium mb-1">{t("customers.frequency")}</label>
             <input type="number" min={1} value={form.maintenanceFrequency} onChange={e => set("maintenanceFrequency", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
-        </div>
-
-        <div className="border-t pt-3">
-          <p className="text-sm font-semibold text-slate-600 mb-3">{isAr ? "تاريخ التركيب (اختياري)" : "Installation Date (optional)"}</p>
-          <div>
-            <label className="block text-sm font-medium mb-1">{t("approvals.installationDate")}</label>
-            <input type="date" value={form.installationDate} onChange={e => set("installationDate", e.target.value)}
               className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
           </div>
         </div>
