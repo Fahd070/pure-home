@@ -84,7 +84,10 @@ describe('Visit Only + Bank Transfer subtype (Parts B/C/D)', () => {
 
   function dateOnly(d: Date | string): string { return new Date(d).toISOString().slice(0, 10); }
 
-  const urgentVisitBase = { customerName: 'Urgent Visit Customer', customerPhone: '0511111111' };
+  // technicianName added here (Technician Name + full completion details batch, Part B)
+  // -- required on every Technician-submitted urgent visit; propagates to all send()
+  // calls below via the spread, matching the established baseBody pattern.
+  const urgentVisitBase = { customerName: 'Urgent Visit Customer', customerPhone: '0511111111', technicianName: 'Ahmed' };
 
   // ================= Part B: Visit Only (urgent-visits) =================
 

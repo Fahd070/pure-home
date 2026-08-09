@@ -7,6 +7,11 @@ import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { useAuthStore } from "../store/authStore";
+// Reuses Modification #13's exact first-name rule/extraction (Part B of this
+// batch) rather than duplicating a second validator -- same file family
+// (technician/pages), same production logic.
+import { FIRST_NAME_RE, firstNameOf } from "./TaskDetail";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
 type PaymentGroup = "" | "CASH" | "BANK_TRANSFER";
@@ -23,6 +28,7 @@ const EMPTY_RECORD = {
   paymentGroup: "CASH" as PaymentGroup,
   transferType: "" as TransferType,
   amount: "",
+  technicianName: "",
 };
 
 export default function TechUrgentAppointments() {
@@ -30,6 +36,7 @@ export default function TechUrgentAppointments() {
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
   const socket = useSocket();
+  const { user } = useAuthStore();
   const [submitModal, setSubmitModal] = useState<{ appt: any } | null>(null);
   const [record, setRecord] = useState({ ...EMPTY_RECORD });
 
@@ -84,7 +91,12 @@ export default function TechUrgentAppointments() {
   // its subtype -- both enforced again server-side (never trust the client).
   const paymentValid = isVisitOnly || resolvePaymentMethod() !== null;
   const amountValid = isVisitOnly || (!!record.amount.trim() && !isNaN(parseFloat(record.amount)) && parseFloat(record.amount) >= 0);
-  const isRecordValid = !!record.customerName.trim() && !!record.customerPhone.trim() && paymentValid && amountValid;
+  const trimmedTechnicianName = record.technicianName.trim();
+  const technicianNameValid = !!trimmedTechnicianName && FIRST_NAME_RE.test(trimmedTechnicianName);
+  const technicianNameError = trimmedTechnicianName && !technicianNameValid
+    ? t("tasks.technicianNameFirstOnly")
+    : null;
+  const isRecordValid = !!record.customerName.trim() && !!record.customerPhone.trim() && paymentValid && amountValid && technicianNameValid;
 
   function selectServiceType(st: ServiceType) {
     setRecord(r => {
@@ -132,6 +144,7 @@ export default function TechUrgentAppointments() {
       serviceType: record.serviceType,
       ...(paymentMethod ? { paymentMethod } : {}),
       amount: isVisitOnly ? 0 : parseFloat(record.amount),
+      technicianName: trimmedTechnicianName,
     });
   }
 
@@ -204,7 +217,7 @@ export default function TechUrgentAppointments() {
                     </td>
                     <td className="px-4 py-3">
                       {!a.urgentVisitRecord ? (
-                        <button onClick={() => { setSubmitModal({ appt: a }); setRecord({ ...EMPTY_RECORD }); }}
+                        <button onClick={() => { setSubmitModal({ appt: a }); setRecord({ ...EMPTY_RECORD, technicianName: firstNameOf(user?.name) }); }}
                           className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600">
                           {t("urgentAppts.submitRecord")}
                         </button>
@@ -244,6 +257,14 @@ export default function TechUrgentAppointments() {
                   <input required value={record.customerPhone} onChange={e => setRecord(r => ({ ...r, customerPhone: e.target.value }))}
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.technicianName")} *</label>
+                <input type="text" required value={record.technicianName}
+                  onChange={e => setRecord(r => ({ ...r, technicianName: e.target.value }))}
+                  placeholder={isAr ? "مثال: أحمد" : "e.g. Ahmed"}
+                  className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${technicianNameError ? "border-red-400" : ""}`} />
+                {technicianNameError && <p className="text-red-500 text-xs mt-1">{technicianNameError}</p>}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerDetails")}</label>

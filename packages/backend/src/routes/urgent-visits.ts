@@ -9,6 +9,15 @@ import { writeAudit } from '../services/audit.service';
 const router = Router();
 router.use(authenticate);
 
+// Modification #13's exact first-name rule, reused for urgent-visit
+// completion (Part B of this batch): one Unicode letter "word" (Latin or
+// Arabic), optionally joined by a single internal hyphen/apostrophe.
+// Deliberately duplicated rather than imported -- matches this codebase's
+// established convention for this exact regex (see routes/appointments.ts's
+// own comment on FIRST_NAME_RE, which duplicates it for the same reason
+// PHONE_RE is duplicated between AddCustomer.tsx and customers.ts).
+const FIRST_NAME_RE = /^[\p{L}]+(?:['-][\p{L}]+)*$/u;
+
 // Bank Transfer subtype fix: BANK_TRANSFER is no longer a valid bare value --
 // replaced by the two required subtypes, so a submission of the old bare
 // "BANK_TRANSFER" string now correctly fails validation instead of silently
@@ -28,6 +37,12 @@ const visitSchema = z.object({
   customerInfo:    z.string().max(1000).optional(),
   serviceDetails:  z.string().max(2000).optional(),
   notes:           z.string().max(2000).optional(),
+  // Part B: required for every Technician-submitted urgent visit (this route
+  // is TECHNICIAN-only -- see requireRole below), same first-name-only rule
+  // as Modification #13's normal-completion technicianName. Business/display
+  // data only -- never used as the audit actor or persisted (see
+  // trimmedTechnicianName below and its comment).
+  technicianName:  z.string().max(100).optional(),
 });
 
 // Technician submits visit record after completing urgent appointment
@@ -35,6 +50,18 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
   try {
     const body = visitSchema.parse(req.body);
     const isVisitOnly = body.serviceType === 'VISIT_ONLY';
+
+    // Part B: technicianName required, first-name-only, same rule as
+    // Modification #13. Blank/whitespace-only is treated as missing. This is
+    // business/display data only -- the authenticated actor (req.user!.userId,
+    // used below for submittedById and the audit log) remains authoritative
+    // and is never replaced by this user-entered string, and it is not
+    // persisted (UrgentVisitRecord has no such column -- see schema.prisma;
+    // the real completer is already reliably identified via submittedById/
+    // submittedBy, so no duplicate name column was added).
+    const trimmedTechnicianName = body.technicianName?.trim() || '';
+    if (!trimmedTechnicianName) return res.status(400).json({ success: false, message: 'Technician name is required' });
+    if (!FIRST_NAME_RE.test(trimmedTechnicianName)) return res.status(400).json({ success: false, message: 'Please enter first name only' });
 
     // Visit Only: amount/payment method are not required and never trusted
     // from the payload -- normalized below regardless of what was submitted,
