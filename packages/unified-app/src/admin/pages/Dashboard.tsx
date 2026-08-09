@@ -6,6 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
+import CallReportModal from "../components/CallReportModal";
 import { combineManualDateTime, splitToManualParts } from "../../utils/dateTimeInput";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
@@ -158,6 +159,12 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "customer" | "appointment" } | null>(null);
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
   const [schedulingCustomer, setSchedulingCustomer] = useState<{ id: string; name: string } | null>(null);
+  // Dashboard parity fix: Admin is already authorized by the same existing Call
+  // Reports subsystem (POST/GET /call-reports are requireRole('ADMIN','SCHEDULING')),
+  // so this mirrors Modification #11's Scheduling Dashboard shortcut exactly.
+  // Always fully replaced (never merged) on open, and cleared on close, so a
+  // stale previous row's context can never bleed into a newly-opened modal.
+  const [callReportCustomer, setCallReportCustomer] = useState<{ id: string; name: string; phone: string } | null>(null);
 
   useEffect(() => { const tm = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(tm); }, [search]);
   useEffect(() => { setPage(1); }, [debouncedSearch]);
@@ -210,6 +217,13 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
           customer={schedulingCustomer}
           onClose={() => setSchedulingCustomer(null)}
           onSaved={() => { qc.invalidateQueries({ queryKey: [endpoint] }); qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); }}
+        />
+      )}
+
+      {callReportCustomer && (
+        <CallReportModal
+          customer={callReportCustomer}
+          onClose={() => setCallReportCustomer(null)}
         />
       )}
 
@@ -278,6 +292,12 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1">
                             <RowActionButton variant="edit" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
+                            {/* Dashboard parity fix: only for a real, registered customer -- an
+                                urgent row with no linked customer has no customerId to attach
+                                a call report to (matches Modification #11's Scheduling guard). */}
+                            {a.customer && (
+                              <RowActionButton variant="call" onClick={() => setCallReportCustomer({ id: a.customer.id, name: a.customer.name, phone: a.customer.phone })} title={t("callReports.action")} />
+                            )}
                             <RowActionButton variant="delete" onClick={() => setConfirmDelete({ id: a.id, type: "appointment" })} title={t("dashboard.deleteRecord")} />
                           </div>
                         </td>

@@ -163,12 +163,13 @@ describe('Customer deletion synchronization (Part A)', () => {
     expect(await prisma.appointment.findUnique({ where: { id: apptId } })).toBeNull();
   });
 
-  // 10. Approved/exported appointment (Modification #5) is cleaned correctly.
-  it('cleans an appointment that has been exported and Admin-approved', async () => {
+  // 10. Approved appointment (Modification #5) is cleaned correctly. A
+  // Scheduling-created appointment now starts already-pending (the approval-
+  // flow fix), so it goes straight to approve-export -- no separate export
+  // step is reachable/needed anymore for a freshly-created appointment.
+  it('cleans an appointment that has been Admin-approved', async () => {
     const custId = await createCustomer('Sync Delete Exported Approved Customer');
     const apptId = await createSchedulingAppointment(custId);
-    const exportRes = await request(ts.baseUrl).patch(`/api/appointments/${apptId}/export-to-technicians`).set('Authorization', `Bearer ${schedToken}`).send({});
-    expect(exportRes.status).toBe(200);
     const approveRes = await request(ts.baseUrl).patch(`/api/appointments/${apptId}/approve-export`).set('Authorization', `Bearer ${adminToken}`).send({});
     expect(approveRes.status).toBe(200);
     const beforeDelete = await prisma.appointment.findUnique({ where: { id: apptId } });
@@ -179,12 +180,12 @@ describe('Customer deletion synchronization (Part A)', () => {
     expect(await prisma.appointment.findUnique({ where: { id: apptId } })).toBeNull();
   });
 
-  // 11. Pending Admin-approval appointment (exported, not yet approved) is cleaned correctly.
-  it('cleans an appointment that is exported and still pending Admin approval', async () => {
+  // 11. Pending Admin-approval appointment is cleaned correctly -- a
+  // Scheduling-created appointment is already in this state immediately at
+  // creation (the approval-flow fix), with no export step required.
+  it('cleans an appointment that is still pending Admin approval', async () => {
     const custId = await createCustomer('Sync Delete Pending Approval Customer');
     const apptId = await createSchedulingAppointment(custId);
-    const exportRes = await request(ts.baseUrl).patch(`/api/appointments/${apptId}/export-to-technicians`).set('Authorization', `Bearer ${schedToken}`).send({});
-    expect(exportRes.status).toBe(200);
     const beforeDelete = await prisma.appointment.findUnique({ where: { id: apptId } });
     expect(beforeDelete?.visibleToTechnician).toBe(false);
     expect(beforeDelete?.adminApproved).toBe(false);

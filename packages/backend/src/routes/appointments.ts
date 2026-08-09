@@ -220,12 +220,18 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
         isUrgent,
         visibleToScheduling,
         adminApproved,
-        // Modification #5: ordinary appointment creation is unaffected by the new
-        // export/approval workflow -- every appointment is technician-visible
-        // immediately, exactly as before. Only the dedicated export endpoint below
-        // ever sets this false, and only for an existing appointment already in the
-        // normal (never-exported) state.
-        visibleToTechnician: true,
+        // Approval-flow fix: a normal (non-urgent) appointment CREATED BY
+        // SCHEDULING must start hidden from Technicians -- exactly the same
+        // pending state the export-to-technicians endpoint below used to
+        // require a separate manual action to reach -- so it lands directly
+        // in Admin's Appointment Acceptance queue instead of ever having been
+        // technician-visible. An Admin-created appointment (or any urgent
+        // appointment, which only Admin can create here -- see `isUrgent`
+        // above) needs no separate approval and stays immediately visible,
+        // exactly as before. The client can never override this: visibleToTechnician
+        // is not one of apptSchema's accepted fields, so a Scheduling-supplied
+        // value is silently dropped by Zod before this line ever runs.
+        visibleToTechnician: isAdmin || isUrgent,
         createdByRole: req.user!.role,
         createdById: req.user!.userId,
         technicianId: body.technicianId ?? null,
