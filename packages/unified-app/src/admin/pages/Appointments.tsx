@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 
 const STATUS_COLORS: Record<string, string> = {
   SCHEDULED:   "bg-blue-100 text-blue-700",
@@ -32,6 +33,15 @@ export default function Appointments() {
   const { data: customersData } = useQuery({
     queryKey: ["customers-select"],
     queryFn: () => api.get("/customers", { params: { limit: 500 } }).then(r => r.data.data || []),
+  });
+
+  // Modification #7: keyed on the selected customer, so react-query's own cache
+  // identity (not a manual AbortController) guarantees a stale response for a
+  // previously-selected customer can never render under a newly-selected one.
+  const { data: prevNote } = useQuery({
+    queryKey: ["latest-maintenance-note", form.customerId],
+    queryFn: () => api.get(`/customers/${form.customerId}/latest-maintenance-note`).then(r => r.data.data.nextMaintenanceNote),
+    enabled: !!form.customerId,
   });
 
   const createMutation = useMutation({
@@ -225,6 +235,11 @@ export default function Appointments() {
               )}
               {form.customerId && <p className="text-xs text-blue-600">✓ {isAr ? "تم اختيار العميل" : "Customer selected"}</p>}
             </div>
+            {form.customerId && (
+              <div className="col-span-2">
+                <PreviousMaintenanceNoteBox note={prevNote} />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
               <input type="datetime-local" required value={form.scheduledDate}

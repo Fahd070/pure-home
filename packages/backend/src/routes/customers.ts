@@ -112,6 +112,38 @@ router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
   } catch (e) { next(e); }
 });
 
+// Modification #7: surfaces the note a technician left on the customer's most
+// recently COMPLETED appointment (Modification #6's nextMaintenanceNote), for
+// display when Admin/Scheduling is creating that customer's next appointment.
+// Reuses the existing field -- no new note storage. Only the minimal fields the
+// UI needs are selected; completionAmount/completionPaymentMethod are never
+// touched here, so there is nothing to strip.
+router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+  try {
+    const customer = await prisma.customer.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
+
+    // A handful of the most recent completed appointments, newest first. Most of
+    // the time the very first one already has a note; a small lookahead handles
+    // the case where one or more of the most recent completions left no note
+    // (test scenario: newest completion has null nextMaintenanceNote, an older
+    // one has a real note -- we must fall through to that older one, not stop).
+    const candidates = await prisma.appointment.findMany({
+      where: { customerId: req.params.id, workStatus: 'COMPLETED', nextMaintenanceNote: { not: null } },
+      orderBy: { completedAt: 'desc' },
+      select: { id: true, nextMaintenanceNote: true, completedAt: true },
+      take: 5,
+    });
+    const match = candidates.find(a => a.nextMaintenanceNote && a.nextMaintenanceNote.trim().length > 0);
+
+    if (!match) return res.json({ success: true, data: { nextMaintenanceNote: null } });
+    res.json({
+      success: true,
+      data: { nextMaintenanceNote: match.nextMaintenanceNote, appointmentId: match.id, completedAt: match.completedAt },
+    });
+  } catch (e) { next(e); }
+});
+
 router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
