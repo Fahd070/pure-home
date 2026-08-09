@@ -34,7 +34,16 @@ async function compressImage(file: File): Promise<string> {
   });
 }
 
-const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod, nextMaintenanceNote: "" };
+const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod, nextMaintenanceNote: "", actualCompletionDate: "" };
+
+// Modification #8: today's date in the local YYYY-MM-DD form a native date
+// input expects, used both to default the field and to cap it via `max` so a
+// future date can't be picked in the first place (server also rejects it).
+function todayDateInputValue(): string {
+  const d = new Date();
+  const offsetMs = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
+}
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -70,6 +79,7 @@ export default function TaskDetail() {
       serviceDetails: completeForm.serviceDetails,
       completionAmount: parseFloat(completeForm.amount),
       completionPaymentMethod: completeForm.paymentMethod,
+      actualCompletionDate: completeForm.actualCompletionDate,
       ...(completionImage ? { completionImage } : {}),
       ...(completeForm.nextMaintenanceNote.trim() ? { nextMaintenanceNote: completeForm.nextMaintenanceNote } : {}),
     }),
@@ -90,7 +100,7 @@ export default function TaskDetail() {
   const addr = customer?.address;
   const workStatus = appt.workStatus;
 
-  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0;
+  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate;
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
@@ -169,7 +179,7 @@ export default function TaskDetail() {
             </button>
           )}
           {workStatus === "IN_PROGRESS" && (<>
-            <button onClick={() => setShowComplete(true)} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700">{t("tasks.complete")}</button>
+            <button onClick={() => { setCompleteForm(f => ({ ...f, actualCompletionDate: todayDateInputValue() })); setShowComplete(true); }} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700">{t("tasks.complete")}</button>
             <button onClick={() => setShowPostpone(true)} className="flex-1 bg-yellow-500 text-white py-2.5 rounded-lg font-medium hover:bg-yellow-600">{t("tasks.postpone")}</button>
           </>)}
         </div>
@@ -191,6 +201,12 @@ export default function TaskDetail() {
                 <textarea value={completeForm.serviceDetails} onChange={e => setCompleteForm(f => ({ ...f, serviceDetails: e.target.value }))} rows={3} required
                   placeholder={isAr ? "تفاصيل الخدمة المنفذة..." : "Details of work done..."}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.completionDate")} *</label>
+                <input type="date" required value={completeForm.actualCompletionDate} max={todayDateInputValue()}
+                  onChange={e => setCompleteForm(f => ({ ...f, actualCompletionDate: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.amount")} * (SAR)</label>
