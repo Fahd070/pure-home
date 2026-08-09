@@ -9,6 +9,7 @@ import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
 import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransactionConflict, sendTransactionConflict } from '../services/bulkDelete.service';
 import { stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
+import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 
 const router = Router();
 router.use(authenticate);
@@ -228,24 +229,31 @@ router.patch('/:id/toggle-active', requireRole('ADMIN'), async (req: AuthRequest
 
 router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({
-      where: { id: req.params.id },
-      include: { appointments: { select: { id: true } } },
-    });
-    if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
-    const apptIds = customer.appointments.map((a: any) => a.id);
-    await prisma.customer.delete({ where: { id: req.params.id } });
+    // See services/customerDeletion.service.ts for why this transactionally
+    // deletes only the customer's operational (WAITING/IN_PROGRESS/POSTPONED,
+    // non-urgent) appointments and leaves COMPLETED/urgent ones alone.
+    const result = await deleteCustomerWithOperationalCleanup(req.params.id);
+
+    if (!result) return res.status(404).json({ success: false, message: 'Not found' });
+    const { customer, operationalAppointmentIds } = result;
+
+    const cleanedNote = operationalAppointmentIds.length > 0
+      ? ` (${operationalAppointmentIds.length} operational appointment${operationalAppointmentIds.length === 1 ? '' : 's'} removed)`
+      : '';
+    const cleanedNoteAr = operationalAppointmentIds.length > 0
+      ? ` (تم حذف ${operationalAppointmentIds.length} موعد عمل)`
+      : '';
     await writeAudit({
       action: 'DELETE', entityType: 'customer', entityId: req.params.id, userId: req.user!.userId,
-      label: `Customer '${customer.name}' was deleted`,
-      labelAr: `تم حذف العميل '${customer.name}'`,
+      label: `Customer '${customer.name}' was deleted${cleanedNote}`,
+      labelAr: `تم حذف العميل '${customer.name}'${cleanedNoteAr}`,
       before: customerFields(customer),
     });
     await emitEvent({ type: EVENT_TYPES.CUSTOMER_DELETED, entityType: 'customer', entityId: req.params.id, userId: req.user!.userId, payload: { id: req.params.id, name: customer.name } });
     // Non-sensitive (id only); all three roles' UIs subscribe to refresh on this.
     emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.CUSTOMER_DELETED, { id: req.params.id });
-    if (apptIds.length > 0) {
-      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: apptIds, customerId: req.params.id });
+    if (operationalAppointmentIds.length > 0) {
+      emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { ids: operationalAppointmentIds, customerId: req.params.id });
     }
     res.json({ success: true });
   } catch (e) { next(e); }
