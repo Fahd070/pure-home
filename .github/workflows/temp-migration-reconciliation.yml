@@ -73,25 +73,51 @@ jobs:
 
       - name: STEP 1 -- Resolve M5 as applied
         working-directory: packages/backend
-        run: npx prisma migrate resolve --applied 20260625000000_remove_tasks_system_and_add_versioning --schema=prisma/schema.prisma
+        run: |
+          set +e
+          OUTPUT=$(npx prisma migrate resolve --applied 20260625000000_remove_tasks_system_and_add_versioning --schema=prisma/schema.prisma 2>&1)
+          CODE=$?
+          echo "$OUTPUT"
+          set -e
+          if [ $CODE -ne 0 ]; then
+            if echo "$OUTPUT" | grep -q "P3008"; then
+              echo "M5 was already resolved in a previous run -- treating as success, continuing."
+            else
+              echo "::error::Unexpected failure resolving M5."
+              exit $CODE
+            fi
+          fi
 
-      - name: STEP 1 -- Verify status after M5
+      - name: STEP 1 -- Verify status after M5 (informational only)
         working-directory: packages/backend
-        run: npx prisma migrate status --schema=prisma/schema.prisma
+        run: npx prisma migrate status --schema=prisma/schema.prisma || true
 
       - name: STEP 2 -- Resolve M6 as applied
         working-directory: packages/backend
-        run: npx prisma migrate resolve --applied 20260626000000_system_configs_and_remaining_columns --schema=prisma/schema.prisma
+        run: |
+          set +e
+          OUTPUT=$(npx prisma migrate resolve --applied 20260626000000_system_configs_and_remaining_columns --schema=prisma/schema.prisma 2>&1)
+          CODE=$?
+          echo "$OUTPUT"
+          set -e
+          if [ $CODE -ne 0 ]; then
+            if echo "$OUTPUT" | grep -q "P3008"; then
+              echo "M6 was already resolved in a previous run -- treating as success, continuing."
+            else
+              echo "::error::Unexpected failure resolving M6."
+              exit $CODE
+            fi
+          fi
 
-      - name: STEP 2 -- Verify status after M6
+      - name: STEP 2 -- Verify status after M6 (informational only)
         working-directory: packages/backend
-        run: npx prisma migrate status --schema=prisma/schema.prisma
+        run: npx prisma migrate status --schema=prisma/schema.prisma || true
 
       - name: STEP 3 -- Deploy M7 (real DDL, appointments FK CASCADE -> SET NULL)
         working-directory: packages/backend
         run: npx prisma migrate deploy --schema=prisma/schema.prisma
 
-      - name: Post-deploy -- migrate status
+      - name: Post-deploy -- migrate status (expect schema up to date)
         working-directory: packages/backend
         run: npx prisma migrate status --schema=prisma/schema.prisma
 
