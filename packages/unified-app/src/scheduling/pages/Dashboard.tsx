@@ -6,6 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
+import CallReportModal from "../components/CallReportModal";
 import { combineManualDateTime, splitToManualParts } from "../../utils/dateTimeInput";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
@@ -164,6 +165,10 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [editingAppt, setEditingAppt] = useState<any | null>(null);
   const [schedulingCustomer, setSchedulingCustomer] = useState<{ id: string; name: string } | null>(null);
+  // Modification #11: the customer a Call Report is being started for. Always
+  // fully replaced (never merged) on open, and cleared on close, so a stale
+  // previous row's context can never bleed into a newly-opened modal.
+  const [callReportCustomer, setCallReportCustomer] = useState<{ id: string; name: string; phone: string } | null>(null);
 
   useEffect(() => { const tm = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(tm); }, [search]);
 
@@ -207,6 +212,13 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
         />
       )}
 
+      {callReportCustomer && (
+        <CallReportModal
+          customer={callReportCustomer}
+          onClose={() => setCallReportCustomer(null)}
+        />
+      )}
+
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
@@ -227,7 +239,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <th className="text-start px-4 py-2">{t("common.phone")}</th>
                     <th className="text-start px-4 py-2">{t("common.date")}</th>
                     <th className="text-start px-4 py-2">{t("common.status")}</th>
-                    <th className="px-4 py-2 w-12"></th>
+                    <th className="px-4 py-2 w-20"></th>
                   </tr></thead>
                   <tbody>{items.map((a: any) => {
                     let loc: any = {};
@@ -241,7 +253,16 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                         <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
                         <td className="px-4 py-2 text-xs">{a.workStatus || a.status}</td>
                         <td className="px-4 py-2">
-                          <RowActionButton variant="edit" theme="green" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
+                          <div className="flex gap-1 items-center">
+                            <RowActionButton variant="edit" theme="green" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
+                            {/* Modification #11: only for a real, registered customer -- an
+                                urgent row with no linked customer has no customerId to attach
+                                a call report to (the existing subsystem requires one or an
+                                unregistered name, which this shortcut deliberately doesn't invent). */}
+                            {a.customer && (
+                              <RowActionButton variant="call" onClick={() => setCallReportCustomer({ id: a.customer.id, name: a.customer.name, phone: a.customer.phone })} title={t("callReports.action")} />
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
