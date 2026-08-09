@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -51,6 +52,14 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
   const { t } = useTranslation();
   const [form, setForm] = useState({ type: "MAINTENANCE", scheduledDate: "", notes: "" });
 
+  // Modification #7: keyed on customer.id -- this modal is always opened for one
+  // fixed customer, but keeping the id in the query key keeps this consistent
+  // with the other forms and cache-safe if that ever changes.
+  const { data: prevNote } = useQuery({
+    queryKey: ["latest-maintenance-note", customer.id],
+    queryFn: () => api.get(`/customers/${customer.id}/latest-maintenance-note`).then(r => r.data.data.nextMaintenanceNote),
+  });
+
   const schedule = useMutation({
     mutationFn: () => api.post("/appointments", {
       customerId: customer.id,
@@ -72,6 +81,7 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
         <h3 className="font-semibold text-slate-800">
           {t("scheduling.scheduleMaintenance")} — {customer.name}
         </h3>
+        <PreviousMaintenanceNoteBox note={prevNote} />
         <div>
           <label className="block text-sm font-medium mb-1">{t("appointments.type")}</label>
           <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}

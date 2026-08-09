@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 
 export default function NewAppointment() {
   const { t } = useTranslation();
@@ -17,6 +18,15 @@ export default function NewAppointment() {
     queryKey: ["customers-search", customerSearch],
     queryFn: () => api.get("/customers", { params: { search: customerSearch, limit: 10 } }).then(r => r.data.data),
     enabled: customerSearch.length > 1
+  });
+
+  // Modification #7: keyed on the selected customer's id, so react-query's own
+  // cache identity guarantees a stale response for a previously-selected
+  // customer can never render under a newly-selected one.
+  const { data: prevNote } = useQuery({
+    queryKey: ["latest-maintenance-note", selectedCustomer?.id],
+    queryFn: () => api.get(`/customers/${selectedCustomer.id}/latest-maintenance-note`).then(r => r.data.data.nextMaintenanceNote),
+    enabled: !!selectedCustomer,
   });
 
   async function handleSubmit(e: React.FormEvent) {
@@ -64,6 +74,7 @@ export default function NewAppointment() {
             </div>
           )}
         </div>
+        {selectedCustomer && <PreviousMaintenanceNoteBox note={prevNote} />}
         <div>
           <label className="block text-sm font-medium mb-1">{t("appointments.type")}</label>
           <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}

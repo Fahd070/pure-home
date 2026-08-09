@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
+import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import { combineManualDateTime, splitToManualParts } from "../../utils/dateTimeInput";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
@@ -91,6 +92,14 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
   const [type, setType] = useState("MAINTENANCE");
   const [loading, setLoading] = useState(false);
 
+  // Modification #7: keyed on customer.id -- this modal is always opened for one
+  // fixed customer, but keeping the id in the query key keeps this consistent
+  // with the other forms and cache-safe if that ever changes.
+  const { data: prevNote } = useQuery({
+    queryKey: ["latest-maintenance-note", customer.id],
+    queryFn: () => api.get(`/customers/${customer.id}/latest-maintenance-note`).then(r => r.data.data.nextMaintenanceNote),
+  });
+
   async function handleSave() {
     if (!scheduledDate) { toast.error(t("common.required")); return; }
     setLoading(true);
@@ -112,6 +121,7 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
           <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">✕</button>
         </div>
         <div className="p-4 space-y-3">
+          <PreviousMaintenanceNoteBox note={prevNote} />
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
             <input type="datetime-local" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)}
