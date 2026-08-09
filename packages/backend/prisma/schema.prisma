@@ -100,6 +100,17 @@ model Appointment {
   isUrgent            Boolean           @default(false)
   adminApproved       Boolean           @default(false)
   visibleToScheduling Boolean           @default(true)
+  // Modification #5: Scheduling/Maintenance -> Admin approval -> Technician
+  // export workflow. Defaults true so every existing appointment (and every
+  // ordinarily-created one going forward) stays immediately technician-visible,
+  // exactly as before -- this field only ever goes false for the narrow window
+  // between an explicit export action and its Admin approval. adminApproved is
+  // reused for the same flow (it was already generically named and effectively
+  // unused/always-false for Scheduling-created appointments, which is the only
+  // creator role the export/approve endpoints operate on); its pre-existing use
+  // for the separate Admin<->Scheduling visibleToScheduling approval flow is
+  // untouched.
+  visibleToTechnician Boolean           @default(true)
   createdByRole       String?
   version             Int               @default(1)
   createdAt           DateTime          @default(now())
