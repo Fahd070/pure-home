@@ -70,6 +70,15 @@ export default function Appointments() {
     onError: () => toast.error(t("common.error")),
   });
 
+  const approveExportMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/appointments/${id}/approve-export`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      toast.success(t("appointments.approveExportSuccess"));
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.approveExportError")),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/appointments/${id}`),
     onSuccess: () => {
@@ -150,6 +159,8 @@ export default function Appointments() {
   const appointments: any[] = data || [];
   // Only show pending-approval banner for Scheduling-created appointments
   const pendingSchedulingAppts = appointments.filter(a => !a.visibleToScheduling && a.createdByRole === 'SCHEDULING');
+  // Appointments exported by Scheduling, awaiting Admin approval before becoming technician-visible
+  const pendingExportAppts = appointments.filter(a => !a.visibleToTechnician && !a.adminApproved);
 
   return (
     <div className="space-y-4">
@@ -166,6 +177,14 @@ export default function Appointments() {
           {isAr
             ? `${pendingSchedulingAppts.length} موعد من الجدولة بانتظار الإظهار — استخدم "إظهار للجدولة"`
             : `${pendingSchedulingAppts.length} scheduling appointment(s) pending — use "Show to Scheduling" to approve`}
+        </div>
+      )}
+
+      {pendingExportAppts.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 text-sm text-orange-700">
+          {isAr
+            ? `${pendingExportAppts.length} موعد مصدّر من الجدولة بانتظار اعتماد الإدارة — استخدم "اعتماد الموعد"`
+            : `${pendingExportAppts.length} exported appointment(s) pending Admin approval — use "Approve Appointment"`}
         </div>
       )}
 
@@ -294,6 +313,13 @@ export default function Appointments() {
                           <button onClick={() => approveMutation.mutate(a.id)} disabled={approveMutation.isPending}
                             className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 whitespace-nowrap disabled:opacity-50">
                             {isAr ? "إظهار للجدولة" : "Show to Scheduling"}
+                          </button>
+                        )}
+                        {/* Export-to-Technician approval: only for appointments exported by Scheduling and still pending */}
+                        {!a.visibleToTechnician && !a.adminApproved && (
+                          <button onClick={() => approveExportMutation.mutate(a.id)} disabled={approveExportMutation.isPending}
+                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 whitespace-nowrap disabled:opacity-50">
+                            {t("appointments.approveExport")}
                           </button>
                         )}
                         <button

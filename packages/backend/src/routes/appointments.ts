@@ -36,24 +36,27 @@ function apptFields(a: any) {
     id: a.id, type: a.type, status: a.status, scheduledDate: a.scheduledDate,
     notes: a.notes, version: a.version, customerId: a.customerId,
     isUrgent: a.isUrgent, adminApproved: a.adminApproved,
-    visibleToScheduling: a.visibleToScheduling, createdByRole: a.createdByRole,
-    technicianId: a.technicianId, workStatus: a.workStatus,
+    visibleToScheduling: a.visibleToScheduling, visibleToTechnician: a.visibleToTechnician,
+    createdByRole: a.createdByRole, technicianId: a.technicianId, workStatus: a.workStatus,
   };
 }
 
 // Routes an appointment:created event exactly the way GET /appointments already filters
 // visibility: SCHEDULING never sees urgent or scheduling-hidden appointments; a technician
 // only sees their own assignment or the shared unassigned pool (never another technician's
-// pre-assigned job).
+// pre-assigned job), and never a Scheduling-exported appointment still pending Admin
+// approval (Modification #5 -- visibleToTechnician).
 function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToScheduling: boolean) {
   emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
   if (!isUrgent && visibleToScheduling) {
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
   }
-  if (appt.technicianId) {
-    emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-  } else {
-    emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+  if (appt.visibleToTechnician) {
+    if (appt.technicianId) {
+      emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    } else {
+      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    }
   }
 }
 
@@ -87,6 +90,11 @@ router.get('/', async (req: AuthRequest, res, next) => {
       where.isUrgent = false;
     }
     if (req.user!.role === 'TECHNICIAN') {
+      // Modification #5: a Scheduling-exported appointment stays hidden from every
+      // technician path (including the shared urgent pool, for defense in depth --
+      // visibleToTechnician defaults true so this never affects existing/urgent
+      // appointments) until Admin explicitly approves it.
+      where.visibleToTechnician = true;
       if (urgent === 'true') {
         // Urgent appointments: all technicians can see all of them
         where.isUrgent = true;
@@ -135,7 +143,9 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
       where.isUrgent = false;
     }
     if (req.user!.role === 'TECHNICIAN') {
-      // Can view urgent appointments (all) or their own/unassigned non-urgent appointments
+      // Can view urgent appointments (all) or their own/unassigned non-urgent appointments,
+      // but never a Scheduling-exported appointment still pending Admin approval (#5).
+      where.visibleToTechnician = true;
       where.OR = [
         { isUrgent: true },
         { isUrgent: false, technicianId: req.user!.userId },
@@ -173,6 +183,12 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
         isUrgent,
         visibleToScheduling,
         adminApproved,
+        // Modification #5: ordinary appointment creation is unaffected by the new
+        // export/approval workflow -- every appointment is technician-visible
+        // immediately, exactly as before. Only the dedicated export endpoint below
+        // ever sets this false, and only for an existing appointment already in the
+        // normal (never-exported) state.
+        visibleToTechnician: true,
         createdByRole: req.user!.role,
         createdById: req.user!.userId,
         technicianId: body.technicianId ?? null,
@@ -250,6 +266,96 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
     emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, updated);
     res.json({ success: true, data: updated });
+  } catch (e) { next(e); }
+});
+
+// ── Modification #5: Scheduling/Maintenance export -> Admin approval -> Technician ──
+// Scheduling requests that an appointment it already manages become visible to
+// Technicians. Never trusts the request body for role or state -- everything is
+// derived from the authenticated JWT role and the appointment's own current row.
+router.patch('/:id/export-to-technicians', requireRole('SCHEDULING'), async (req: AuthRequest, res, next) => {
+  try {
+    // Scoped to exactly what Scheduling can already see in its own appointment
+    // table (visibleToScheduling + non-urgent) -- an appointment outside that
+    // scope reports 404, the same as it would from GET /appointments/:id, rather
+    // than leaking a distinguishable 403.
+    const before = await prisma.appointment.findFirst({
+      where: { id: req.params.id, visibleToScheduling: true, isUrgent: false },
+      include: { customer: true },
+    });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+
+    // State machine (visibleToTechnician, adminApproved): (true,false) = never
+    // exported -- the only state export is allowed from. (false,false) = already
+    // pending. (true,true) = already exported and approved. (false,true) never
+    // occurs. Both non-exportable states are rejected server-side, not just
+    // hidden in the UI -- prevents duplicate/overlapping export requests from
+    // corrupting the state or silently creating a second pending request.
+    if (!before.visibleToTechnician && !before.adminApproved) {
+      return res.status(409).json({ success: false, error: 'ALREADY_PENDING', message: 'This appointment is already pending Admin approval.' });
+    }
+    if (before.visibleToTechnician && before.adminApproved) {
+      return res.status(409).json({ success: false, error: 'ALREADY_APPROVED', message: 'This appointment has already been exported and approved.' });
+    }
+
+    const appt = await prisma.appointment.update({
+      where: { id: req.params.id },
+      data: { visibleToTechnician: false, adminApproved: false, version: { increment: 1 } },
+      include: { customer: { include: { address: true } }, technician: true },
+    });
+    const custName = appt.customer?.name || 'Urgent Visit';
+    const custNameAr = appt.customer?.name || 'زيارة عاجلة';
+    await writeAudit({
+      action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
+      label: `Appointment for '${custName}' exported for Admin approval by Scheduling`,
+      labelAr: `تم تصدير موعد '${custNameAr}' لاعتماد الإدارة بواسطة الجدولة`,
+      before: apptFields(before), after: apptFields(appt),
+    });
+    // Admin/Scheduling-only status update -- deliberately never reaches any
+    // technician room; the appointment is not (or no longer) technician-visible.
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    res.json({ success: true, data: appt });
+  } catch (e) { next(e); }
+});
+
+// Admin approves a Scheduling-exported appointment, revealing it to Technicians.
+router.patch('/:id/approve-export', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const before = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+
+    // Only approvable from the "pending export approval" state -- rejects an
+    // appointment that was never exported and one that's already approved
+    // (idempotent-safe: a duplicate approval click gets a clear 409, not a
+    // silent no-op or a corrupted double-increment).
+    if (before.visibleToTechnician || before.adminApproved) {
+      return res.status(409).json({ success: false, error: 'NOT_PENDING', message: 'This appointment is not pending export approval.' });
+    }
+
+    const appt = await prisma.appointment.update({
+      where: { id: req.params.id },
+      data: { visibleToTechnician: true, adminApproved: true, version: { increment: 1 } },
+      include: { customer: { include: { address: true } }, technician: true },
+    });
+    const custName = appt.customer?.name || 'Urgent Visit';
+    const custNameAr = appt.customer?.name || 'زيارة عاجلة';
+    await writeAudit({
+      action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
+      label: `Appointment for '${custName}' export approved by Admin -- now visible to Technicians`,
+      labelAr: `تم اعتماد تصدير موعد '${custNameAr}' بواسطة الإدارة — أصبح مرئياً للفنيين`,
+      before: apptFields(before), after: apptFields(appt),
+    });
+    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    // Reveal to Technicians now that Admin has approved -- same routing convention
+    // as broadcastAppointmentCreated: the assigned technician if one exists,
+    // otherwise the shared/unassigned pool (whole TECHNICIAN room). This is the
+    // ONLY place a Scheduling-exported appointment ever reaches a technician room.
+    if (appt.technicianId) {
+      emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    } else {
+      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    }
+    res.json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
 

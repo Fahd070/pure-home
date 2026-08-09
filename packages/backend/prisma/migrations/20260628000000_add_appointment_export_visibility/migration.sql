@@ -1,0 +1,13 @@
+-- Modification #5: Scheduling/Maintenance -> Admin approval -> Technician
+-- export workflow. Adds one boolean column; no other schema changes.
+--
+-- DEFAULT true is intentional and required: every existing appointment row
+-- (and every appointment created through the ordinary, unchanged create
+-- flow going forward) must remain immediately technician-visible exactly as
+-- before. The column only ever becomes false for the narrow window between
+-- an explicit Scheduling export action (PATCH /appointments/:id/export-to-
+-- technicians) and the corresponding Admin approval
+-- (PATCH /appointments/:id/approve-export) -- both new, additive endpoints.
+-- No existing row's effective visibility changes as a result of this
+-- migration; no data is deleted or transformed.
+ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "visibleToTechnician" BOOLEAN NOT NULL DEFAULT true;
