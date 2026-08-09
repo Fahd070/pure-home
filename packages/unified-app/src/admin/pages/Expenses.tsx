@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
+import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING:  "bg-yellow-100 text-yellow-700",
@@ -42,7 +43,7 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
   <div class="sec-title">${isAr ? "تفاصيل المصروف" : "Expense Details"}</div>
   <div class="grid">
     <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${esc(expense.technician?.name) || "—"}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val">${new Date(expense.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val" dir="ltr">${formatGregorianDate(expense.date)}</div></div>
     <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${esc(isAr ? (catAr[expense.category] || expense.category) : expense.category)}</div></div>
     <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${esc(isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status))}</div></div>
     <div class="item"><div class="lbl">${isAr ? "طريقة الدفع" : "Payment Method"}</div><div class="val">—</div></div>
@@ -53,7 +54,7 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
   <span class="lbl">${isAr ? "المبلغ الإجمالي" : "Total Amount"}</span>
   <span class="val">${expense.amount.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span>
 </div>
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()} &nbsp;|&nbsp; ${isAr ? "تاريخ الإصدار" : "Issued"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })} &nbsp;|&nbsp; ${isAr ? "تاريخ الإصدار" : "Issued"}: ${formatGregorianDate(new Date(), { utc: false })}</div>
 </body></html>`;
 }
 
@@ -74,7 +75,7 @@ function buildAllInvoicesPdfHtml(expenses: any[], isAr: boolean) {
         <div class="sec-title">${isAr ? "تفاصيل المصروف" : "Expense Details"}</div>
         <div class="grid">
           <div class="item"><div class="lbl">${isAr ? "الفني" : "Technician"}</div><div class="val">${esc(expense.technician?.name) || "—"}</div></div>
-          <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val">${new Date(expense.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+          <div class="item"><div class="lbl">${isAr ? "التاريخ" : "Date"}</div><div class="val" dir="ltr">${formatGregorianDate(expense.date)}</div></div>
           <div class="item"><div class="lbl">${isAr ? "الفئة" : "Category"}</div><div class="val">${esc(isAr ? (catAr[expense.category] || expense.category) : expense.category)}</div></div>
           <div class="item"><div class="lbl">${isAr ? "الحالة" : "Status"}</div><div class="val">${esc(isAr ? (statusAr[expense.status] || expense.status) : (statusEn[expense.status] || expense.status))}</div></div>
           ${expense.description ? `<div class="item" style="grid-column:1/-1"><div class="lbl">${isAr ? "الوصف" : "Description"}</div><div class="val" style="font-weight:normal">${esc(expense.description)}</div></div>` : ""}
@@ -84,7 +85,7 @@ function buildAllInvoicesPdfHtml(expenses: any[], isAr: boolean) {
         <span class="lbl">${isAr ? "المبلغ الإجمالي" : "Total Amount"}</span>
         <span class="val">${expense.amount.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span>
       </div>
-      <div class="ftr">Pure Home System — ${new Date().toLocaleString()} &nbsp;|&nbsp; ${isAr ? "تاريخ الإصدار" : "Issued"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+      <div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })} &nbsp;|&nbsp; ${isAr ? "تاريخ الإصدار" : "Issued"}: ${formatGregorianDate(new Date(), { utc: false })}</div>
     </div>`).join("");
 
   return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
@@ -127,7 +128,7 @@ function buildExpensePdfHtml(expenses: any[], isAr: boolean, period: string) {
       <td>${esc(e.technician?.name) || "—"}</td>
       <td>${esc(isAr ? (catAr[e.category] || e.category) : e.category)}</td>
       <td style="text-align:center;font-weight:600;font-family:monospace">${e.amount.toFixed(2)}</td>
-      <td style="white-space:nowrap">${new Date(e.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+      <td style="white-space:nowrap" dir="ltr">${formatGregorianDate(e.date)}</td>
       <td style="color:#666;font-size:9px">${esc(e.description) || "—"}</td>
       <td><span style="padding:2px 7px;border-radius:10px;font-size:9px;font-weight:bold;background:${e.status==="APPROVED"?"#dcfce7":e.status==="REJECTED"?"#fee2e2":"#fef3c7"};color:${e.status==="APPROVED"?"#166534":e.status==="REJECTED"?"#991b1b":"#92400e"}">${esc(isAr ? (statusAr[e.status] || e.status) : (statusEn[e.status] || e.status))}</span></td>
     </tr>`).join("");
@@ -169,7 +170,7 @@ tr:nth-child(even) td{background:#f7f8fc}
     <div class="rtitle">${isAr ? "تقرير المصروفات" : "Expenses Report"}</div>
     <div><span class="period-badge">📅 ${period}</span></div>
   </div>
-  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${formatGregorianDate(new Date(), { utc: false })}</div>
 </div>
 <table>
   <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
@@ -187,7 +188,7 @@ tr:nth-child(even) td{background:#f7f8fc}
     <div class="grand-count">${isAr ? `${expenses.length} مصروف` : `${expenses.length} expense(s)`}</div>
   </div>
 </div>
-<div class="ftr">Pure Home System &nbsp;|&nbsp; ${isAr ? "نظام بيور هوم" : "Pure Home Management System"} &nbsp;|&nbsp; ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System &nbsp;|&nbsp; ${isAr ? "نظام بيور هوم" : "Pure Home Management System"} &nbsp;|&nbsp; ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </div>
 </body></html>`;
 }
@@ -313,12 +314,12 @@ export default function AdminExpenses() {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
-            <input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
+            <input type="date" lang="en-GB" dir="ltr" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
               className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateTo")}</label>
-            <input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
+            <input type="date" lang="en-GB" dir="ltr" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
               className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
@@ -363,8 +364,8 @@ export default function AdminExpenses() {
                       {isAr ? (CATEGORY_AR[e.category] || e.category) : e.category}
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-800">{e.amount.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
-                      {new Date(e.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs" dir="ltr">
+                      {formatGregorianDate(e.date)}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[200px] truncate">{e.description || "—"}</td>
                     <td className="px-4 py-3">

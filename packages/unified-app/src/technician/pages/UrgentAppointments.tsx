@@ -6,6 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
+import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
 type PaymentGroup = "" | "CASH" | "BANK_TRANSFER";
@@ -192,8 +193,8 @@ export default function TechUrgentAppointments() {
                 {appointments.map((a: any) => (
                   <tr key={a.id} className="border-b hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium">{locationText(a)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm">
-                      {new Date(a.scheduledDate).toLocaleString(isAr ? "ar-SA" : undefined)}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm" dir="ltr">
+                      {formatGregorianDate(a.scheduledDate)} {formatGregorianTime(a.scheduledDate)}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px] truncate">{a.notes || "—"}</td>
                     <td className="px-4 py-3">

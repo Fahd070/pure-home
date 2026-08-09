@@ -41,8 +41,13 @@ describe('WorkQueue card: pending task details', () => {
 
   it('displays service type and the full scheduled date+time (not date-only)', () => {
     expect(workQueueSrc).toMatch(/appt\.type === "INSTALLATION"/);
-    expect(workQueueSrc).toMatch(/new Date\(appt\.scheduledDate\)\.toLocaleString\(/);
-    expect(workQueueSrc).not.toMatch(/new Date\(appt\.scheduledDate\)\.toLocaleDateString\(\)/);
+    // Date-input-normalization batch: the naked toLocaleString(isAr ? "ar-SA" :
+    // undefined) call (Arabic-Indic-digit/Hijri-calendar risk) was replaced with
+    // the shared Gregorian/English-digit formatter -- still date+time, not
+    // date-only, just locale-independent now.
+    expect(workQueueSrc).toMatch(/formatGregorianDate\(appt\.scheduledDate\)/);
+    expect(workQueueSrc).toMatch(/formatGregorianTime\(appt\.scheduledDate\)/);
+    expect(workQueueSrc).not.toMatch(/toLocaleString|toLocaleDateString/);
   });
 
   it('shows an appointment-notes preview when notes are present', () => {
@@ -71,7 +76,10 @@ describe('TaskDetail: full pending-detail view', () => {
   });
 
   it('displays the full scheduled date+time, not date-only', () => {
-    expect(taskDetailSrc).toMatch(/new Date\(appt\?\.scheduledDate\)\.toLocaleString\(/);
+    // Date-input-normalization batch: replaced the naked toLocaleString call
+    // with the shared Gregorian/English-digit formatter (still date+time).
+    expect(taskDetailSrc).toMatch(/formatGregorianDate\(appt\?\.scheduledDate\)/);
+    expect(taskDetailSrc).toMatch(/formatGregorianTime\(appt\?\.scheduledDate\)/);
   });
 
   it('displays a localized service type instead of the raw enum value', () => {

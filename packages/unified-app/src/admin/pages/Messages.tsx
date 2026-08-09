@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useSocket } from "../hooks/useSocket";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 const ROLE_BG: Record<string, string> = { ADMIN: "bg-blue-700", SCHEDULING: "bg-green-700", TECHNICIAN: "bg-orange-700" };
 const ROLE_BADGE: Record<string, string> = { ADMIN: "bg-blue-100 text-blue-700", SCHEDULING: "bg-green-100 text-green-700", TECHNICIAN: "bg-orange-100 text-orange-700" };
@@ -18,7 +19,7 @@ function formatTime(d: string, lang: string) {
   if (diff < 3600000) return isAr ? `${mins} د` : `${mins}m ago`;
   const hrs = Math.floor(diff / 3600000);
   if (diff < 86400000) return isAr ? `${hrs} س` : `${hrs}h ago`;
-  return date.toLocaleDateString(isAr ? "ar-SA" : undefined);
+  return formatGregorianDate(date);
 }
 
 export default function Messages() {

@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
+import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -59,7 +60,7 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 .lbl{color:#888;font-size:9px;margin-bottom:2px}.val{font-size:11px;font-weight:500}
 .ftr{margin-top:20px;border-top:1px solid #eee;padding-top:8px;color:#999;font-size:9px;text-align:center}
 </style></head><body>
-<div class="hdr"><div class="brand">Pure Home</div><div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+<div class="hdr"><div class="brand">Pure Home</div><div style="color:#666;font-size:10px">${formatGregorianDate(new Date(), { utc: false })}</div></div>
 <div class="cname">${esc(c.name)}</div>
 <span class="badge badge-${c.alertLevel || "ok"}">${c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قادم قريباً" : "Upcoming Soon") : (isAr ? "طبيعي" : "OK")}</span>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات التواصل" : "Contact Info"}</div>
@@ -71,13 +72,13 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 </div></div>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات الصيانة" : "Maintenance Info"}</div>
 <div class="grid">
-<div><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val">${new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+<div><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val" dir="ltr">${formatGregorianDate(c.createdAt)}</div></div>
 <div><div class="lbl">${isAr ? "دورة الصيانة" : "Cycle"}</div><div class="val">${fmtCycle(c.maintenanceCycle, c.maintenanceFrequency)}</div></div>
-<div><div class="lbl">${isAr ? "آخر صيانة" : "Last Maintenance"}</div><div class="val">${c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
-<div><div class="lbl">${isAr ? "الصيانة القادمة" : "Next Maintenance"}</div><div class="val">${c.nextMaintenance ? new Date(c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
+<div><div class="lbl">${isAr ? "آخر صيانة" : "Last Maintenance"}</div><div class="val" dir="ltr">${c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}</div></div>
+<div><div class="lbl">${isAr ? "الصيانة القادمة" : "Next Maintenance"}</div><div class="val" dir="ltr">${c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "—"}</div></div>
 </div></div>
 ${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </body></html>`;
   const filePath = await (window as any).electron.printToPDF(html, `customer-${c.id}-${Date.now()}.pdf`);
   return filePath;
@@ -152,11 +153,11 @@ export default function Customers() {
         [isAr ? "المدينة" : "City"]: c.address?.city || "",
         [isAr ? "الحي" : "District"]: c.address?.district || "",
         [isAr ? "الشارع" : "Street"]: c.address?.street || "",
-        [isAr ? "تاريخ التسجيل" : "Reg. Date"]: new Date(c.createdAt).toLocaleDateString(),
-        [isAr ? "تاريخ التركيب" : "Install Date"]: c.installationDate ? new Date(c.installationDate).toLocaleDateString() : "",
+        [isAr ? "تاريخ التسجيل" : "Reg. Date"]: formatGregorianDate(c.createdAt),
+        [isAr ? "تاريخ التركيب" : "Install Date"]: c.installationDate ? formatGregorianDate(c.installationDate) : "",
         [isAr ? "دورة الصيانة" : "Cycle"]: formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t),
-        [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString() : "",
-        [isAr ? "الصيانة القادمة" : "Next Maint."]: c.nextMaintenance ? new Date(c.nextMaintenance).toLocaleDateString() : "",
+        [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "",
+        [isAr ? "الصيانة القادمة" : "Next Maint."]: c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "",
         [isAr ? "الحالة" : "Status"]: c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive"),
         [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
       }));
@@ -237,17 +238,17 @@ export default function Customers() {
                   <td className="px-4 py-3 font-medium cursor-pointer text-blue-700 hover:underline" onClick={() => navigate(`/admin/customers/${c.id}`)}>{c.name}</td>
                   <td className="px-4 py-3">{c.phone}</td>
                   <td className="px-4 py-3 text-xs font-medium text-slate-600">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                    {c.installationDate ? new Date(c.installationDate).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap" dir="ltr">
+                    {c.installationDate ? formatGregorianDate(c.installationDate) : "—"}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                    {c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap" dir="ltr">
+                    {c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="space-y-1">
                       <MaintenanceBadge c={c} t={t} />
                       {c.nextMaintenance && (
-                        <p className="text-xs text-slate-400">{new Date(c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined)}</p>
+                        <p className="text-xs text-slate-400" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</p>
                       )}
                     </div>
                   </td>

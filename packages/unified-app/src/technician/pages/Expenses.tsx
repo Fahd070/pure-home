@@ -5,9 +5,10 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
+import { formatGregorianDate, todayDateOnly } from "../../utils/dateTimeInput";
 
 const CATEGORIES = ["fuel","tools","materials","food","transport","other"] as const;
-const EMPTY = { amount: "", category: "fuel", description: "", date: new Date().toISOString().slice(0,10), customCategory: "" };
+const EMPTY = { amount: "", category: "fuel", description: "", date: todayDateOnly(), customCategory: "" };
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
@@ -110,7 +111,7 @@ export default function TechExpenses() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("expenses.date")}</label>
-              <input type="date" required value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              <input type="date" required lang="en-GB" dir="ltr" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
             </div>
             {form.category === "other" && (
@@ -165,8 +166,8 @@ export default function TechExpenses() {
                   <tr key={e.id} className="border-b hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium">{CATEGORY_LABEL[e.category] || e.category}</td>
                     <td className="px-4 py-3 font-semibold text-slate-800">{e.amount.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
-                      {new Date(e.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}
+                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap" dir="ltr">
+                      {formatGregorianDate(e.date)}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[200px] truncate">{e.description || "—"}</td>
                     <td className="px-4 py-3">

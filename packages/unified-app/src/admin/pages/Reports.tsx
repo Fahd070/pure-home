@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
+import { formatGregorianDate, formatGregorianDateTime, formatGregorianMonthYear, localDateOnlyStr } from "../../utils/dateTimeInput";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -65,11 +66,11 @@ function buildPdfHtml(customers: any[], filters: any, isAr: boolean, t: any, tot
       <td>${esc(c.name)}</td>
       <td>${esc(c.phone)}</td>
       <td>${esc(c.address?.city) || "—"}</td>
-      <td>${new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
-      <td>${c.installationDate ? new Date(c.installationDate).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</td>
+      <td dir="ltr">${formatGregorianDate(c.createdAt)}</td>
+      <td dir="ltr">${c.installationDate ? formatGregorianDate(c.installationDate) : "—"}</td>
       <td>${formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</td>
-      <td>${c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</td>
-      <td>${(c.nextMaintenanceDate || c.nextMaintenance) ? new Date(c.nextMaintenanceDate || c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</td>
+      <td dir="ltr">${c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}</td>
+      <td dir="ltr">${(c.nextMaintenanceDate || c.nextMaintenance) ? formatGregorianDate(c.nextMaintenanceDate || c.nextMaintenance) : "—"}</td>
       <td><span class="badge badge-${c.alertLevel || "ok"}">${
     c.alertLevel === "overdue"
       ? (isAr ? `متأخر ${c.overdueCount} يوم` : `Overdue ${c.overdueCount}d`)
@@ -103,11 +104,11 @@ tr:nth-child(even){background:#f9f9f9}
 <div class="hdr">
   <div class="brand">Pure Home</div>
   <div class="rtitle">${isAr ? "تقرير العملاء" : "Customer Report"}</div>
-  <div class="meta">${isAr ? "تاريخ التقرير" : "Date"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)} &nbsp;|&nbsp; ${isAr ? "الفلاتر" : "Filters"}: ${esc(filterSummary)} &nbsp;|&nbsp; ${isAr ? "الإجمالي" : "Total"}: ${total}</div>
+  <div class="meta">${isAr ? "تاريخ التقرير" : "Date"}: ${formatGregorianDate(new Date(), { utc: false })} &nbsp;|&nbsp; ${isAr ? "الفلاتر" : "Filters"}: ${esc(filterSummary)} &nbsp;|&nbsp; ${isAr ? "الإجمالي" : "Total"}: ${total}</div>
 </div>
 <table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
 <div class="grand-total"><span>${isAr ? "إجمالي المبالغ" : "Total Amount"}</span><span>${grandTotal.toFixed(2)} ${isAr ? "ريال" : "SAR"}</span></div>
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </body></html>`;
 }
 
@@ -128,7 +129,7 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 </style></head><body>
 <div class="hdr">
   <div class="brand">Pure Home</div>
-  <div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+  <div style="color:#666;font-size:10px">${formatGregorianDate(new Date(), { utc: false })}</div>
 </div>
 <div class="cname">${esc(c.name)}</div>
 <span class="badge badge-${c.alertLevel || "ok"}">${c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قادم قريباً" : "Upcoming Soon") : (isAr ? "طبيعي" : "OK")}</span>
@@ -144,14 +145,14 @@ body{font-family:Tahoma,Arial,sans-serif;margin:24px;font-size:12px;direction:${
 <div class="section">
   <div class="sec-title">${isAr ? "معلومات الصيانة" : "Maintenance Info"}</div>
   <div class="grid">
-    <div class="item"><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val">${new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val" dir="ltr">${formatGregorianDate(c.createdAt)}</div></div>
     <div class="item"><div class="lbl">${isAr ? "دورة الصيانة" : "Cycle"}</div><div class="val">${formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "آخر صيانة" : "Last Maintenance"}</div><div class="val">${c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
-    <div class="item"><div class="lbl">${isAr ? "الصيانة القادمة" : "Next Maintenance"}</div><div class="val">${c.nextMaintenance ? new Date(c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "آخر صيانة" : "Last Maintenance"}</div><div class="val" dir="ltr">${c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}</div></div>
+    <div class="item"><div class="lbl">${isAr ? "الصيانة القادمة" : "Next Maintenance"}</div><div class="val" dir="ltr">${c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "—"}</div></div>
   </div>
 </div>
 ${c.notes ? `<div class="section"><div class="sec-title">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </body></html>`;
 }
 
@@ -193,7 +194,7 @@ function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, tota
     <td>${esc(r.customerName)}</td>
     <td>${esc(r.customerPhone)}</td>
     <td>${esc(typeLabels[r.appointmentType] || r.appointmentType)}</td>
-    <td style="white-space:nowrap">${new Date(r.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+    <td style="white-space:nowrap" dir="ltr">${formatGregorianDate(r.date)}</td>
     <td>${esc(r.technicianName)}</td>
     <td>${esc(payLabels[r.paymentMethod] || r.paymentMethod || "—")}</td>
     <td style="text-align:center;font-weight:600;font-family:monospace">${Number(r.amount).toFixed(2)}</td>
@@ -224,7 +225,7 @@ tr:nth-child(even) td{background:#f7f8fc}
     <div class="rtitle">${isAr ? "تقرير المبيعات" : "Sales Report"}</div>
     <div><span class="period-badge">📅 ${periodLabel}</span></div>
   </div>
-  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+  <div class="print-date">${isAr ? "تاريخ الطباعة" : "Printed"}: ${formatGregorianDate(new Date(), { utc: false })}</div>
 </div>
 <table>
   <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
@@ -234,7 +235,7 @@ tr:nth-child(even) td{background:#f7f8fc}
   <span class="grand-lbl">${isAr ? "إجمالي المبيعات" : "Total Sales"} &nbsp;·&nbsp; ${rows.length} ${isAr ? "سجل" : "records"}</span>
   <span class="grand-val">${totalAmount.toFixed(2)} <span style="font-size:13px;opacity:0.85">${isAr ? "ريال" : "SAR"}</span></span>
 </div>
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </div>
 </body></html>`;
 }
@@ -319,7 +320,7 @@ export default function Reports() {
           <td>${i + 1}</td>
           <td>${esc(a.customer?.name) || (isAr ? "زيارة عاجلة" : "Urgent Visit")}</td>
           <td>${esc(a.customer?.phone) || "—"}</td>
-          <td>${new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+          <td dir="ltr">${formatGregorianDate(a.scheduledDate)}</td>
           <td>${a.type === "INSTALLATION" ? (isAr ? "تركيب" : "Installation") : (isAr ? "صيانة" : "Maintenance")}</td>
           <td>${esc(a.status)}</td>
           <td>${esc(apptSourceLabel(a.createdByRole))}</td>
@@ -354,7 +355,7 @@ tr:nth-child(even){background:#f9f9f9}
 <div class="hdr">
   <div class="brand">Pure Home</div>
   <div style="font-size:14px;font-weight:bold">${isAr ? "تقرير المواعيد" : "Appointments Report"}</div>
-  <div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div>
+  <div style="color:#666;font-size:10px">${formatGregorianDate(new Date(), { utc: false })}</div>
 </div>
 <h2>${isAr ? "المواعيد العادية" : "Regular Appointments"} (${regularAppts.length})</h2>
 <table><thead><tr>${headHtml}</tr></thead><tbody>${apptRows(regularAppts)}
@@ -365,7 +366,7 @@ tr:nth-child(even){background:#f9f9f9}
 <tr class="total-row"><td colspan="7" style="text-align:${dir==="rtl"?"left":"right"}">${isAr?"إجمالي المواعيد العاجلة":"Urgent Total"}</td><td style="text-align:center;font-family:monospace">${totalUrgent.toFixed(2)}</td></tr>
 </tbody></table>
 <div class="grand-total"><span>${isAr?"الإجمالي الكلي":"Grand Total"}</span><span>${grandTotal.toFixed(2)} ${isAr?"ريال":"SAR"}</span></div>
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </body></html>`;
       const filePath = await (window as any).electron.printToPDF(html, `appointments-report-${Date.now()}.pdf`);
       toast.success(`${t("reports.savedTo")}: ${filePath}`);
@@ -386,7 +387,7 @@ tr:nth-child(even){background:#f9f9f9}
           [isAr ? "المصدر" : "Source"]: apptSourceLabel(a.createdByRole),
           [isAr ? "العميل" : "Customer"]: a.customer?.name || (isAr ? "زيارة عاجلة" : "Urgent Visit"),
           [isAr ? "الجوال" : "Phone"]: a.customer?.phone || "—",
-          [isAr ? "التاريخ" : "Date"]: new Date(a.scheduledDate).toLocaleDateString(),
+          [isAr ? "التاريخ" : "Date"]: formatGregorianDate(a.scheduledDate),
           [isAr ? "نوع الخدمة" : "Service Type"]: a.type,
           [isAr ? "الحالة" : "Status"]: a.status,
           [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: amt != null ? amt : "",
@@ -433,11 +434,11 @@ tr:nth-child(even){background:#f9f9f9}
           [isAr ? "الجوال" : "Phone"]: c.phone,
           [isAr ? "المدينة" : "City"]: c.address?.city || "",
           [isAr ? "الحي" : "District"]: c.address?.district || "",
-          [isAr ? "تاريخ التسجيل" : "Reg. Date"]: new Date(c.createdAt).toLocaleDateString(),
-          [isAr ? "تاريخ التركيب" : "Installation Date"]: c.installationDate ? new Date(c.installationDate).toLocaleDateString() : "",
+          [isAr ? "تاريخ التسجيل" : "Reg. Date"]: formatGregorianDate(c.createdAt),
+          [isAr ? "تاريخ التركيب" : "Installation Date"]: c.installationDate ? formatGregorianDate(c.installationDate) : "",
           [isAr ? "دورة الصيانة" : "Cycle"]: formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t),
-          [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString() : "",
-          [isAr ? "الصيانة القادمة" : "Next Maint."]: (c.nextMaintenanceDate || c.nextMaintenance) ? new Date(c.nextMaintenanceDate || c.nextMaintenance).toLocaleDateString() : "",
+          [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "",
+          [isAr ? "الصيانة القادمة" : "Next Maint."]: (c.nextMaintenanceDate || c.nextMaintenance) ? formatGregorianDate(c.nextMaintenanceDate || c.nextMaintenance) : "",
           [isAr ? "أيام متبقية" : "Days Until"]: c.daysUntil ?? "",
           [isAr ? "حالة الصيانة" : "Maintenance Status"]: c.maintenanceStatus ? maintenanceStatusLabel(c.maintenanceStatus) : "",
           [isAr ? "الحالة" : "Alert"]: c.alertLevel === "overdue" ? (isAr ? "متأخر" : "Overdue") : c.alertLevel === "soon" ? (isAr ? "قريب" : "Soon") : (isAr ? "طبيعي" : "OK"),
@@ -495,15 +496,18 @@ tr:nth-child(even){background:#f9f9f9}
     setGeneratingSales(key);
     try {
       const { from, to } = period === "weekly" ? prevWeekRange() : prevMonthRange();
-      const fromStr = from.toISOString().slice(0, 10);
-      const toStr = to.toISOString().slice(0, 10);
+      // Timezone safety: from/to are LOCAL-midnight Date objects (see
+      // prevWeekRange/prevMonthRange above) -- toISOString() would convert to
+      // UTC and can shift the boundary back a day in Saudi's +03:00 offset.
+      const fromStr = localDateOnlyStr(from);
+      const toStr = localDateOnlyStr(to);
       const periodLabel = period === "weekly"
         ? (isAr
-            ? `الأسبوع الماضي: ${from.toLocaleDateString("ar-SA")} — ${to.toLocaleDateString("ar-SA")}`
-            : `Previous Week: ${from.toLocaleDateString("en-GB")} — ${to.toLocaleDateString("en-GB")}`)
+            ? `الأسبوع الماضي: ${formatGregorianDate(from, { utc: false })} — ${formatGregorianDate(to, { utc: false })}`
+            : `Previous Week: ${formatGregorianDate(from, { utc: false })} — ${formatGregorianDate(to, { utc: false })}`)
         : (isAr
-            ? `الشهر الماضي: ${from.toLocaleDateString("ar-SA", { month: "long", year: "numeric" })}`
-            : `Previous Month: ${from.toLocaleDateString("en-US", { month: "long", year: "numeric" })}`);
+            ? `الشهر الماضي: ${formatGregorianMonthYear(from, true)}`
+            : `Previous Month: ${formatGregorianMonthYear(from, false)}`);
       const { data: salesData } = await api.get("/reports/sales", { params: { from: fromStr, to: toStr } });
       const rows: any[] = salesData.data || [];
       const totalAmount: number = salesData.meta?.totalAmount || 0;
@@ -521,7 +525,7 @@ tr:nth-child(even){background:#f9f9f9}
             [isAr ? "اسم العميل" : "Customer"]: r.customerName,
             [isAr ? "الجوال" : "Phone"]: r.customerPhone,
             [isAr ? "نوع الخدمة" : "Service Type"]: typeLabels[r.appointmentType] || r.appointmentType,
-            [isAr ? "التاريخ" : "Date"]: new Date(r.date).toLocaleDateString(),
+            [isAr ? "التاريخ" : "Date"]: formatGregorianDate(r.date),
             [isAr ? "الفني" : "Technician"]: r.technicianName,
             [isAr ? "طريقة الدفع" : "Payment"]: payLabels[r.paymentMethod] || r.paymentMethod || "—",
             [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: Number(r.amount),
@@ -674,12 +678,12 @@ tr:nth-child(even){background:#f9f9f9}
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
-            <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+            <input type="date" lang="en-GB" dir="ltr" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
               className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateTo")}</label>
-            <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+            <input type="date" lang="en-GB" dir="ltr" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
               className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
@@ -735,20 +739,20 @@ tr:nth-child(even){background:#f9f9f9}
                     <td className="px-4 py-3 font-medium">{c.name}</td>
                     <td className="px-4 py-3 text-slate-600">{c.phone}</td>
                     <td className="px-4 py-3 text-slate-500">{c.address?.city || "—"}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
+                      {formatGregorianDate(c.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {c.installationDate ? new Date(c.installationDate).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
+                      {c.installationDate ? formatGregorianDate(c.installationDate) : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs font-medium text-slate-600">
                       {formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {c.lastMaintenance ? new Date(c.lastMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
+                      {c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {(c.nextMaintenanceDate || c.nextMaintenance) ? new Date(c.nextMaintenanceDate || c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined) : "—"}
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
+                      {(c.nextMaintenanceDate || c.nextMaintenance) ? formatGregorianDate(c.nextMaintenanceDate || c.nextMaintenance) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <AlertBadge c={c} isAr={isAr} />
@@ -803,13 +807,13 @@ tr:nth-child(even){background:#f9f9f9}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
-              <input type="date" value={apptFilters.dateFrom}
+              <input type="date" lang="en-GB" dir="ltr" value={apptFilters.dateFrom}
                 onChange={e => setApptFilters(f => ({ ...f, dateFrom: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateTo")}</label>
-              <input type="date" value={apptFilters.dateTo}
+              <input type="date" lang="en-GB" dir="ltr" value={apptFilters.dateTo}
                 onChange={e => setApptFilters(f => ({ ...f, dateTo: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
@@ -874,7 +878,7 @@ tr:nth-child(even){background:#f9f9f9}
                           <td className="px-4 py-3 text-slate-400 text-xs">{i + 1}</td>
                           <td className="px-4 py-3 font-medium">{a.customer?.name || "—"}</td>
                           <td className="px-4 py-3 text-slate-500">{a.customer?.phone || "—"}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-xs">{new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap text-xs" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
                           <td className="px-4 py-3 text-xs text-slate-500">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</td>
                           <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{a.status}</span></td>
                           <td className="px-4 py-3 text-xs text-slate-600">{apptSourceLabel(a.createdByRole)}</td>
@@ -918,7 +922,7 @@ tr:nth-child(even){background:#f9f9f9}
                           <tr key={a.id} className="border-b hover:bg-slate-50">
                             <td className="px-4 py-3 text-slate-400 text-xs">{i + 1}</td>
                             <td className="px-4 py-3 text-slate-700">{locationText}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-xs">{new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-xs" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
                             <td className="px-4 py-3 text-xs text-slate-500">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</td>
                             <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700">{a.status}</span></td>
                             <td className="px-4 py-3 text-xs text-slate-600">{apptSourceLabel(a.createdByRole)}</td>

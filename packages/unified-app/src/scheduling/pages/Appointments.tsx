@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 const STATUS_COLORS: Record<string, string> = { SCHEDULED: "bg-blue-100 text-blue-700", RESCHEDULED: "bg-yellow-100 text-yellow-700", CANCELLED: "bg-red-100 text-red-700", PENDING: "bg-slate-100 text-slate-600" };
 
@@ -84,7 +85,7 @@ export default function Appointments() {
                 return (
                   <tr key={a.id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/scheduling/appointments/${a.id}`)}>
                     <td className="px-4 py-3 font-medium">{a.customer?.name}</td>
-                    <td className="px-4 py-3">{new Date(a.scheduledDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-3" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
                     <td className="px-4 py-3">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</td>
                     <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[a.status] || ""}`}>{a.status}</span></td>
                     <td className="px-4 py-3">
