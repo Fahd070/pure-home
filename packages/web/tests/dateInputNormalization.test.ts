@@ -1,17 +1,16 @@
-// Date input/date display normalization batch: source-level regression tests
-// for every business-date form control across the app. Follows this project's
-// established pattern (see technicianNameCompletion.test.ts, dateTimeInput.test.ts)
-// -- source-level assertions against the exact production wiring.
-//
-// Scope recap: business-date fields (appointment date, completion date,
-// postpone date, call date, expense date, report filters) must never use
-// <input type="datetime-local"> or ask for a time inside a date-only field.
-// Where an appointment/call genuinely needs BOTH a date and a time, the two
-// remain separate manual DD/MM/YYYY + HH:MM fields (the existing Modification
-// #4 pattern, now reused everywhere instead of duplicated ad hoc). Native
-// <input type="date"> fields keep their calendar-picker UX but gain
-// lang="en-GB" dir="ltr" (Chromium/Electron's documented mechanism for
-// locking a form control's locale independent of the page's own language).
+// Source-level regression tests for business-date form controls, covering two
+// stacked batches:
+// 1) Date normalization (Gregorian calendar, English digits, lang="en-GB"
+//    dir="ltr" on native date inputs) -- still fully in effect.
+// 2) Date-picker-only simplification (THIS batch): every business-date form
+//    that previously used <input type="datetime-local"> was converted to
+//    manual DD/MM/YYYY + HH:MM text fields in the date-normalization batch,
+//    and is now converted AGAIN to a single native <input type="date"> with
+//    NO time field at all, per the explicit new requirement that removes
+//    time selection from business-date scheduling entirely. Follows this
+//    project's established pattern (see technicianNameCompletion.test.ts,
+//    dateTimeInput.test.ts) -- source-level assertions against the exact
+//    production wiring.
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -20,7 +19,7 @@ function src(rel: string): string {
   return fs.readFileSync(path.resolve(__dirname, '../../unified-app/src', rel), 'utf-8');
 }
 
-const FORMS_CONVERTED_FROM_DATETIME_LOCAL = [
+const FORMS_CONVERTED_TO_DATE_PICKER = [
   'admin/pages/Dashboard.tsx',
   'admin/pages/Appointments.tsx',
   'admin/pages/UrgentAppointments.tsx',
@@ -32,7 +31,7 @@ const FORMS_CONVERTED_FROM_DATETIME_LOCAL = [
 ];
 
 describe('No business-date form uses <input type="datetime-local"> anywhere in the app', () => {
-  it.each(FORMS_CONVERTED_FROM_DATETIME_LOCAL)('%s no longer contains a datetime-local input', (rel) => {
+  it.each(FORMS_CONVERTED_TO_DATE_PICKER)('%s does not contain a datetime-local input', (rel) => {
     expect(src(rel)).not.toMatch(/type="datetime-local"/);
   });
 
@@ -56,36 +55,56 @@ describe('No business-date form uses <input type="datetime-local"> anywhere in t
   });
 });
 
-describe('Each converted form now uses separate manual DD/MM/YYYY + HH:MM fields', () => {
-  it.each(FORMS_CONVERTED_FROM_DATETIME_LOCAL)('%s reuses combineManualDateTime from the shared utility', (rel) => {
-    expect(src(rel)).toMatch(/combineManualDateTime/);
+describe('No business-date form uses manual DD/MM/YYYY text entry anymore', () => {
+  it.each(FORMS_CONVERTED_TO_DATE_PICKER)('%s does not render a manual DD/MM/YYYY placeholder text input', (rel) => {
+    expect(src(rel)).not.toMatch(/placeholder="15\/06\/2026"/);
   });
+  it('the removed manual-entry helpers (combineManualDateTime, splitToManualParts) no longer exist anywhere in the app', () => {
+    const root = path.resolve(__dirname, '../../unified-app/src');
+    const offenders: string[] = [];
+    function walk(dir: string) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.tsx?$/.test(entry.name)) {
+          const text = fs.readFileSync(full, 'utf-8');
+          if (/\bcombineManualDateTime\(/.test(text) || /\bsplitToManualParts\(/.test(text)) offenders.push(full);
+        }
+      }
+    }
+    walk(root);
+    expect(offenders).toEqual([]);
+  });
+});
 
-  it.each(FORMS_CONVERTED_FROM_DATETIME_LOCAL)('%s renders two manual text inputs with dir="ltr" (date + time, not a native picker)', (rel) => {
+describe('Each converted form now uses a single native date-only picker', () => {
+  it.each(FORMS_CONVERTED_TO_DATE_PICKER)('%s renders a native type="date" input locked to Gregorian/English digits', (rel) => {
     const s = src(rel);
-    const manualInputs = s.match(/inputMode="numeric" dir="ltr"/g) || [];
-    expect(manualInputs.length).toBeGreaterThanOrEqual(2);
+    expect(s).toMatch(/type="date" lang="en-GB" dir="ltr"/);
+  });
+  it.each(FORMS_CONVERTED_TO_DATE_PICKER)('%s reuses dateOnlyToApiDate from the shared utility rather than a bespoke normalizer', (rel) => {
+    expect(src(rel)).toMatch(/dateOnlyToApiDate/);
   });
 });
 
-describe('Appointment scheduling time is preserved as a separate field, not removed', () => {
-  it('admin Appointments.tsx: manualDate and manualTime are both required, distinct state fields', () => {
-    const s = src('admin/pages/Appointments.tsx');
-    expect(s).toMatch(/manualDate: "", manualTime: ""/);
-    expect(s).toMatch(/combineManualDateTime\(form\.manualDate, form\.manualTime\)/);
+describe('No user-facing time field remains in any business-date scheduling form', () => {
+  it.each(FORMS_CONVERTED_TO_DATE_PICKER)('%s has no type="time" input', (rel) => {
+    expect(src(rel)).not.toMatch(/type="time"/);
   });
-  it('scheduling NewAppointment.tsx: manualDate and manualTime are both present', () => {
-    const s = src('scheduling/pages/NewAppointment.tsx');
-    expect(s).toMatch(/manualDate: "", manualTime: ""/);
-    expect(s).toMatch(/combineManualDateTime\(form\.manualDate, form\.manualTime\)/);
+  it.each(FORMS_CONVERTED_TO_DATE_PICKER)('%s renders no "Time"/"الوقت" label for date scheduling', (rel) => {
+    const s = src(rel);
+    expect(s).not.toMatch(/>{?\s*"?Time"?\s*}?</);
+    expect(s).not.toMatch(/الوقت/);
   });
-  it('admin UrgentAppointments.tsx create form: manualDate and manualTime are both present', () => {
-    const s = src('admin/pages/UrgentAppointments.tsx');
-    expect(s).toMatch(/manualDate: "", manualTime: ""/);
+  it('the dead dashboard.manualDate/manualTime/invalidDateTime i18n keys were removed, not just left unused', () => {
+    const i18nSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/i18n.ts'), 'utf-8');
+    expect(i18nSrc).not.toMatch(/manualDate:/);
+    expect(i18nSrc).not.toMatch(/manualTime:/);
+    expect(i18nSrc).not.toMatch(/invalidDateTime:/);
   });
 });
 
-describe('Native date-only inputs (no time needed) are locked to Gregorian/English-digit rendering', () => {
+describe('Native date-only inputs (business-date fields with no time) are locked to Gregorian/English-digit rendering', () => {
   const NATIVE_DATE_ONLY_SITES: Array<[string, RegExp]> = [
     ['technician/pages/TaskDetail.tsx', /type="date" required lang="en-GB" dir="ltr" value=\{completeForm\.actualCompletionDate\}/],
     ['technician/pages/TaskDetail.tsx', /type="date" lang="en-GB" dir="ltr" value=\{postponeDate\}/],
@@ -104,9 +123,6 @@ describe('Native date-only inputs (no time needed) are locked to Gregorian/Engli
 
   it('no native date input in the app is missing the lang="en-GB" lock', () => {
     const root = path.resolve(__dirname, '../../unified-app/src');
-    // dateTimeInput.ts itself is the utility module -- it only ever mentions
-    // `<input type="date">` inside a JSDoc comment describing what calls it,
-    // never a real form control.
     const excluded = path.join(root, 'utils', 'dateTimeInput.ts');
     const offenders: string[] = [];
     function walk(dir: string) {
@@ -126,72 +142,47 @@ describe('Native date-only inputs (no time needed) are locked to Gregorian/Engli
   });
 });
 
-describe('Regression: Modification #4 (EditApptModal manual date/time) still works unchanged', () => {
-  it('admin Dashboard.tsx EditApptModal still uses splitToManualParts + combineManualDateTime', () => {
-    const s = src('admin/pages/Dashboard.tsx');
-    expect(s).toMatch(/const initialParts = splitToManualParts\(appt\.scheduledDate\);/);
-    expect(s).toMatch(/const scheduledDate = combineManualDateTime\(form\.manualDate, form\.manualTime\);/);
-  });
-  it('scheduling Dashboard.tsx EditApptModal still uses splitToManualParts + combineManualDateTime', () => {
-    const s = src('scheduling/pages/Dashboard.tsx');
-    expect(s).toMatch(/const initialParts = splitToManualParts\(appt\.scheduledDate\);/);
-    expect(s).toMatch(/const scheduledDate = combineManualDateTime\(form\.manualDate, form\.manualTime\);/);
-  });
-  it('the wire-format contract (YYYY-MM-DDTHH:mm) is unchanged -- combineManualDateTime is still the single source of the value sent to the backend', () => {
-    const dtiSrc = src('utils/dateTimeInput.ts');
-    expect(dtiSrc).toMatch(/return `\$\{year\}-\$\{month\}-\$\{day\}T\$\{timeStr\.trim\(\)\}`;/);
-  });
-});
-
-describe('Regression: Modification #8 (actualCompletionDate is date-only, distinct from completedAt) still holds', () => {
-  it('TaskDetail.tsx still requires actualCompletionDate via a native date-only input, capped at today', () => {
-    const s = src('technician/pages/TaskDetail.tsx');
-    expect(s).toMatch(/type="date" required lang="en-GB" dir="ltr" value=\{completeForm\.actualCompletionDate\}\s+max=\{todayDateInputValue\(\)\}/);
-  });
-  it('completedAt is never conflated with actualCompletionDate in the completion payload', () => {
-    const s = src('technician/pages/TaskDetail.tsx');
-    expect(s).not.toMatch(/completedAt:\s*completeForm/);
-  });
-});
-
-describe('Regression: Technician Work Queue displays scheduled date and time, standardized', () => {
-  it('WorkQueue.tsx shows the Gregorian date and time together via the shared formatter, not a naked toLocaleString', () => {
+describe('Regression: Technician Work Queue displays scheduled date only (no fabricated time)', () => {
+  it('WorkQueue.tsx shows the Gregorian date via the shared formatter, with no time portion', () => {
     const s = src('technician/pages/WorkQueue.tsx');
     expect(s).toMatch(/formatGregorianDate\(appt\.scheduledDate\)/);
-    expect(s).toMatch(/formatGregorianTime\(appt\.scheduledDate\)/);
-    expect(s).not.toMatch(/toLocaleString|toLocaleDateString/);
+    expect(s).not.toMatch(/formatGregorianTime\(appt\.scheduledDate\)/);
   });
 });
 
-describe('Regression: Call Report date behavior remains correct (both departments)', () => {
+describe('Regression: Call Report date behavior remains correct (both departments), now date-only', () => {
   it.each(['admin/components/CallReportForm.tsx', 'scheduling/components/CallReportForm.tsx'])(
-    '%s: callDate is still assembled from manual date+time and padded to :00 seconds, matching the pre-existing wire contract',
+    '%s: callDate is derived from a single native date picker via dateOnlyToApiDate',
     (rel) => {
       const s = src(rel);
-      expect(s).toMatch(/const combined = combineManualDateTime\(form\.manualDate, form\.manualTime\);/);
-      expect(s).toMatch(/const callDate = combined \+ ":00";/);
+      expect(s).toMatch(/const callDate = dateOnlyToApiDate\(form\.date\);/);
     }
   );
   it.each(['admin/pages/CallReports.tsx', 'scheduling/pages/CallReports.tsx'])(
-    '%s: the call-report list still shows date and time together via the shared formatter',
+    '%s: the call-report list shows the date only, via the shared formatter (no fabricated time)',
     (rel) => {
       const s = src(rel);
       expect(s).toMatch(/formatGregorianDate\(r\.callDate\)/);
-      expect(s).toMatch(/formatGregorianTime\(r\.callDate\)/);
+      expect(s).not.toMatch(/formatGregorianTime\(r\.callDate\)/);
     }
   );
 });
 
-describe('Regression: Urgent Visit date behavior remains correct', () => {
-  it('admin UrgentAppointments.tsx create form still requires a date and time before submit', () => {
+describe('Regression: Urgent Visit date behavior remains correct, now date-only', () => {
+  it('admin UrgentAppointments.tsx create form uses a single native date picker', () => {
     const s = src('admin/pages/UrgentAppointments.tsx');
-    expect(s).toMatch(/const scheduledDate = combineManualDateTime\(form\.manualDate, form\.manualTime\);/);
+    expect(s).toMatch(/const scheduledDate = dateOnlyToApiDate\(form\.date\);/);
     expect(s).toMatch(/if \(!scheduledDate \|\| !form\.city \|\| !form\.district \|\| !form\.street\)/);
   });
-  it('technician UrgentAppointments.tsx list still shows the urgent appointment\'s date and time via the shared formatter', () => {
+  it('technician UrgentAppointments.tsx list shows the urgent appointment\'s date only (no fabricated time)', () => {
     const s = src('technician/pages/UrgentAppointments.tsx');
     expect(s).toMatch(/formatGregorianDate\(a\.scheduledDate\)/);
-    expect(s).toMatch(/formatGregorianTime\(a\.scheduledDate\)/);
+    expect(s).not.toMatch(/formatGregorianTime\(a\.scheduledDate\)/);
+  });
+  it('admin UrgentAppointments.tsx visit-detail modal still shows the real submitted-at system timestamp WITH time (not a business date, not stripped)', () => {
+    const s = src('admin/pages/UrgentAppointments.tsx');
+    expect(s).toMatch(/formatGregorianDate\(visitDetail\.createdAt\)/);
+    expect(s).toMatch(/formatGregorianTime\(visitDetail\.createdAt\)/);
   });
 });
 
@@ -200,5 +191,12 @@ describe('Existing report timestamps that legitimately include time were not acc
     for (const rel of ['admin/pages/Reports.tsx', 'admin/pages/Customers.tsx', 'admin/pages/CustomerDetail.tsx', 'admin/pages/Expenses.tsx']) {
       expect(src(rel)).toMatch(/formatGregorianDateTime\(new Date\(\), \{ utc: false \}\)/);
     }
+  });
+});
+
+describe('Regression: Modification #8 (actualCompletionDate date-only, capped at today) still holds', () => {
+  it('TaskDetail.tsx still requires actualCompletionDate via a native date-only input, capped at today', () => {
+    const s = src('technician/pages/TaskDetail.tsx');
+    expect(s).toMatch(/type="date" required lang="en-GB" dir="ltr" value=\{completeForm\.actualCompletionDate\}\s+max=\{todayDateInputValue\(\)\}/);
   });
 });

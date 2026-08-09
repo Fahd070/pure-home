@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import CallReportModal from "../components/CallReportModal";
-import { combineManualDateTime, splitToManualParts, formatGregorianDate } from "../../utils/dateTimeInput";
+import { toDateInputValue, dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
 const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
@@ -16,10 +16,8 @@ const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"
 export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: string, data: any) => void; onClose: () => void }) {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
-  const initialParts = splitToManualParts(appt.scheduledDate);
   const [form, setForm] = useState({
-    manualDate: initialParts.date,
-    manualTime: initialParts.time,
+    date: toDateInputValue(appt.scheduledDate),
     type: appt.type || "MAINTENANCE",
     status: appt.status || "SCHEDULED",
     notes: appt.notes || "",
@@ -27,8 +25,8 @@ export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (i
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   function handleSave() {
-    const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
-    if (!scheduledDate) { toast.error(t("dashboard.invalidDateTime")); return; }
+    const scheduledDate = dateOnlyToApiDate(form.date);
+    if (!scheduledDate) { toast.error(t("common.required")); return; }
     onSave(appt.id, { scheduledDate, type: form.type, status: form.status, notes: form.notes });
   }
 
@@ -40,17 +38,10 @@ export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (i
           <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500">✕</button>
         </div>
         <div className="p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
-              <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={form.manualDate} onChange={e => set("manualDate", e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
-              <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={form.manualTime} onChange={e => set("manualTime", e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
+            <input type="date" lang="en-GB" dir="ltr" value={form.date} onChange={e => set("date", e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
@@ -89,8 +80,7 @@ export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (i
 // ── Quick Schedule Sub-modal ─────────────────────────────────────────────────
 function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: string; name: string }; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation();
-  const [manualDate, setManualDate] = useState("");
-  const [manualTime, setManualTime] = useState("");
+  const [date, setDate] = useState("");
   const [type, setType] = useState("MAINTENANCE");
   const [loading, setLoading] = useState(false);
 
@@ -103,8 +93,8 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
   });
 
   async function handleSave() {
-    const scheduledDate = combineManualDateTime(manualDate, manualTime);
-    if (!scheduledDate) { toast.error(t("dashboard.invalidDateTime")); return; }
+    const scheduledDate = dateOnlyToApiDate(date);
+    if (!scheduledDate) { toast.error(t("common.required")); return; }
     setLoading(true);
     try {
       await api.post("/appointments", { customerId: customer.id, scheduledDate, type });
@@ -125,17 +115,10 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
         </div>
         <div className="p-4 space-y-3">
           <PreviousMaintenanceNoteBox note={prevNote} />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
-              <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={manualDate} onChange={e => setManualDate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
-              <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={manualTime} onChange={e => setManualTime(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
+            <input type="date" lang="en-GB" dir="ltr" value={date} onChange={e => setDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>

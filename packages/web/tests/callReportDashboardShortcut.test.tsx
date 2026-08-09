@@ -60,13 +60,15 @@ describe('CallReportForm: pre-fill and stale-context safety', () => {
     const el = render(<CallReportForm presetCustomer={customerA} onSaved={() => {}} onCancel={() => {}} />);
     expect(el.textContent).toContain('Customer A');
     expect(el.textContent).toContain('0501111111');
-    // callDate is now two manual DD/MM/YYYY + HH:MM text inputs (date-input-
-    // normalization batch) instead of a native datetime-local picker; employeeName
+    // callDate is now a single native date-only picker (date-picker-only
+    // simplification batch) -- no datetime-local, no time field; employeeName
     // input still exists; no search input or "unregistered customer" toggle when
     // the customer is already known.
     expect(el.querySelector('input[type="datetime-local"]')).toBeNull();
-    expect(el.querySelector('input[placeholder="15/06/2026"]')).not.toBeNull();
-    expect(el.querySelector('input[placeholder="14:30"]')).not.toBeNull();
+    expect(el.querySelector('input[type="time"]')).toBeNull();
+    const dateInput = el.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput).not.toBeNull();
+    expect(dateInput.getAttribute('lang')).toBe('en-GB');
     expect(el.textContent).not.toMatch(/Unregistered Customer|عميل غير مسجل/);
   });
 
@@ -94,11 +96,9 @@ describe('CallReportForm: pre-fill and stale-context safety', () => {
     const onSaved = vi.fn();
     const el = render(<CallReportForm presetCustomer={customerB} onSaved={onSaved} onCancel={() => {}} />);
 
-    const dateInput = el.querySelector('input[placeholder="15/06/2026"]') as HTMLInputElement;
-    const timeInput = el.querySelector('input[placeholder="14:30"]') as HTMLInputElement;
+    const dateInput = el.querySelector('input[type="date"]') as HTMLInputElement;
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-    act(() => { nativeSetter.call(dateInput, '09/08/2026'); dateInput.dispatchEvent(new Event('input', { bubbles: true })); });
-    act(() => { nativeSetter.call(timeInput, '10:00'); timeInput.dispatchEvent(new Event('input', { bubbles: true })); });
+    act(() => { nativeSetter.call(dateInput, '2026-08-09'); dateInput.dispatchEvent(new Event('input', { bubbles: true })); });
 
     const form = el.querySelector('form')!;
     await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
@@ -108,6 +108,7 @@ describe('CallReportForm: pre-fill and stale-context safety', () => {
     const [, body] = apiPost.mock.calls[0];
     expect(body.customerId).toBe('cust-b');
     expect(body.customerId).not.toBe('cust-a');
+    expect(body.callDate).toBe('2026-08-09T23:59:59');
   });
 
   it('does not fetch the customer-search list at all when a presetCustomer is given (enabled:false)', () => {
@@ -121,11 +122,9 @@ describe('CallReportForm: pre-fill and stale-context safety', () => {
     apiPost.mockReturnValue(new Promise(r => { resolvePost = r; }));
     const el = render(<CallReportForm presetCustomer={customerA} onSaved={() => {}} onCancel={() => {}} />);
 
-    const dateInput = el.querySelector('input[placeholder="15/06/2026"]') as HTMLInputElement;
-    const timeInput = el.querySelector('input[placeholder="14:30"]') as HTMLInputElement;
+    const dateInput = el.querySelector('input[type="date"]') as HTMLInputElement;
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-    act(() => { nativeSetter.call(dateInput, '09/08/2026'); dateInput.dispatchEvent(new Event('input', { bubbles: true })); });
-    act(() => { nativeSetter.call(timeInput, '10:00'); timeInput.dispatchEvent(new Event('input', { bubbles: true })); });
+    act(() => { nativeSetter.call(dateInput, '2026-08-09'); dateInput.dispatchEvent(new Event('input', { bubbles: true })); });
 
     const form = el.querySelector('form')!;
     act(() => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });

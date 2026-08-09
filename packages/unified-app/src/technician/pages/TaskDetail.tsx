@@ -7,7 +7,7 @@ import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
-import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
 type PaymentGroup = "CASH" | "BANK_TRANSFER";
@@ -231,7 +231,7 @@ export default function TaskDetail() {
         })()}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-slate-400">{t("appointments.type")}: </span>{appt?.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</div>
-          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(appt?.scheduledDate)} {formatGregorianTime(appt?.scheduledDate)}</span></div>
+          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(appt?.scheduledDate)}</span></div>
         </div>
         {appt?.notes && (
           <div className="bg-slate-50 rounded-lg p-3 text-sm">

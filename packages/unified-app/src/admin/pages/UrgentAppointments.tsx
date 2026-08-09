@@ -6,12 +6,12 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
-import { combineManualDateTime, formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { dateOnlyToApiDate, formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 
 type Tab = "list" | "records";
 
 const EMPTY_FORM = {
-  manualDate: "", manualTime: "", city: "", district: "", street: "",
+  date: "", city: "", district: "", street: "",
   postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "", notes: "",
 };
 
@@ -88,7 +88,7 @@ export default function UrgentAppointments() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+    const scheduledDate = dateOnlyToApiDate(form.date);
     if (!scheduledDate || !form.city || !form.district || !form.street) {
       toast.error(isAr ? "الحقول المطلوبة: المدينة، الحي، الشارع، التاريخ" : "Required: City, District, Street, Date");
       return;
@@ -149,19 +149,11 @@ export default function UrgentAppointments() {
             <HelpButton titleAr={HELP["admin.urgentAppointments"].titleAr} contentAr={HELP["admin.urgentAppointments"].contentAr} />
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")} *</label>
-                <input type="text" inputMode="numeric" dir="ltr" required placeholder="15/06/2026" value={form.manualDate}
-                  onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")} *</label>
-                <input type="text" inputMode="numeric" dir="ltr" required placeholder="14:30" value={form.manualTime}
-                  onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")} *</label>
+              <input type="date" lang="en-GB" dir="ltr" required value={form.date}
+                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">
               {t("urgentAppts.locationInfo")}
@@ -263,7 +255,7 @@ export default function UrgentAppointments() {
                           );
                         })()}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap" dir="ltr">{formatGregorianDate(a.scheduledDate)} {formatGregorianTime(a.scheduledDate)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
                       <td className="px-4 py-3 text-slate-500 text-xs max-w-[180px] truncate">{a.notes || "—"}</td>
                       <td className="px-4 py-3">
                         {a.visibleToScheduling ? (
@@ -398,7 +390,7 @@ export default function UrgentAppointments() {
                     <div className="flex gap-2">
                       <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الموعد" : "Appointment Date"}:</span>
                       <span className="text-slate-700 text-xs" dir="ltr">
-                        {formatGregorianDate(visitDetail.appointment.scheduledDate)} {formatGregorianTime(visitDetail.appointment.scheduledDate)}
+                        {formatGregorianDate(visitDetail.appointment.scheduledDate)}
                       </span>
                     </div>
                   )}

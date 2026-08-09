@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
-import { combineManualDateTime, formatGregorianDate } from "../../utils/dateTimeInput";
+import { dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -51,7 +51,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClose: () => void; onSuccess: () => void }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState({ type: "MAINTENANCE", manualDate: "", manualTime: "", notes: "" });
+  const [form, setForm] = useState({ type: "MAINTENANCE", date: "", notes: "" });
 
   // Modification #7: keyed on customer.id -- this modal is always opened for one
   // fixed customer, but keeping the id in the query key keeps this consistent
@@ -61,13 +61,13 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
     queryFn: () => api.get(`/customers/${customer.id}/latest-maintenance-note`).then(r => r.data.data.nextMaintenanceNote),
   });
 
-  const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+  const scheduledDate = dateOnlyToApiDate(form.date);
 
   const schedule = useMutation({
     mutationFn: () => api.post("/appointments", {
       customerId: customer.id,
       type: form.type,
-      scheduledDate: new Date(scheduledDate!).toISOString(),
+      scheduledDate,
       notes: form.notes || undefined
     }),
     onSuccess: () => {
@@ -93,19 +93,11 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
             <option value="INSTALLATION">{t("appointments.installation")}</option>
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">{t("dashboard.manualDate")} *</label>
-            <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={form.manualDate}
-              onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">{t("dashboard.manualTime")} *</label>
-            <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={form.manualTime}
-              onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
-          </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("common.date")} *</label>
+          <input type="date" lang="en-GB" dir="ltr" value={form.date}
+            onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">{t("common.notes")}</label>

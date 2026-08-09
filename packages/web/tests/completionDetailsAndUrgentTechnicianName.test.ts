@@ -48,9 +48,9 @@ describe('Part A: Admin Technicians detail modal shows full completion details',
   it('3. shows service type', () => {
     expect(adminTechniciansSrc).toMatch(/APPT_TYPE_LABELS\[taskDetail\.task\.type/);
   });
-  it('4. shows scheduled date and time', () => {
+  it('4. shows the scheduled date (date-picker-only simplification batch: business-date scheduling no longer carries a user-entered time)', () => {
     expect(adminTechniciansSrc).toMatch(/formatGregorianDate\(taskDetail\.task\.scheduledDate\)/);
-    expect(adminTechniciansSrc).toMatch(/formatGregorianTime\(taskDetail\.task\.scheduledDate\)/);
+    expect(adminTechniciansSrc).not.toMatch(/formatGregorianTime\(taskDetail\.task\.scheduledDate\)/);
   });
   it('5. shows actualCompletionDate via the Gregorian formatter, distinct from completedAt', () => {
     expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.actualCompletionDate &&/);

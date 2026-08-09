@@ -6,7 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
-import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 import { useAuthStore } from "../store/authStore";
 // Reuses Modification #13's exact first-name rule/extraction (Part B of this
 // batch) rather than duplicating a second validator -- same file family
@@ -207,7 +207,7 @@ export default function TechUrgentAppointments() {
                   <tr key={a.id} className="border-b hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium">{locationText(a)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm" dir="ltr">
-                      {formatGregorianDate(a.scheduledDate)} {formatGregorianTime(a.scheduledDate)}
+                      {formatGregorianDate(a.scheduledDate)}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[160px] truncate">{a.notes || "—"}</td>
                     <td className="px-4 py-3">

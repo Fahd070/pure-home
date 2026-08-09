@@ -39,14 +39,15 @@ describe('WorkQueue card: pending task details', () => {
     expect(workQueueSrc).toMatch(/addr\.district/);
   });
 
-  it('displays service type and the full scheduled date+time (not date-only)', () => {
+  it('displays service type and the scheduled date (date-only, no fabricated time)', () => {
     expect(workQueueSrc).toMatch(/appt\.type === "INSTALLATION"/);
-    // Date-input-normalization batch: the naked toLocaleString(isAr ? "ar-SA" :
-    // undefined) call (Arabic-Indic-digit/Hijri-calendar risk) was replaced with
-    // the shared Gregorian/English-digit formatter -- still date+time, not
-    // date-only, just locale-independent now.
+    // Date-picker-only simplification batch: business-date scheduling no
+    // longer carries a user-entered time at all, so the display dropped the
+    // formatGregorianTime call it briefly had (added in the earlier
+    // date-input-normalization batch) -- still the locale-independent
+    // Gregorian/English-digit formatter, just date-only now.
     expect(workQueueSrc).toMatch(/formatGregorianDate\(appt\.scheduledDate\)/);
-    expect(workQueueSrc).toMatch(/formatGregorianTime\(appt\.scheduledDate\)/);
+    expect(workQueueSrc).not.toMatch(/formatGregorianTime\(appt\.scheduledDate\)/);
     expect(workQueueSrc).not.toMatch(/toLocaleString|toLocaleDateString/);
   });
 
@@ -75,11 +76,11 @@ describe('TaskDetail: full pending-detail view', () => {
     expect(taskDetailSrc).toMatch(/appt\.notes/);
   });
 
-  it('displays the full scheduled date+time, not date-only', () => {
-    // Date-input-normalization batch: replaced the naked toLocaleString call
-    // with the shared Gregorian/English-digit formatter (still date+time).
+  it('displays the scheduled date (date-only, no fabricated time)', () => {
+    // Date-picker-only simplification batch: no user-entered time exists for
+    // scheduledDate anymore, so only the date formatter is used here.
     expect(taskDetailSrc).toMatch(/formatGregorianDate\(appt\?\.scheduledDate\)/);
-    expect(taskDetailSrc).toMatch(/formatGregorianTime\(appt\?\.scheduledDate\)/);
+    expect(taskDetailSrc).not.toMatch(/formatGregorianTime\(appt\?\.scheduledDate\)/);
   });
 
   it('displays a localized service type instead of the raw enum value', () => {

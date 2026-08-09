@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
-import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 const STATUS_COLORS: Record<string, string> = {
   WAITING: "bg-yellow-100 text-yellow-700",
@@ -114,7 +114,7 @@ export default function WorkQueue() {
                 )}
                 <div className="mt-3 flex justify-between text-xs text-slate-400">
                   <span>{appt.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</span>
-                  <span dir="ltr">{formatGregorianDate(appt.scheduledDate)} · {formatGregorianTime(appt.scheduledDate)}</span>
+                  <span dir="ltr">{formatGregorianDate(appt.scheduledDate)}</span>
                 </div>
               </div>
             );

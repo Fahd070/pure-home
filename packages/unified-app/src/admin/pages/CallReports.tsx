@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import CallReportForm from "../components/CallReportForm";
-import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 type ConfirmType = "single" | "selected" | "all";
 
@@ -229,7 +229,7 @@ export default function AdminCallReports() {
                     <td className="px-4 py-3 text-slate-500">{r.customer?.phone || r.unregisteredPhone || "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{r.employeeName}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs" dir="ltr">
-                      {formatGregorianDate(r.callDate)} {formatGregorianTime(r.callDate)}
+                      {formatGregorianDate(r.callDate)}
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs max-w-[300px] truncate">{r.notes || "—"}</td>
                     <td className="px-4 py-3">
