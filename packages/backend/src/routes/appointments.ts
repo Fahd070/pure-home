@@ -141,6 +141,27 @@ router.get('/', async (req: AuthRequest, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Modification #10: lists exactly the appointments Scheduling has exported
+// (Modification #5) that are still awaiting Admin approval -- the
+// (visibleToTechnician=false, adminApproved=false) state. Registered before
+// GET /:id so "pending-export-approval" is never swallowed by the :id param
+// route. This boolean pair is only ever produced by the export-to-technicians
+// endpoint (ordinary appointment creation always sets visibleToTechnician=true;
+// export-to-technicians is itself scoped to visibleToScheduling=true,
+// isUrgent=false appointments), so no separate createdByRole filter is needed
+// to exclude unrelated appointments -- isUrgent:false is still asserted here
+// explicitly, matching that same scoping, as defense in depth.
+router.get('/pending-export-approval', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const appts = await prisma.appointment.findMany({
+      where: { visibleToTechnician: false, adminApproved: false, isUrgent: false },
+      include: { customer: { include: { address: true } }, technician: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    res.json({ success: true, data: appts });
+  } catch (e) { next(e); }
+});
+
 router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
     const where: any = { id: req.params.id };
