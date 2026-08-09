@@ -24,13 +24,41 @@ export default function Notifications() {
   const qc = useQueryClient();
   const socket = useSocket();
   const { data, isLoading } = useQuery({ queryKey: ["notifications-page"], queryFn: () => api.get("/notifications").then(r => r.data.data) });
-  const markAll = useMutation({ mutationFn: () => api.patch("/notifications/read-all"), onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications-page"] }) });
-  const markOne = useMutation({ mutationFn: (id: string) => api.patch("/notifications/" + id + "/read"), onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications-page"] }) });
+  // Reused unchanged -- the existing manual "Mark all read" action (kept below
+  // as a fallback for a failed auto-mark or a notification that arrives after
+  // it). Also invalidates the sidebar's own unread-count query (notif-unread-admin)
+  // so the red badge clears immediately, not just on its next 30s poll.
+  const markAll = useMutation({
+    mutationFn: () => api.patch("/notifications/read-all"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications-page"] });
+      qc.invalidateQueries({ queryKey: ["notif-unread-admin"] });
+    },
+  });
+  const markOne = useMutation({
+    mutationFn: (id: string) => api.patch("/notifications/" + id + "/read"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications-page"] });
+      qc.invalidateQueries({ queryKey: ["notif-unread-admin"] });
+    },
+  });
   useEffect(() => {
     if (!socket) return;
     socket.on("notification:new", () => qc.invalidateQueries({ queryKey: ["notifications-page"] }));
     return () => { socket.off("notification:new"); };
   }, [socket, qc]);
+  // Read-on-open fix: "entering the section" = this page mounting (the user
+  // actually navigated here). Reuses the exact same PATCH /notifications/read-all
+  // endpoint the manual button already called -- no new backend logic, no new
+  // read-state storage. Re-fires if a genuinely new unread notification arrives
+  // (via the socket handler above) while the page is still open, which is the
+  // desired behavior: the user can already see it on screen.
+  useEffect(() => {
+    if (data && data.some((n: any) => !n.isRead)) {
+      markAll.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
   const unread = (data || []).filter((n: any) => !n.isRead).length;
   return (
     <div className="max-w-2xl mx-auto space-y-4">

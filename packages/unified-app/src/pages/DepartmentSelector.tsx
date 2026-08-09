@@ -22,6 +22,18 @@ type ServerStatus = "checking" | "online" | "offline";
 
 function DeptCard({ dept, isAr, onClick }: { dept: typeof depts[number]; isAr: boolean; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  // Focus/select readability fix: hover (mouse) and focus (keyboard Tab) both
+  // switch the card into the same "active" look -- a SOLID fill of the
+  // department's own color, matching how that exact color is already used as
+  // a solid background elsewhere in the app (Admin/Scheduling/Technician
+  // sidebars and headers), always paired with white text there. The previous
+  // version only tinted the background ~9% opacity while leaving the label
+  // text dark, which stayed readable at that faint tint but was never
+  // readable against a more prominent highlight -- this makes the fill solid
+  // and the text white together, so contrast is correct by construction
+  // instead of tuned by eye.
+  const active = hovered || focused;
   const color = DEPT_COLORS[dept.id];
 
   return (
@@ -29,18 +41,20 @@ function DeptCard({ dept, isAr, onClick }: { dept: typeof depts[number]; isAr: b
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="rounded-2xl px-5 py-7 flex flex-col items-center justify-center gap-2 border-2 transition-all shadow-sm"
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      className="rounded-2xl px-5 py-7 flex flex-col items-center justify-center gap-2 border-2 transition-all shadow-sm focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-slate-800"
       style={{
-        backgroundColor: hovered ? color + "18" : "#ffffff",
+        backgroundColor: active ? color : "#ffffff",
         borderColor: color,
-        boxShadow: hovered ? `0 4px 16px ${color}33` : "0 1px 3px rgba(0,0,0,0.08)",
-        transform: hovered ? "translateY(-2px)" : "none",
+        boxShadow: active ? `0 4px 16px ${color}66` : "0 1px 3px rgba(0,0,0,0.08)",
+        transform: active ? "translateY(-2px)" : "none",
       }}
     >
-      <span className="font-bold text-slate-800 text-sm text-center">
+      <span className={`font-bold text-sm text-center ${active ? "text-white" : "text-slate-800"}`}>
         {isAr ? dept.label_ar : dept.label_en}
       </span>
-      <span className="text-slate-400 text-xs text-center">
+      <span className={`text-xs text-center ${active ? "text-white/80" : "text-slate-400"}`}>
         {isAr ? dept.label_en : dept.label_ar}
       </span>
     </button>
