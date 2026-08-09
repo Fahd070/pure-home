@@ -130,6 +130,22 @@ model Appointment {
   // appointment; for now it is just persisted and readable via the existing
   // appointment/customer APIs.
   nextMaintenanceNote String?
+  // Modification #8: the Technician-declared ACTUAL date the maintenance
+  // operation took place -- distinct from `completedAt`, which continues to
+  // mean "when the completion submission was received by the server" and is
+  // never touched by this field. Plain DateTime (no @db.Date), matching this
+  // schema's existing convention for date-only business fields (see
+  // Customer.installationDate) -- stored as the date the technician selected,
+  // parsed the same simple way.
+  actualCompletionDate DateTime?
+  // Modification #8: whether Scheduling/Maintenance has reviewed and explicitly
+  // confirmed a Technician's completion report (completion date + non-financial
+  // completion details). Defaults false so every existing completed appointment
+  // (and every new completion going forward) starts unconfirmed until Scheduling
+  // acts -- Technician completion submission must never set this true itself.
+  // Deliberately its own field, not a repurposing of adminApproved (Modification
+  // #5's distinct Admin export-approval flow) or visibleToTechnician.
+  maintenanceConfirmed Boolean           @default(false)
   startedAt           DateTime?
   completedAt         DateTime?
   customerId          String?
