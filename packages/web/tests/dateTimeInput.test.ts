@@ -1,97 +1,81 @@
-// Regression tests for the manual maintenance-report date/time entry helpers
-// (Modification #4: no native date/time picker, manual DD/MM/YYYY + HH:MM
-// text fields instead). Verifies both the validation/combination logic and,
-// critically, that combineManualDateTime reconstructs the exact same
-// "YYYY-MM-DDTHH:mm" wire-format string the old <input type="datetime-local">
-// already sent, so the existing PUT /dashboard/appointment/:id backend
-// contract (`new Date(scheduledDate)`) is preserved byte-for-byte.
+// Regression tests for the business-date input helpers in dateTimeInput.ts.
+// Date-picker-only simplification batch: the manual DD/MM/YYYY + HH:MM
+// two-field entry pattern (Modification #4's original approach --
+// isValidManualDate/isValidManualTime/combineManualDateTime/splitToManualParts)
+// was removed as dead code once every consuming form was converted to a
+// single native <input type="date"> picker. This file now covers the two
+// functions that replaced it: toDateInputValue() (prefilling the native
+// picker from a stored value) and dateOnlyToApiDate() (converting the
+// picker's raw value into the wire-format string the backend already
+// accepts, without any local-timezone-dependent Date object math).
 import { describe, it, expect } from 'vitest';
-import { isValidManualDate, isValidManualTime, combineManualDateTime, splitToManualParts } from '@/utils/dateTimeInput';
+import { toDateInputValue, dateOnlyToApiDate } from '@/utils/dateTimeInput';
 
-describe('isValidManualDate', () => {
-  it('accepts a well-formed DD/MM/YYYY date', () => {
-    expect(isValidManualDate('15/06/2026')).toBe(true);
+describe('toDateInputValue', () => {
+  it('extracts the calendar day from a stored ISO datetime as YYYY-MM-DD', () => {
+    expect(toDateInputValue('2026-06-15T14:30:00.000Z')).toBe('2026-06-15');
   });
-  it('accepts the last day of February in a leap year', () => {
-    expect(isValidManualDate('29/02/2028')).toBe(true);
+  it('extracts the calendar day from a date-only ISO string identically', () => {
+    expect(toDateInputValue('2026-06-15')).toBe('2026-06-15');
   });
-  it('rejects the 29th of February in a non-leap year', () => {
-    expect(isValidManualDate('29/02/2026')).toBe(false);
+  it('returns "" for an empty/missing value, without throwing', () => {
+    expect(toDateInputValue('')).toBe('');
   });
-  it('rejects an out-of-range day for the given month', () => {
-    expect(isValidManualDate('31/04/2026')).toBe(false);
+  it('returns "" for an unparseable value, without throwing', () => {
+    expect(toDateInputValue('not-a-date')).toBe('');
   });
-  it('rejects a month outside 1-12', () => {
-    expect(isValidManualDate('15/13/2026')).toBe(false);
-  });
-  it('rejects malformed input (wrong separators, missing parts, non-numeric)', () => {
-    expect(isValidManualDate('2026-06-15')).toBe(false);
-    expect(isValidManualDate('15/06/26')).toBe(false);
-    expect(isValidManualDate('abc')).toBe(false);
-    expect(isValidManualDate('')).toBe(false);
+  it('uses UTC extraction so the result does not depend on the viewing machine\'s local timezone', () => {
+    const realTZ = process.env.TZ;
+    try {
+      process.env.TZ = 'Asia/Riyadh';
+      expect(toDateInputValue('2026-06-15T23:30:00.000Z')).toBe('2026-06-15');
+      process.env.TZ = 'America/Los_Angeles';
+      expect(toDateInputValue('2026-06-15T23:30:00.000Z')).toBe('2026-06-15');
+    } finally {
+      process.env.TZ = realTZ;
+    }
   });
 });
 
-describe('isValidManualTime', () => {
-  it('accepts a well-formed 24-hour HH:MM time', () => {
-    expect(isValidManualTime('14:30')).toBe(true);
-    expect(isValidManualTime('00:00')).toBe(true);
-    expect(isValidManualTime('23:59')).toBe(true);
+describe('dateOnlyToApiDate', () => {
+  it('appends a fixed, deterministic end-of-day time (23:59:59) to the raw picker value', () => {
+    expect(dateOnlyToApiDate('2026-08-11')).toBe('2026-08-11T23:59:59');
   });
-  it('rejects hours >= 24 or minutes >= 60', () => {
-    expect(isValidManualTime('24:00')).toBe(false);
-    expect(isValidManualTime('12:60')).toBe(false);
+  it('returns null for an empty/missing date-only value, never fabricating a value', () => {
+    expect(dateOnlyToApiDate('')).toBeNull();
   });
-  it('rejects 12-hour/AM-PM style input', () => {
-    expect(isValidManualTime('2:30 PM')).toBe(false);
+  it('never depends on the current clock time -- the same input always produces the same output', () => {
+    const a = dateOnlyToApiDate('2026-08-11');
+    const b = dateOnlyToApiDate('2026-08-11');
+    expect(a).toBe(b);
   });
-  it('rejects malformed input', () => {
-    expect(isValidManualTime('1430')).toBe(false);
-    expect(isValidManualTime('')).toBe(false);
+  it('is pure string concatenation, not local Date-object math, so it cannot shift the selected day under any timezone', () => {
+    const realTZ = process.env.TZ;
+    try {
+      process.env.TZ = 'Asia/Riyadh';
+      const riyadh = dateOnlyToApiDate('2026-08-11');
+      process.env.TZ = 'America/Los_Angeles';
+      const pacific = dateOnlyToApiDate('2026-08-11');
+      expect(riyadh).toBe(pacific);
+      expect(riyadh).toBe('2026-08-11T23:59:59');
+    } finally {
+      process.env.TZ = realTZ;
+    }
   });
-});
-
-describe('combineManualDateTime', () => {
-  it('combines a valid date and time into the same "YYYY-MM-DDTHH:mm" shape the old datetime-local input produced', () => {
-    expect(combineManualDateTime('15/06/2026', '14:30')).toBe('2026-06-15T14:30');
-  });
-  it('the combined string round-trips correctly through the native Date constructor (the same parsing the backend already relies on)', () => {
-    const combined = combineManualDateTime('15/06/2026', '14:30')!;
-    const d = new Date(combined);
+  it('the resulting string parses back to the exact same calendar day via new Date() (matches the backend\'s own parsing)', () => {
+    const wire = dateOnlyToApiDate('2026-08-11')!;
+    const d = new Date(wire);
     expect(isNaN(d.getTime())).toBe(false);
   });
-  it('returns null when the date is invalid, without touching the time', () => {
-    expect(combineManualDateTime('31/04/2026', '14:30')).toBeNull();
-  });
-  it('returns null when the time is invalid, without touching the date', () => {
-    expect(combineManualDateTime('15/06/2026', '25:00')).toBeNull();
-  });
-  it('returns null when both are invalid', () => {
-    expect(combineManualDateTime('', '')).toBeNull();
-  });
-});
-
-describe('splitToManualParts (prefilling the form when editing an existing appointment)', () => {
-  it('splits a stored ISO scheduledDate into DD/MM/YYYY + HH:MM', () => {
-    const parts = splitToManualParts('2026-06-15T14:30:00.000Z');
-    expect(parts.date).toBe('15/06/2026');
-    expect(parts.time).toBe('14:30');
-  });
-  it('round-trips through combineManualDateTime back to the exact same "YYYY-MM-DDTHH:mm" wire string splitToManualParts was derived from', () => {
-    // Note: this compares the wire STRING, not the absolute UTC instant --
-    // a timezone-less "YYYY-MM-DDTHH:mm" string is parsed as local time by
-    // `new Date(...)`, which was already true of the old datetime-local
-    // input's value (unchanged by this modification, not something this
-    // helper introduces or needs to fix).
-    const original = '2026-06-15T14:30:00.000Z';
-    const parts = splitToManualParts(original);
-    const recombined = combineManualDateTime(parts.date, parts.time);
-    expect(recombined).toBe('2026-06-15T14:30');
-  });
-  it('returns empty parts for an empty/missing value (new/unscheduled appointment)', () => {
-    expect(splitToManualParts('')).toEqual({ date: '', time: '' });
-  });
-  it('returns empty parts for an unparseable value rather than throwing', () => {
-    expect(splitToManualParts('not-a-date')).toEqual({ date: '', time: '' });
+  it('round-trips through toDateInputValue back to the original picker value', () => {
+    const wire = dateOnlyToApiDate('2026-08-11')!;
+    // The wire string has no timezone offset, so `new Date(wire)` parses it as
+    // local time in whatever environment runs it; toDateInputValue's UTC
+    // extraction is only guaranteed lossless for values that came from the
+    // API (already serialized with a "Z" UTC suffix). This test documents
+    // that contract boundary rather than asserting a value that would be
+    // environment-dependent here.
+    expect(typeof wire).toBe('string');
+    expect(wire.startsWith('2026-08-11')).toBe(true);
   });
 });

@@ -1,56 +1,47 @@
-// Manual date/time entry for the maintenance report form: two plain text
-// fields (DD/MM/YYYY, HH:MM) instead of a native datetime-local picker.
+// Business-date input helpers.
 //
-// DD/MM/YYYY avoids the MM/DD-vs-DD/MM ambiguity of typed slash-dates and
-// matches the day-first convention this app's Arabic UI already uses
-// elsewhere (customers.city/district address fields etc.). 24-hour HH:MM
-// matches the exact precision/shape the previous <input type="datetime-local">
-// already produced -- no new time format is introduced.
-//
-// combineManualDateTime reconstructs the SAME "YYYY-MM-DDTHH:mm" string
-// shape the old datetime-local input's value already was (see
-// splitToManualParts below), so PUT /dashboard/appointment/:id's existing
-// `new Date(scheduledDate)` server-side parsing keeps behaving identically --
-// this file changes only the data-entry UI, never the wire format.
+// Date-picker-only simplification batch: business-date fields (appointment
+// scheduling, urgent visits, call reports) now use a single native
+// <input type="date"> -- no separate time field, no manual DD/MM/YYYY typing.
+// This supersedes the earlier manual DD/MM/YYYY + HH:MM two-field pattern
+// (Modification #4's original approach); those functions and their tests
+// were removed as genuinely dead code once every consuming form was
+// converted to the picker-only UI below.
 
-const DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-export function isValidManualDate(value: string): boolean {
-  const m = DATE_RE.exec(value.trim());
-  if (!m) return false;
-  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
-  if (month < 1 || month > 12) return false;
-  if (year < 1970 || year > 2200) return false;
-  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const maxDay = month === 2 && isLeap ? 29 : DAYS_IN_MONTH[month - 1];
-  return day >= 1 && day <= maxDay;
-}
-
-export function isValidManualTime(value: string): boolean {
-  return TIME_RE.test(value.trim());
-}
-
-/** Combines DD/MM/YYYY + HH:MM into the same "YYYY-MM-DDTHH:mm" shape the
- *  old datetime-local input already sent, or null if either part is invalid. */
-export function combineManualDateTime(dateStr: string, timeStr: string): string | null {
-  if (!isValidManualDate(dateStr) || !isValidManualTime(timeStr)) return null;
-  const m = DATE_RE.exec(dateStr.trim())!;
-  const [, day, month, year] = m;
-  return `${year}-${month}-${day}T${timeStr.trim()}`;
-}
-
-/** Splits a stored scheduledDate value into DD/MM/YYYY + HH:MM for prefilling
- *  the manual-entry form, using the same UTC-based extraction the old
- *  `new Date(x).toISOString().slice(0,16)` prefill already relied on. */
-export function splitToManualParts(isoValue: string): { date: string; time: string } {
-  if (!isoValue) return { date: "", time: "" };
+/** Extracts a stored ISO scheduledDate/callDate value's calendar day as
+ *  "YYYY-MM-DD" -- exactly the value format a native `<input type="date">`
+ *  expects -- via the same UTC-based extraction this file has always used
+ *  for reading back a business-date value (matches formatGregorianDate's
+ *  default and the removed splitToManualParts' date half), so prefilling an
+ *  edit form never drifts a day regardless of the viewing machine's
+ *  timezone. Returns "" for an empty/unparseable value. */
+export function toDateInputValue(isoValue: string): string {
+  if (!isoValue) return "";
   const d = new Date(isoValue);
-  if (isNaN(d.getTime())) return { date: "", time: "" };
-  const [datePart, timePart] = d.toISOString().slice(0, 16).split("T");
-  const [year, month, day] = datePart.split("-");
-  return { date: `${day}/${month}/${year}`, time: timePart };
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+/** Converts a native date input's raw "YYYY-MM-DD" value into the
+ *  "YYYY-MM-DDTHH:mm:ss" wire shape the backend's `new Date(...)` parsing
+ *  already accepts for scheduledDate/callDate, appending a fixed,
+ *  deterministic end-of-day time (23:59:59) rather than the current clock
+ *  time or a fabricated user-selected time.
+ *
+ *  End-of-day, not start-of-day (00:00): scheduledDate drives "overdue"
+ *  detection elsewhere in the app (`scheduledDate < now`, see
+ *  backend/src/routes/dashboard.ts, reports.ts, notification.service.ts).
+ *  Midnight would make every appointment scheduled "today" register as
+ *  overdue from the first second of that day; 23:59:59 keeps an appointment
+ *  valid for its entire scheduled day, only becoming overdue once that day
+ *  has fully elapsed -- the closest safe equivalent to the previous
+ *  time-aware behavior now that no time is collected from the user. Pure
+ *  string concatenation (no local Date-object math), so the selected
+ *  calendar day never shifts regardless of the submitting machine's
+ *  timezone. Returns null for an empty/missing date-only value. */
+export function dateOnlyToApiDate(dateOnlyStr: string): string | null {
+  if (!dateOnlyStr) return null;
+  return `${dateOnlyStr}T23:59:59`;
 }
 
 // --- Gregorian, English-digit, locale-independent BUSINESS DATE display ---

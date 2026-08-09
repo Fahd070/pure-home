@@ -1,10 +1,10 @@
-// Regression tests for Modification #4: the appointment-edit modal's title
-// renamed from "تعديل الموعد" ("Edit Appointment") to "تقرير الصيانة"
-// ("Maintenance Report"), and its date/time fields switched from a native
-// <input type="datetime-local"> picker to two manually-typed text fields
-// (DD/MM/YYYY, HH:MM). Covers both the admin (blue) and scheduling (green)
-// copies of EditApptModal, which are independently duplicated in this
-// codebase (not a shared component) -- both must behave identically here.
+// Regression tests for the appointment-edit modal ("تقرير الصيانة" /
+// "Maintenance Report"). Date-picker-only simplification batch: the date/time
+// fields (previously two manually-typed DD/MM/YYYY + HH:MM text fields from
+// Modification #4) are now a single native <input type="date"> -- no time
+// field at all. Covers both the admin (blue) and scheduling (green) copies of
+// EditApptModal, which are independently duplicated in this codebase (not a
+// shared component) -- both must behave identically here.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
@@ -29,7 +29,7 @@ afterEach(() => {
 // Setting `.value` directly does not trigger React's controlled-input
 // change detection (React overrides the native property setter to track
 // changes); this invokes that native setter first, matching how a real
-// keystroke would be observed, before dispatching the input event.
+// keystroke/pick would be observed, before dispatching the input event.
 function typeInto(input: HTMLInputElement, value: string) {
   const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
   nativeSetter.call(input, value);
@@ -65,76 +65,54 @@ for (const { name, Modal } of variants) {
       expect(el.textContent).not.toContain('تعديل الموعد');
     });
 
-    it('date input is a plain text field, not a date/datetime picker', () => {
+    it('date field is a native date picker, locked to Gregorian/English digits, not a manual text field or datetime-local', () => {
       const el = render(<Modal appt={sampleAppt} onSave={() => {}} onClose={() => {}} />);
-      const dateInput = el.querySelector('input[placeholder="15/06/2026"]') as HTMLInputElement;
+      const dateInput = el.querySelector('input[type="date"]') as HTMLInputElement;
       expect(dateInput).toBeTruthy();
-      expect(dateInput.type).toBe('text');
-      expect(el.querySelector('input[type="date"]')).toBeNull();
+      expect(dateInput.getAttribute('lang')).toBe('en-GB');
+      expect(dateInput.getAttribute('dir')).toBe('ltr');
       expect(el.querySelector('input[type="datetime-local"]')).toBeNull();
+      expect(el.querySelector('input[placeholder="15/06/2026"]')).toBeNull();
     });
 
-    it('time input is a plain text field, not a time picker', () => {
+    it('renders NO time field at all -- no type="time", no HH:MM text input, no "Time"/"الوقت" label', () => {
       const el = render(<Modal appt={sampleAppt} onSave={() => {}} onClose={() => {}} />);
-      const timeInput = el.querySelector('input[placeholder="14:30"]') as HTMLInputElement;
-      expect(timeInput).toBeTruthy();
-      expect(timeInput.type).toBe('text');
       expect(el.querySelector('input[type="time"]')).toBeNull();
+      expect(el.querySelector('input[placeholder="14:30"]')).toBeNull();
+      expect(el.textContent).not.toContain('الوقت');
     });
 
-    it('loads the existing date value correctly when editing (DD/MM/YYYY)', () => {
+    it('loads the existing date value correctly when editing, in native YYYY-MM-DD form', () => {
       const el = render(<Modal appt={sampleAppt} onSave={() => {}} onClose={() => {}} />);
-      const dateInput = el.querySelector('input[placeholder="15/06/2026"]') as HTMLInputElement;
-      expect(dateInput.value).toBe('15/06/2026');
+      const dateInput = el.querySelector('input[type="date"]') as HTMLInputElement;
+      expect(dateInput.value).toBe('2026-06-15');
     });
 
-    it('loads the existing time value correctly when editing (HH:MM)', () => {
-      const el = render(<Modal appt={sampleAppt} onSave={() => {}} onClose={() => {}} />);
-      const timeInput = el.querySelector('input[placeholder="14:30"]') as HTMLInputElement;
-      expect(timeInput.value).toBe('14:30');
-    });
-
-    it('submits the manually-entered values through the same existing onSave/API flow, in the exact same payload shape as before', () => {
+    it('submits the picked date through the same existing onSave/API flow, normalized to a deterministic end-of-day time', () => {
       const onSave = vi.fn();
       const el = render(<Modal appt={sampleAppt} onSave={onSave} onClose={() => {}} />);
-      const dateInput = el.querySelector('input[placeholder="15/06/2026"]') as HTMLInputElement;
-      const timeInput = el.querySelector('input[placeholder="14:30"]') as HTMLInputElement;
-      act(() => { typeInto(dateInput, '20/07/2026'); });
-      act(() => { typeInto(timeInput, '09:15'); });
+      const dateInput = el.querySelector('input[type="date"]') as HTMLInputElement;
+      act(() => { typeInto(dateInput, '2026-07-20'); });
       const saveButton = Array.from(el.querySelectorAll('button')).find(b => b.textContent === i18n.t('common.save'))!;
       act(() => { saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 
       expect(onSave).toHaveBeenCalledTimes(1);
       expect(onSave).toHaveBeenCalledWith('appt-1', {
-        scheduledDate: '2026-07-20T09:15',
+        scheduledDate: '2026-07-20T23:59:59',
         type: 'MAINTENANCE',
         status: 'SCHEDULED',
         notes: 'test notes',
       });
     });
 
-    it('blocks submission and shows an error when the typed date is invalid, without calling onSave', () => {
+    it('blocks submission and shows an error when no date is selected, without calling onSave', () => {
       const onSave = vi.fn();
-      const el = render(<Modal appt={sampleAppt} onSave={onSave} onClose={() => {}} />);
-      const dateInput = el.querySelector('input[placeholder="15/06/2026"]') as HTMLInputElement;
-      act(() => { typeInto(dateInput, '31/04/2026'); }); // April has 30 days
+      const el = render(<Modal appt={{ ...sampleAppt, scheduledDate: '' }} onSave={onSave} onClose={() => {}} />);
       const saveButton = Array.from(el.querySelectorAll('button')).find(b => b.textContent === i18n.t('common.save'))!;
       act(() => { saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
 
       expect(onSave).not.toHaveBeenCalled();
-      expect(toastError).toHaveBeenCalledWith(i18n.t('dashboard.invalidDateTime'));
-    });
-
-    it('blocks submission and shows an error when the typed time is invalid, without calling onSave', () => {
-      const onSave = vi.fn();
-      const el = render(<Modal appt={sampleAppt} onSave={onSave} onClose={() => {}} />);
-      const timeInput = el.querySelector('input[placeholder="14:30"]') as HTMLInputElement;
-      act(() => { typeInto(timeInput, '99:99'); });
-      const saveButton = Array.from(el.querySelectorAll('button')).find(b => b.textContent === i18n.t('common.save'))!;
-      act(() => { saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-
-      expect(onSave).not.toHaveBeenCalled();
-      expect(toastError).toHaveBeenCalledWith(i18n.t('dashboard.invalidDateTime'));
+      expect(toastError).toHaveBeenCalledWith(i18n.t('common.required'));
     });
   });
 }

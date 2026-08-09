@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
-import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -42,7 +42,7 @@ export default function AppointmentDetail() {
         <h2 className="text-lg font-bold">{a.customer?.name}</h2>
         <p className="text-slate-500 text-sm">{a.customer?.phone}</p>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(a.scheduledDate)} {formatGregorianTime(a.scheduledDate)}</span></div>
+          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></div>
           <div><span className="text-slate-400">{t("appointments.type")}: </span>{a.type}</div>
           <div><span className="text-slate-400">{t("common.status")}: </span>{a.status}</div>
           <div><span className="text-slate-400">{t("appointments.technician")}: </span>{a.task?.technician?.name || "—"}</div>

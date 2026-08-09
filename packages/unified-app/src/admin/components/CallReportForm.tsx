@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
-import { combineManualDateTime } from "../../utils/dateTimeInput";
+import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
 
 export interface CallReportPresetCustomer {
   id: string;
@@ -12,7 +12,7 @@ export interface CallReportPresetCustomer {
   phone: string;
 }
 
-const EMPTY = { customerId: "", manualDate: "", manualTime: "", notes: "", employeeName: "", unregisteredName: "", unregisteredPhone: "" };
+const EMPTY = { customerId: "", date: "", notes: "", employeeName: "", unregisteredName: "", unregisteredPhone: "" };
 
 // Dashboard parity fix: the Admin department's own copy of Modification #11's
 // shared call-report form, mirroring scheduling/components/CallReportForm.tsx
@@ -66,9 +66,8 @@ export default function CallReportForm({
     const hasCustomer = unregisteredMode
       ? (form.unregisteredName.trim().length > 0)
       : !!form.customerId;
-    const combined = combineManualDateTime(form.manualDate, form.manualTime);
-    if (!hasCustomer || !combined || !form.employeeName) return;
-    const callDate = combined + ":00";
+    const callDate = dateOnlyToApiDate(form.date);
+    if (!hasCustomer || !callDate || !form.employeeName) return;
     if (unregisteredMode) {
       createMutation.mutate({
         unregisteredName: form.unregisteredName,
@@ -144,19 +143,11 @@ export default function CallReportForm({
           </>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
-          <input type="text" inputMode="numeric" dir="ltr" required placeholder="15/06/2026" value={form.manualDate}
-            onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
-          <input type="text" inputMode="numeric" dir="ltr" required placeholder="14:30" value={form.manualTime}
-            onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
+        <input type="date" lang="en-GB" dir="ltr" required value={form.date}
+          onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.employeeName")}</label>

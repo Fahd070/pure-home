@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
-import { combineManualDateTime, splitToManualParts, formatGregorianDate } from "../../utils/dateTimeInput";
+import { toDateInputValue, dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
 
 const STATUS_COLORS: Record<string, string> = {
   SCHEDULED:   "bg-blue-100 text-blue-700",
@@ -14,7 +14,7 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING:     "bg-slate-100 text-slate-600",
 };
 
-const EMPTY_FORM = { customerId: "", customerSearch: "", manualDate: "", manualTime: "", type: "MAINTENANCE", notes: "" };
+const EMPTY_FORM = { customerId: "", customerSearch: "", date: "", type: "MAINTENANCE", notes: "" };
 
 export default function Appointments() {
   const { t, i18n } = useTranslation();
@@ -138,12 +138,10 @@ export default function Appointments() {
 
   function openEdit(a: any) {
     const cust = allCustomers.find((c: any) => c.id === (a.customerId || a.customer?.id));
-    const parts = splitToManualParts(a.scheduledDate);
     setForm({
       customerId: a.customerId || a.customer?.id || "",
       customerSearch: cust ? `${cust.name} — ${cust.phone}` : "",
-      manualDate: parts.date,
-      manualTime: parts.time,
+      date: toDateInputValue(a.scheduledDate),
       type: a.type || "MAINTENANCE",
       notes: a.notes || "",
     });
@@ -153,7 +151,7 @@ export default function Appointments() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+    const scheduledDate = dateOnlyToApiDate(form.date);
     if (!form.customerId || !scheduledDate) return;
     const body = {
       customerId: form.customerId,
@@ -244,19 +242,11 @@ export default function Appointments() {
                 <PreviousMaintenanceNoteBox note={prevNote} />
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
-                <input type="text" inputMode="numeric" dir="ltr" required placeholder="15/06/2026" value={form.manualDate}
-                  onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
-                <input type="text" inputMode="numeric" dir="ltr" required placeholder="14:30" value={form.manualTime}
-                  onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
+              <input type="date" lang="en-GB" dir="ltr" required value={form.date}
+                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>

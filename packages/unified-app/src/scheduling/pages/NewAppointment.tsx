@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
-import { combineManualDateTime } from "../../utils/dateTimeInput";
+import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
 
 export default function NewAppointment() {
   const { t } = useTranslation();
@@ -13,7 +13,7 @@ export default function NewAppointment() {
   const [loading, setLoading] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [form, setForm] = useState({ type: "MAINTENANCE", manualDate: "", manualTime: "", notes: "" });
+  const [form, setForm] = useState({ type: "MAINTENANCE", date: "", notes: "" });
 
   const { data: customers } = useQuery({
     queryKey: ["customers-search", customerSearch],
@@ -33,11 +33,11 @@ export default function NewAppointment() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedCustomer) { toast.error("Select a customer"); return; }
-    const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+    const scheduledDate = dateOnlyToApiDate(form.date);
     if (!scheduledDate) { toast.error("Select a date"); return; }
     setLoading(true);
     try {
-      await api.post("/appointments", { customerId: selectedCustomer.id, type: form.type, scheduledDate: new Date(scheduledDate).toISOString(), notes: form.notes || undefined });
+      await api.post("/appointments", { customerId: selectedCustomer.id, type: form.type, scheduledDate, notes: form.notes || undefined });
       toast.success(t("common.success"));
       navigate("/scheduling/appointments");
     } catch (err: any) {
@@ -85,17 +85,10 @@ export default function NewAppointment() {
             <option value="INSTALLATION">{t("appointments.installation")}</option>
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">{t("dashboard.manualDate")} *</label>
-            <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={form.manualDate} onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">{t("dashboard.manualTime")} *</label>
-            <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={form.manualTime} onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("common.date")} *</label>
+          <input type="date" lang="en-GB" dir="ltr" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">{t("common.notes")}</label>

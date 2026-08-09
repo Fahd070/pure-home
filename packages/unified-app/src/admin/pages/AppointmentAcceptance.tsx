@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
-import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 // Modification #10: dedicated Admin-only page for appointments Scheduling/
 // Maintenance has exported (Modification #5) and that are still awaiting
@@ -87,7 +87,7 @@ export default function AppointmentAcceptance() {
                         {a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap" dir="ltr">
-                        {formatGregorianDate(a.scheduledDate)} {formatGregorianTime(a.scheduledDate)}
+                        {formatGregorianDate(a.scheduledDate)}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {addr ? [addr.city, addr.district].filter(Boolean).join("، ") : "—"}
