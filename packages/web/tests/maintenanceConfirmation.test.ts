@@ -57,7 +57,8 @@ describe('Technician completion modal: required Completion Date field', () => {
     expect(taskDetailSrc).toMatch(/workStatus === "IN_PROGRESS"/);
     expect(taskDetailSrc).toMatch(/serviceDetails:\s*completeForm\.serviceDetails/);
     expect(taskDetailSrc).toMatch(/completionAmount:\s*parseFloat\(completeForm\.amount\)/);
-    expect(taskDetailSrc).toMatch(/completionPaymentMethod:\s*completeForm\.paymentMethod/);
+    // Bank Transfer subtype fix (Part D): resolved via resolvePaymentMethod().
+    expect(taskDetailSrc).toMatch(/completionPaymentMethod:\s*resolvePaymentMethod\(\)/);
   });
 });
 

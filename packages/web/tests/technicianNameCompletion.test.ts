@@ -79,7 +79,10 @@ describe('Technician completion modal: Technician Name field', () => {
 
   it('isCompleteValid requires a valid technicianName before the task can be completed', () => {
     expect(taskDetailSrc).toMatch(/technicianNameValid\s*=\s*!!trimmedTechnicianName\s*&&\s*FIRST_NAME_RE\.test\(trimmedTechnicianName\)/);
-    expect(taskDetailSrc).toMatch(/isCompleteValid\s*=[\s\S]*?&&\s*technicianNameValid;/);
+    // Bank Transfer subtype fix (Part D) appends paymentMethodValid after
+    // technicianNameValid in isCompleteValid -- technicianName is still required,
+    // just no longer the final conjunct.
+    expect(taskDetailSrc).toMatch(/isCompleteValid\s*=[\s\S]*?&&\s*technicianNameValid\s*&&\s*paymentMethodValid;/);
   });
 
   it('shows a localized inline error only once the field is non-empty and invalid (not required-nagging on first open)', () => {
@@ -102,7 +105,10 @@ describe('Technician completion modal: Technician Name field', () => {
   it('the existing required fields (serviceDetails, amount, paymentMethod, actualCompletionDate) remain required and untouched', () => {
     expect(taskDetailSrc).toMatch(/serviceDetails:\s*completeForm\.serviceDetails/);
     expect(taskDetailSrc).toMatch(/completionAmount:\s*parseFloat\(completeForm\.amount\)/);
-    expect(taskDetailSrc).toMatch(/completionPaymentMethod:\s*completeForm\.paymentMethod/);
+    // Bank Transfer subtype fix (Part D): completionPaymentMethod is now resolved
+    // via resolvePaymentMethod() (CASH / BANK_TRANSFER_COMMERCIAL / BANK_TRANSFER_PERSONAL)
+    // instead of a raw completeForm.paymentMethod field -- see paymentMethodValid below.
+    expect(taskDetailSrc).toMatch(/completionPaymentMethod:\s*resolvePaymentMethod\(\)/);
     expect(taskDetailSrc).toMatch(/actualCompletionDate:\s*completeForm\.actualCompletionDate,/);
   });
 

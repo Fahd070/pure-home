@@ -80,7 +80,8 @@ export default function Technicians() {
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
-    BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer",
+    BANK_TRANSFER_COMMERCIAL: isAr ? "تحويل بنكي (تجاري)" : "Bank Transfer (Commercial)",
+    BANK_TRANSFER_PERSONAL: isAr ? "تحويل بنكي (خاص)" : "Bank Transfer (Personal)",
   };
 
   const APPT_TYPE_LABELS: Record<string, string> = {

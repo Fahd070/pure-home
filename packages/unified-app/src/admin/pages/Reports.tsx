@@ -183,7 +183,7 @@ function prevMonthRange() {
 
 function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, totalAmount: number) {
   const dir = isAr ? "rtl" : "ltr";
-  const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
+  const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER_COMMERCIAL: isAr ? "تحويل بنكي (تجاري)" : "Bank Transfer (Commercial)", BANK_TRANSFER_PERSONAL: isAr ? "تحويل بنكي (خاص)" : "Bank Transfer (Personal)" };
   const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
   const headers = isAr
     ? ["#", "اسم العميل", "الجوال", "نوع الخدمة", "التاريخ", "الفني", "طريقة الدفع", "المبلغ (ريال)"]
@@ -195,7 +195,7 @@ function buildSalesPdfHtml(rows: any[], isAr: boolean, periodLabel: string, tota
     <td>${esc(typeLabels[r.appointmentType] || r.appointmentType)}</td>
     <td style="white-space:nowrap">${new Date(r.date).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
     <td>${esc(r.technicianName)}</td>
-    <td>${esc(payLabels[r.paymentMethod] || r.paymentMethod)}</td>
+    <td>${esc(payLabels[r.paymentMethod] || r.paymentMethod || "—")}</td>
     <td style="text-align:center;font-weight:600;font-family:monospace">${Number(r.amount).toFixed(2)}</td>
   </tr>`).join("");
   return `<!DOCTYPE html><html dir="${dir}" lang="${isAr ? "ar" : "en"}"><head><meta charset="UTF-8">
@@ -514,7 +514,7 @@ tr:nth-child(even){background:#f9f9f9}
         toast.success(`${t("reports.savedTo")}: ${filePath}`);
       } else {
         const { downloadExcelWorkbook } = await import("../../utils/excelExport");
-        const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer" };
+        const payLabels: Record<string, string> = { CASH: isAr ? "نقداً" : "Cash", BANK_TRANSFER_COMMERCIAL: isAr ? "تحويل بنكي (تجاري)" : "Bank Transfer (Commercial)", BANK_TRANSFER_PERSONAL: isAr ? "تحويل بنكي (خاص)" : "Bank Transfer (Personal)" };
         const typeLabels: Record<string, string> = { INSTALLATION: isAr ? "تركيب" : "Installation", MAINTENANCE: isAr ? "صيانة" : "Maintenance", VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only" };
         const excelRows = [
           ...rows.map((r: any) => ({
@@ -523,7 +523,7 @@ tr:nth-child(even){background:#f9f9f9}
             [isAr ? "نوع الخدمة" : "Service Type"]: typeLabels[r.appointmentType] || r.appointmentType,
             [isAr ? "التاريخ" : "Date"]: new Date(r.date).toLocaleDateString(),
             [isAr ? "الفني" : "Technician"]: r.technicianName,
-            [isAr ? "طريقة الدفع" : "Payment"]: payLabels[r.paymentMethod] || r.paymentMethod,
+            [isAr ? "طريقة الدفع" : "Payment"]: payLabels[r.paymentMethod] || r.paymentMethod || "—",
             [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: Number(r.amount),
           })),
           {

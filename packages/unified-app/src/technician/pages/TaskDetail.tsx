@@ -8,7 +8,9 @@ import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 
-type PaymentMethod = "CASH" | "BANK_TRANSFER";
+type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
+type PaymentGroup = "CASH" | "BANK_TRANSFER";
+type TransferType = "" | "COMMERCIAL" | "PERSONAL";
 
 const ACCEPTED_IMG_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMG_PX = 1200;
@@ -49,7 +51,10 @@ async function compressImage(file: File): Promise<string> {
   });
 }
 
-const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod, nextMaintenanceNote: "", actualCompletionDate: "", technicianName: "" };
+// Bank Transfer subtype fix (Part D, same behavior as the urgent visit form):
+// paymentGroup is the top-level Cash/Bank Transfer choice; transferType only
+// matters (and is only shown) when paymentGroup is Bank Transfer.
+const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentGroup: "CASH" as PaymentGroup, transferType: "" as TransferType, nextMaintenanceNote: "", actualCompletionDate: "", technicianName: "" };
 
 // Modification #8: today's date in the local YYYY-MM-DD form a native date
 // input expects, used both to default the field and to cap it via `max` so a
@@ -94,7 +99,7 @@ export default function TaskDetail() {
       notes: ".",
       serviceDetails: completeForm.serviceDetails,
       completionAmount: parseFloat(completeForm.amount),
-      completionPaymentMethod: completeForm.paymentMethod,
+      completionPaymentMethod: resolvePaymentMethod(),
       actualCompletionDate: completeForm.actualCompletionDate,
       technicianName: completeForm.technicianName.trim(),
       ...(completionImage ? { completionImage } : {}),
@@ -123,11 +128,27 @@ export default function TaskDetail() {
     ? t("tasks.technicianNameFirstOnly")
     : null;
 
-  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate && technicianNameValid;
+  // Bank Transfer subtype fix (Part D): resolves the final 3-way value the
+  // backend accepts. Cash never needs a subtype; Bank Transfer requires one
+  // (Commercial or Personal) to be selected, matching the urgent visit form.
+  const paymentMethodValid = completeForm.paymentGroup === "CASH" || !!completeForm.transferType;
+  function resolvePaymentMethod(): PaymentMethod | null {
+    if (completeForm.paymentGroup === "CASH") return "CASH";
+    if (completeForm.transferType === "COMMERCIAL") return "BANK_TRANSFER_COMMERCIAL";
+    if (completeForm.transferType === "PERSONAL") return "BANK_TRANSFER_PERSONAL";
+    return null;
+  }
+
+  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate && technicianNameValid && paymentMethodValid;
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
     BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer",
+  };
+
+  const TRANSFER_TYPE_LABELS: Record<string, string> = {
+    COMMERCIAL: t("tasks.commercialTransfer"),
+    PERSONAL: t("tasks.personalTransfer"),
   };
 
   // Modification #9: same status-label mapping WorkQueue uses, so the detail
@@ -270,14 +291,29 @@ export default function TaskDetail() {
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.paymentMethod")} *</label>
                 <div className="flex gap-2">
-                  {(["CASH","BANK_TRANSFER"] as PaymentMethod[]).map(pm => (
-                    <button key={pm} type="button" onClick={() => setCompleteForm(f => ({ ...f, paymentMethod: pm }))}
-                      className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${completeForm.paymentMethod === pm ? "bg-green-600 text-white border-green-600" : "hover:bg-slate-50"}`}>
-                      {PAYMENT_LABELS[pm]}
+                  {(["CASH","BANK_TRANSFER"] as PaymentGroup[]).map(pg => (
+                    <button key={pg} type="button"
+                      onClick={() => setCompleteForm(f => ({ ...f, paymentGroup: pg, transferType: "" }))}
+                      className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${completeForm.paymentGroup === pg ? "bg-green-600 text-white border-green-600" : "hover:bg-slate-50"}`}>
+                      {PAYMENT_LABELS[pg]}
                     </button>
                   ))}
                 </div>
               </div>
+              {completeForm.paymentGroup === "BANK_TRANSFER" && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.transferType")} *</label>
+                  <div className="flex gap-2">
+                    {(["COMMERCIAL","PERSONAL"] as Array<"COMMERCIAL" | "PERSONAL">).map(tt => (
+                      <button key={tt} type="button"
+                        onClick={() => setCompleteForm(f => ({ ...f, transferType: tt }))}
+                        className={`flex-1 py-2 text-xs rounded-lg border font-medium transition-colors ${completeForm.transferType === tt ? "bg-green-600 text-white border-green-600" : "hover:bg-slate-50"}`}>
+                        {TRANSFER_TYPE_LABELS[tt]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   {t("tasks.nextMaintenanceNote")}
