@@ -123,6 +123,13 @@ model Appointment {
   completionAmount    Float?
   completionPaymentMethod String?
   completionImage     String?           @db.Text
+  // Modification #6: technician-recorded note about what to check/prepare for the
+  // customer's NEXT maintenance visit. Unlike completionAmount, this is not
+  // financial data -- visible to Admin/Technician/Scheduling alike. A later
+  // modification (#7) will surface it automatically when scheduling the next
+  // appointment; for now it is just persisted and readable via the existing
+  // appointment/customer APIs.
+  nextMaintenanceNote String?
   startedAt           DateTime?
   completedAt         DateTime?
   customerId          String?
