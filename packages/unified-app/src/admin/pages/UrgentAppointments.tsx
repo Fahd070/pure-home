@@ -23,6 +23,7 @@ export default function UrgentAppointments() {
   const [tab, setTab] = useState<Tab>("list");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [visitDetail, setVisitDetail] = useState<any | null>(null);
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-urgent-admin"));
@@ -322,7 +323,7 @@ export default function UrgentAppointments() {
                 </thead>
                 <tbody>
                   {visitData.map((v: any) => (
-                    <tr key={v.id} className="border-b hover:bg-slate-50">
+                    <tr key={v.id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => setVisitDetail(v)}>
                       <td className="px-4 py-3 font-medium">{v.customerName || v.appointment?.customer?.name || "—"}</td>
                       <td className="px-4 py-3 text-slate-600">{v.customerPhone || "—"}</td>
                       <td className="px-4 py-3 text-xs font-medium">
@@ -348,6 +349,120 @@ export default function UrgentAppointments() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {visitDetail && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+          onClick={() => setVisitDetail(null)}>
+          <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b flex justify-between items-center shrink-0 bg-gradient-to-r from-orange-50 to-white rounded-t-xl">
+              <h3 className="font-bold text-slate-800 text-base">
+                {isAr ? "تفاصيل الزيارة العاجلة" : "Urgent Visit Details"}
+              </h3>
+              <button onClick={() => setVisitDetail(null)}
+                className="text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 shrink-0">
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+
+              {/* Section 1 — Visit Information */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
+                  {isAr ? "معلومات الزيارة" : "Visit Information"}
+                </p>
+                <div className="bg-slate-50 rounded-xl p-4 space-y-2.5">
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "اسم الفني" : "Technician"}:</span>
+                    <span className="font-semibold text-slate-800 text-sm">{visitDetail.submittedBy?.name || "—"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "اسم العميل" : "Customer"}:</span>
+                    <span className="text-slate-700 text-xs">{visitDetail.customerName || visitDetail.appointment?.customer?.name || "—"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "رقم الجوال" : "Phone"}:</span>
+                    <span className="text-slate-700 text-xs">{visitDetail.customerPhone || "—"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "الموقع" : "Location"}:</span>
+                    <span className="text-slate-700 text-xs">{visitDetail.appointment ? locationText(visitDetail.appointment) : "—"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "نوع الخدمة" : "Service Type"}:</span>
+                    <span className="text-slate-700 text-xs">{visitDetail.serviceType ? (SERVICE_LABELS[visitDetail.serviceType] || visitDetail.serviceType) : "—"}</span>
+                  </div>
+                  {visitDetail.appointment?.scheduledDate && (
+                    <div className="flex gap-2">
+                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الموعد" : "Appointment Date"}:</span>
+                      <span className="text-slate-700 text-xs" dir="ltr">
+                        {formatGregorianDate(visitDetail.appointment.scheduledDate)} {formatGregorianTime(visitDetail.appointment.scheduledDate)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2 — Details (only when present -- customerDetails/serviceNotes are the
+                  only two free-text fields the active technician form actually populates) */}
+              {(visitDetail.customerDetails || visitDetail.serviceNotes) && (
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
+                    {isAr ? "التفاصيل" : "Details"}
+                  </p>
+                  <div className="bg-blue-50/60 rounded-xl p-4 space-y-2.5 border border-blue-100">
+                    {visitDetail.customerDetails && (
+                      <div className="flex gap-2">
+                        <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تفاصيل العميل" : "Customer Details"}:</span>
+                        <span className="text-slate-700 text-xs break-words">{visitDetail.customerDetails}</span>
+                      </div>
+                    )}
+                    {visitDetail.serviceNotes && (
+                      <div className="flex gap-2">
+                        <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "ملاحظات الخدمة" : "Service Notes"}:</span>
+                        <span className="text-slate-700 text-xs break-words">{visitDetail.serviceNotes}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 3 — Payment (Admin-only page -- API already returns raw values, no Scheduling exposure here) */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
+                  {isAr ? "معلومات الدفع" : "Payment Information"}
+                </p>
+                <div className="bg-green-50/70 rounded-xl p-4 space-y-2.5 border border-green-100">
+                  <div className="flex gap-2 items-center">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "المبلغ" : "Amount"}:</span>
+                    <span className="font-bold text-green-700 text-base">
+                      {visitDetail.amount != null ? visitDetail.amount.toFixed(2) : "0.00"} {isAr ? "ريال" : "SAR"}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "طريقة الدفع" : "Payment Method"}:</span>
+                    <span className="text-slate-700 text-xs">
+                      {visitDetail.serviceType === "VISIT_ONLY"
+                        ? (isAr ? "غير مطلوب (زيارة فقط)" : "N/A (Visit Only)")
+                        : (PAYMENT_LABELS[visitDetail.paymentMethod] || visitDetail.paymentMethod || "—")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+            <div className="p-4 border-t shrink-0 flex items-center justify-between">
+              <span className="text-xs text-slate-400" dir="ltr">
+                {isAr ? "أُرسلت في: " : "Submitted: "}{formatGregorianDate(visitDetail.createdAt)} {formatGregorianTime(visitDetail.createdAt)}
+              </span>
+              <button onClick={() => setVisitDetail(null)}
+                className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition-colors">
+                {isAr ? "إغلاق" : "Close"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

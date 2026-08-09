@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
@@ -153,7 +153,7 @@ export default function Technicians() {
                     <div className="flex gap-2">
                       <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الموعد" : "Appointment Date"}:</span>
                       <span className="text-slate-700 text-xs" dir="ltr">
-                        {formatGregorianDate(taskDetail.task.scheduledDate)}
+                        {formatGregorianDate(taskDetail.task.scheduledDate)} {formatGregorianTime(taskDetail.task.scheduledDate)}
                       </span>
                     </div>
                   )}
@@ -173,6 +173,22 @@ export default function Technicians() {
                   <div className="flex gap-2">
                     <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "الحالة" : "Status"}:</span>
                     <span className="text-green-700 font-semibold text-xs">✓ {isAr ? "مكتملة" : "Completed"}</span>
+                  </div>
+                  {taskDetail.task.actualCompletionDate && (
+                    <div className="flex gap-2">
+                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الإكمال" : "Completion Date"}:</span>
+                      <span className="text-slate-800 font-medium text-xs" dir="ltr">
+                        {formatGregorianDate(taskDetail.task.actualCompletionDate)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تأكيد الصيانة" : "Maintenance Confirmation"}:</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${taskDetail.task.maintenanceConfirmed ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                      {taskDetail.task.maintenanceConfirmed
+                        ? (isAr ? "تم تأكيد العملية" : "Operation Confirmed")
+                        : (isAr ? "بانتظار تأكيد الصيانة" : "Awaiting Maintenance Confirmation")}
+                    </span>
                   </div>
                   {taskDetail.task.completedAt && (
                     <div className="flex gap-2">
