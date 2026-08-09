@@ -107,6 +107,15 @@ export default function TaskDetail() {
     BANK_TRANSFER: isAr ? "تحويل بنكي" : "Bank Transfer",
   };
 
+  // Modification #9: same status-label mapping WorkQueue uses, so the detail
+  // page shows a readable label instead of the raw workStatus enum value.
+  const statusLabel: Record<string, string> = {
+    WAITING: t("tasks.waiting") || "Waiting",
+    IN_PROGRESS: t("tasks.inProgress"),
+    COMPLETED: t("tasks.completed"),
+    POSTPONED: t("tasks.postponed"),
+  };
+
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) { setCompletionImage(null); return; }
@@ -141,9 +150,16 @@ export default function TaskDetail() {
             <h2 className="text-xl font-bold">{customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</h2>
             <p className="text-slate-500">{customer?.phone}</p>
           </div>
-          <span className={`text-xs px-2 py-1 rounded-full font-medium ${workStatus === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" : "bg-yellow-100 text-yellow-700"}`}>
-            {workStatus}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${workStatus === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" : "bg-yellow-100 text-yellow-700"}`}>
+              {statusLabel[workStatus] || workStatus}
+            </span>
+            {!appt?.technicianId && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500">
+                {t("tasks.unassigned")}
+              </span>
+            )}
+          </div>
         </div>
         {addr && (
           <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
@@ -169,9 +185,15 @@ export default function TaskDetail() {
           } catch { return null; }
         })()}
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-slate-400">{t("appointments.type")}: </span>{appt?.type}</div>
-          <div><span className="text-slate-400">{t("common.date")}: </span>{new Date(appt?.scheduledDate).toLocaleDateString()}</div>
+          <div><span className="text-slate-400">{t("appointments.type")}: </span>{appt?.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</div>
+          <div><span className="text-slate-400">{t("common.date")}: </span>{new Date(appt?.scheduledDate).toLocaleString(isAr ? "ar-SA" : undefined)}</div>
         </div>
+        {appt?.notes && (
+          <div className="bg-slate-50 rounded-lg p-3 text-sm">
+            <p className="font-medium mb-1">{t("common.notes")}</p>
+            <p className="text-slate-700 whitespace-pre-wrap">{appt.notes}</p>
+          </div>
+        )}
         <div className="flex gap-3 pt-2">
           {workStatus === "WAITING" && (
             <button onClick={() => start.mutate()} disabled={start.isPending} className="flex-1 bg-orange-600 text-white py-2.5 rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50">

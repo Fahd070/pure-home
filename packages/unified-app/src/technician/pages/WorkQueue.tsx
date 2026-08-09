@@ -11,7 +11,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function WorkQueue() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isAr = i18n.language === "ar";
   const navigate = useNavigate();
   const qc = useQueryClient();
   const socket = useSocket();
@@ -74,9 +75,16 @@ export default function WorkQueue() {
                     <p className="font-bold text-base">{customer?.name}</p>
                     <p className="text-slate-500 text-sm">{customer?.phone}</p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[appt.workStatus] || ""}`}>
-                    {statusLabel[appt.workStatus] || appt.workStatus}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[appt.workStatus] || ""}`}>
+                      {statusLabel[appt.workStatus] || appt.workStatus}
+                    </span>
+                    {!appt.technicianId && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500">
+                        {t("tasks.unassigned")}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {addr && (
                   <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
@@ -86,9 +94,15 @@ export default function WorkQueue() {
                     {addr.buildingNo && <p><span className="text-slate-400">{t("customers.buildingNo")}: </span>{addr.buildingNo}</p>}
                   </div>
                 )}
+                {appt.notes && (
+                  <p className="mt-2 text-xs text-slate-500 truncate">
+                    <span className="text-slate-400">{t("common.notes")}: </span>
+                    {appt.notes}
+                  </p>
+                )}
                 <div className="mt-3 flex justify-between text-xs text-slate-400">
                   <span>{appt.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</span>
-                  <span>{new Date(appt.scheduledDate).toLocaleDateString()}</span>
+                  <span>{new Date(appt.scheduledDate).toLocaleString(isAr ? "ar-SA" : undefined)}</span>
                 </div>
               </div>
             );
