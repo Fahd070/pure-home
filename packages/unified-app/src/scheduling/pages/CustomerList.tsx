@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
+import { combineManualDateTime, formatGregorianDate } from "../../utils/dateTimeInput";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -50,7 +51,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClose: () => void; onSuccess: () => void }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState({ type: "MAINTENANCE", scheduledDate: "", notes: "" });
+  const [form, setForm] = useState({ type: "MAINTENANCE", manualDate: "", manualTime: "", notes: "" });
 
   // Modification #7: keyed on customer.id -- this modal is always opened for one
   // fixed customer, but keeping the id in the query key keeps this consistent
@@ -60,11 +61,13 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
     queryFn: () => api.get(`/customers/${customer.id}/latest-maintenance-note`).then(r => r.data.data.nextMaintenanceNote),
   });
 
+  const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+
   const schedule = useMutation({
     mutationFn: () => api.post("/appointments", {
       customerId: customer.id,
       type: form.type,
-      scheduledDate: new Date(form.scheduledDate).toISOString(),
+      scheduledDate: new Date(scheduledDate!).toISOString(),
       notes: form.notes || undefined
     }),
     onSuccess: () => {
@@ -90,11 +93,19 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
             <option value="INSTALLATION">{t("appointments.installation")}</option>
           </select>
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("scheduling.scheduleDate")} *</label>
-          <input type="datetime-local" value={form.scheduledDate}
-            onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("dashboard.manualDate")} *</label>
+            <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={form.manualDate}
+              onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("dashboard.manualTime")} *</label>
+            <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={form.manualTime}
+              onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">{t("common.notes")}</label>
@@ -102,7 +113,7 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
             className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none" />
         </div>
         <div className="flex gap-3 pt-1">
-          <button onClick={() => schedule.mutate()} disabled={!form.scheduledDate || schedule.isPending}
+          <button onClick={() => schedule.mutate()} disabled={!scheduledDate || schedule.isPending}
             style={{ backgroundColor: "#008000" }}
             className="flex-1 text-white py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
             {schedule.isPending ? t("common.loading") : t("scheduling.scheduleMaintenance")}
@@ -170,7 +181,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
             <p className="text-xs text-slate-500 mb-1">{t("scheduling.lastMaintenance")}</p>
             <p className="text-sm font-medium">
               {lastMaint
-                ? new Date(lastMaint.scheduledDate).toLocaleDateString()
+                ? formatGregorianDate(lastMaint.scheduledDate)
                 : t("scheduling.noLast")}
             </p>
           </div>
@@ -178,7 +189,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
             <p className="text-xs text-slate-500 mb-1">{t("scheduling.nextMaintenance")}</p>
             <p className="text-sm font-medium">
               {nextMaint
-                ? new Date(nextMaint.scheduledDate).toLocaleDateString()
+                ? formatGregorianDate(nextMaint.scheduledDate)
                 : t("scheduling.noNext")}
             </p>
           </div>
@@ -204,8 +215,8 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
                 {appointments.map((a: any) => (
                   <React.Fragment key={a.id}>
                     <tr className="border-b hover:bg-slate-50">
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {new Date(a.scheduledDate).toLocaleDateString()}
+                      <td className="px-3 py-2 whitespace-nowrap" dir="ltr">
+                        {formatGregorianDate(a.scheduledDate)}
                       </td>
                       <td className="px-3 py-2">
                         {a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
@@ -229,7 +240,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
                       <tr className="border-b bg-slate-50/70">
                         <td colSpan={5} className="px-3 py-1.5 text-xs text-slate-600">
                           {a.actualCompletionDate && (
-                            <span className="me-3"><span className="font-medium">{t("tasks.completionDate")}:</span> {new Date(a.actualCompletionDate).toLocaleDateString()}</span>
+                            <span className="me-3"><span className="font-medium">{t("tasks.completionDate")}:</span> <span dir="ltr">{formatGregorianDate(a.actualCompletionDate)}</span></span>
                           )}
                           <span className={`px-2 py-0.5 rounded-full font-medium ${a.maintenanceConfirmed ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
                             {a.maintenanceConfirmed ? t("appointments.operationConfirmed") : t("appointments.awaitingMaintenanceConfirmation")}
@@ -318,7 +329,7 @@ export default function CustomerList() {
                     <div className="space-y-1">
                       <MaintenanceBadge c={c} t={t} />
                       {c.nextMaintenance && (
-                        <p className="text-xs text-slate-400">{new Date(c.nextMaintenance).toLocaleDateString(isAr ? "ar-SA" : undefined)}</p>
+                        <p className="text-xs text-slate-400" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</p>
                       )}
                     </div>
                   </td>

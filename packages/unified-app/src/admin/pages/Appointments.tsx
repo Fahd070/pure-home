@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
+import { combineManualDateTime, splitToManualParts, formatGregorianDate } from "../../utils/dateTimeInput";
 
 const STATUS_COLORS: Record<string, string> = {
   SCHEDULED:   "bg-blue-100 text-blue-700",
@@ -13,7 +14,7 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING:     "bg-slate-100 text-slate-600",
 };
 
-const EMPTY_FORM = { customerId: "", customerSearch: "", scheduledDate: "", type: "MAINTENANCE", notes: "" };
+const EMPTY_FORM = { customerId: "", customerSearch: "", manualDate: "", manualTime: "", type: "MAINTENANCE", notes: "" };
 
 export default function Appointments() {
   const { t, i18n } = useTranslation();
@@ -137,10 +138,12 @@ export default function Appointments() {
 
   function openEdit(a: any) {
     const cust = allCustomers.find((c: any) => c.id === (a.customerId || a.customer?.id));
+    const parts = splitToManualParts(a.scheduledDate);
     setForm({
       customerId: a.customerId || a.customer?.id || "",
       customerSearch: cust ? `${cust.name} — ${cust.phone}` : "",
-      scheduledDate: a.scheduledDate ? a.scheduledDate.slice(0, 16) : "",
+      manualDate: parts.date,
+      manualTime: parts.time,
       type: a.type || "MAINTENANCE",
       notes: a.notes || "",
     });
@@ -150,10 +153,11 @@ export default function Appointments() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.customerId || !form.scheduledDate) return;
+    const scheduledDate = combineManualDateTime(form.manualDate, form.manualTime);
+    if (!form.customerId || !scheduledDate) return;
     const body = {
       customerId: form.customerId,
-      scheduledDate: form.scheduledDate,
+      scheduledDate,
       type: form.type,
       notes: form.notes || undefined,
       visibleToScheduling: true,
@@ -240,11 +244,19 @@ export default function Appointments() {
                 <PreviousMaintenanceNoteBox note={prevNote} />
               </div>
             )}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
-              <input type="datetime-local" required value={form.scheduledDate}
-                onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
+                <input type="text" inputMode="numeric" dir="ltr" required placeholder="15/06/2026" value={form.manualDate}
+                  onChange={e => setForm(f => ({ ...f, manualDate: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
+                <input type="text" inputMode="numeric" dir="ltr" required placeholder="14:30" value={form.manualTime}
+                  onChange={e => setForm(f => ({ ...f, manualTime: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
@@ -293,7 +305,7 @@ export default function Appointments() {
                       {a.customer?.name || (a.isUrgent ? <span className="text-red-600">🚨 {isAr ? "زيارة عاجلة" : "Urgent Visit"}</span> : "—")}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}
+                      <span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
                       {a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}

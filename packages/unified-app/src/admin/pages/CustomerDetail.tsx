@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
+import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
 
 function formatCycle(cycle: string, freq: number, isAr: boolean) {
   const n = Number(freq) || 1;
@@ -31,7 +32,7 @@ export default function CustomerDetail() {
     const dir = isAr ? "rtl" : "ltr";
     const apptRows = (c.appointments || []).map((a: any) => `
       <tr>
-        <td>${new Date(a.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}</td>
+        <td dir="ltr">${formatGregorianDate(a.scheduledDate)}</td>
         <td>${a.type === "INSTALLATION" ? (isAr ? "تركيب" : "Installation") : (isAr ? "صيانة" : "Maintenance")}</td>
         <td>${esc(a.status)}</td>
         <td>${esc(a.task?.technician?.name) || "—"}</td>
@@ -54,7 +55,7 @@ td{padding:4px 8px;border-bottom:1px solid #eee}
 tr:nth-child(even){background:#f9f9f9}
 .ftr{margin-top:20px;border-top:1px solid #eee;padding-top:8px;color:#999;font-size:9px;text-align:center}
 </style></head><body>
-<div class="hdr"><div class="brand">Pure Home</div><div style="color:#666;font-size:10px">${new Date().toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+<div class="hdr"><div class="brand">Pure Home</div><div style="color:#666;font-size:10px">${formatGregorianDate(new Date(), { utc: false })}</div></div>
 <div class="cname">${esc(c.name)}</div>
 <span class="${c.isActive ? "active-badge" : "inactive-badge"}">${c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive")}</span>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات التواصل" : "Contact Info"}</div>
@@ -67,7 +68,7 @@ ${addr?.buildingNo ? `<div><div class="lbl">${isAr ? "رقم المبنى" : "Bu
 </div></div>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات الصيانة" : "Maintenance Info"}</div>
 <div class="grid">
-<div><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val">${new Date(c.createdAt).toLocaleDateString(isAr ? "ar-SA" : undefined)}</div></div>
+<div><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val" dir="ltr">${formatGregorianDate(c.createdAt)}</div></div>
 <div><div class="lbl">${isAr ? "دورة الصيانة" : "Cycle"}</div><div class="val">${formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr)}</div></div>
 </div></div>
 ${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
@@ -76,7 +77,7 @@ ${(c.appointments || []).length > 0 ? `
 <table><thead><tr>
 <th>${isAr ? "التاريخ" : "Date"}</th><th>${isAr ? "النوع" : "Type"}</th><th>${isAr ? "الحالة" : "Status"}</th><th>${isAr ? "الفني" : "Technician"}</th>
 </tr></thead><tbody>${apptRows}</tbody></table></div>` : ""}
-<div class="ftr">Pure Home System — ${new Date().toLocaleString()}</div>
+<div class="ftr">Pure Home System — ${formatGregorianDateTime(new Date(), { utc: false })}</div>
 </body></html>`;
 
     try {
@@ -126,7 +127,7 @@ ${(c.appointments || []).length > 0 ? `
           <div className="space-y-2">
             {c.appointments.map((a: any) => (
               <div key={a.id} className="flex justify-between text-sm py-2 border-b last:border-0">
-                <span>{new Date(a.scheduledDate).toLocaleDateString()} — {a.type}</span>
+                <span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span> — {a.type}
                 <span className="text-slate-500">{a.status}</span>
               </div>
             ))}

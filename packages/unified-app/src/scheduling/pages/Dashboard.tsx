@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import CallReportModal from "../components/CallReportModal";
-import { combineManualDateTime, splitToManualParts } from "../../utils/dateTimeInput";
+import { combineManualDateTime, splitToManualParts, formatGregorianDate } from "../../utils/dateTimeInput";
 
 const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
 const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
@@ -52,12 +52,12 @@ export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (i
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
-              <input type="text" inputMode="numeric" placeholder="15/06/2026" value={form.manualDate} onChange={e => set("manualDate", e.target.value)}
+              <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={form.manualDate} onChange={e => set("manualDate", e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
-              <input type="text" inputMode="numeric" placeholder="14:30" value={form.manualTime} onChange={e => set("manualTime", e.target.value)}
+              <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={form.manualTime} onChange={e => set("manualTime", e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
           </div>
@@ -97,7 +97,8 @@ export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (i
 
 function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: string; name: string }; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation();
-  const [scheduledDate, setScheduledDate] = useState("");
+  const [manualDate, setManualDate] = useState("");
+  const [manualTime, setManualTime] = useState("");
   const [type, setType] = useState("MAINTENANCE");
   const [loading, setLoading] = useState(false);
 
@@ -110,7 +111,8 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
   });
 
   async function handleSave() {
-    if (!scheduledDate) { toast.error(t("common.required")); return; }
+    const scheduledDate = combineManualDateTime(manualDate, manualTime);
+    if (!scheduledDate) { toast.error(t("dashboard.invalidDateTime")); return; }
     setLoading(true);
     try {
       await api.post("/appointments", { customerId: customer.id, scheduledDate, type });
@@ -131,10 +133,17 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
         </div>
         <div className="p-4 space-y-3">
           <PreviousMaintenanceNoteBox note={prevNote} />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
-            <input type="datetime-local" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualDate")}</label>
+              <input type="text" inputMode="numeric" dir="ltr" placeholder="15/06/2026" value={manualDate} onChange={e => setManualDate(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t("dashboard.manualTime")}</label>
+              <input type="text" inputMode="numeric" dir="ltr" placeholder="14:30" value={manualTime} onChange={e => setManualTime(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
@@ -259,7 +268,7 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                       <tr key={a.id} className="border-b hover:bg-slate-50">
                         <td className="px-4 py-2">{displayName}</td>
                         <td className="px-4 py-2 text-slate-500">{displayPhone}</td>
-                        <td className="px-4 py-2">{new Date(a.scheduledDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-2" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
                         <td className="px-4 py-2 text-xs font-medium text-slate-600">{a.type}</td>
                         <td className="px-4 py-2">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskColors[a.workStatus] || "bg-slate-100 text-slate-600"}`}>

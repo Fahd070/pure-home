@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
+import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -41,7 +42,7 @@ export default function AppointmentDetail() {
         <h2 className="text-lg font-bold">{a.customer?.name}</h2>
         <p className="text-slate-500 text-sm">{a.customer?.phone}</p>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-slate-400">{t("common.date")}: </span>{new Date(a.scheduledDate).toLocaleString()}</div>
+          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(a.scheduledDate)} {formatGregorianTime(a.scheduledDate)}</span></div>
           <div><span className="text-slate-400">{t("appointments.type")}: </span>{a.type}</div>
           <div><span className="text-slate-400">{t("common.status")}: </span>{a.status}</div>
           <div><span className="text-slate-400">{t("appointments.technician")}: </span>{a.task?.technician?.name || "—"}</div>
@@ -63,7 +64,7 @@ export default function AppointmentDetail() {
             </div>
             <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1.5">
               {a.actualCompletionDate && (
-                <div><span className="text-slate-400">{t("tasks.completionDate")}: </span>{new Date(a.actualCompletionDate).toLocaleDateString()}</div>
+                <div><span className="text-slate-400">{t("tasks.completionDate")}: </span><span dir="ltr">{formatGregorianDate(a.actualCompletionDate)}</span></div>
               )}
               {a.serviceDetails && (
                 <div><span className="text-slate-400">{t("tasks.serviceDetails")}: </span>{a.serviceDetails}</div>

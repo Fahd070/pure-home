@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useSocket } from "../hooks/useSocket";
 import { api } from "../api/client";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 function cleanBody(body: string): string {
   return body.replace(/\s*\[[\w:.\\-]+\]\s*$/, "").trim();
@@ -16,7 +17,7 @@ function formatTime(d: string, lang: string): string {
   if (diff < 3600000) return isAr ? `${mins} د` : `${mins}m ago`;
   const hrs = Math.floor(diff / 3600000);
   if (diff < 86400000) return isAr ? `${hrs} س` : `${hrs}h ago`;
-  return date.toLocaleDateString(isAr ? "ar-SA" : undefined);
+  return formatGregorianDate(date);
 }
 
 export default function Notifications() {

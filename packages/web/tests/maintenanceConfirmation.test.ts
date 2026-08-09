@@ -38,7 +38,11 @@ describe('Technician completion modal: required Completion Date field', () => {
 
   it('renders a required native date input for the Completion Date, capped at today', () => {
     expect(taskDetailSrc).toMatch(/t\("tasks\.completionDate"\)/);
-    expect(taskDetailSrc).toMatch(/type="date"\s+required\s+value=\{completeForm\.actualCompletionDate\}\s+max=\{todayDateInputValue\(\)\}/);
+    expect(taskDetailSrc).toMatch(/type="date"\s+required\s+lang="en-GB"\s+dir="ltr"\s+value=\{completeForm\.actualCompletionDate\}\s+max=\{todayDateInputValue\(\)\}/);
+  });
+
+  it('the Completion Date input is locked to the Gregorian calendar and English digits regardless of device locale (lang="en-GB")', () => {
+    expect(taskDetailSrc).toMatch(/type="date"[^>]*lang="en-GB"/);
   });
 
   it('a future date cannot be picked client-side (max is capped to today, matching the server-side "no future dates" rule)', () => {

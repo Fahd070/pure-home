@@ -7,6 +7,7 @@ import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
+import { formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
 type PaymentGroup = "CASH" | "BANK_TRANSFER";
@@ -230,7 +231,7 @@ export default function TaskDetail() {
         })()}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-slate-400">{t("appointments.type")}: </span>{appt?.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</div>
-          <div><span className="text-slate-400">{t("common.date")}: </span>{new Date(appt?.scheduledDate).toLocaleString(isAr ? "ar-SA" : undefined)}</div>
+          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(appt?.scheduledDate)} {formatGregorianTime(appt?.scheduledDate)}</span></div>
         </div>
         {appt?.notes && (
           <div className="bg-slate-50 rounded-lg p-3 text-sm">
@@ -278,7 +279,7 @@ export default function TaskDetail() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">{t("tasks.completionDate")} *</label>
-                <input type="date" required value={completeForm.actualCompletionDate} max={todayDateInputValue()}
+                <input type="date" required lang="en-GB" dir="ltr" value={completeForm.actualCompletionDate} max={todayDateInputValue()}
                   onChange={e => setCompleteForm(f => ({ ...f, actualCompletionDate: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
@@ -372,7 +373,7 @@ export default function TaskDetail() {
             <h3 className="font-semibold mb-3">{t("tasks.confirmPostpone")}</h3>
             <textarea value={postponeReason} onChange={e => setPostponeReason(e.target.value)} placeholder={t("tasks.reason") + " *"} rows={3}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 mb-3" />
-            <input type="date" value={postponeDate} onChange={e => setPostponeDate(e.target.value)}
+            <input type="date" lang="en-GB" dir="ltr" value={postponeDate} onChange={e => setPostponeDate(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 mb-4" />
             <div className="flex gap-2">
               <button onClick={() => postponeReason.trim() && postpone.mutate()} disabled={!postponeReason.trim() || postpone.isPending}

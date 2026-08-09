@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "../store/appStore";
 import axios from "axios";
 import toast from "react-hot-toast";
+import { formatGregorianDate } from "../utils/dateTimeInput";
 
 type View = "list" | "thread" | "compose";
 
@@ -23,7 +24,7 @@ function formatTime(d: string, lang: string) {
   if (diff < 3600000) return isAr ? `${mins} د` : `${mins}m ago`;
   const hrs = Math.floor(diff / 3600000);
   if (diff < 86400000) return isAr ? `${hrs} س` : `${hrs}h ago`;
-  return date.toLocaleDateString(isAr ? "ar-SA" : undefined);
+  return formatGregorianDate(date);
 }
 
 function useApi() {

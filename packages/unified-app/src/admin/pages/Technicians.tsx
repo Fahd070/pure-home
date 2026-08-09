@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { formatGregorianDate } from "../../utils/dateTimeInput";
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
@@ -151,8 +152,8 @@ export default function Technicians() {
                   {taskDetail.task.scheduledDate && (
                     <div className="flex gap-2">
                       <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الموعد" : "Appointment Date"}:</span>
-                      <span className="text-slate-700 text-xs">
-                        {new Date(taskDetail.task.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)}
+                      <span className="text-slate-700 text-xs" dir="ltr">
+                        {formatGregorianDate(taskDetail.task.scheduledDate)}
                       </span>
                     </div>
                   )}
@@ -355,9 +356,9 @@ export default function Technicians() {
                       <p className="text-xs text-slate-400">{task.customer?.phone || "—"}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-400" dir="ltr">
                         {task.scheduledDate
-                          ? new Date(task.scheduledDate).toLocaleDateString(isAr ? "ar-SA" : undefined)
+                          ? formatGregorianDate(task.scheduledDate)
                           : "—"}
                       </span>
                       {modal.type === "completed" && (
@@ -391,7 +392,7 @@ export default function Technicians() {
                       {task.postponements?.[0]?.newDate && (
                         <DetailRow
                           label={isAr ? "الموعد الجديد" : "New date"}
-                          value={new Date(task.postponements[0].newDate).toLocaleDateString(isAr ? "ar-SA" : undefined)} />
+                          value={formatGregorianDate(task.postponements[0].newDate)} />
                       )}
                       <DetailRow label={isAr ? "ملاحظات الفني" : "Technician notes"} value={task.workNotes} />
                     </div>
