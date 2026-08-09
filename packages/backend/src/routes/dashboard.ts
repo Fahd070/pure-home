@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { emitToRoles } from '../socket';
+import { emitToRole, emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
+import { stripCompletionAmount, stripCompletionAmountFromList, stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 
 const router = Router();
 router.use(authenticate);
@@ -129,14 +130,14 @@ router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req, re
   } catch (e) { next(e); }
 });
 
-router.get('/completed-maintenance', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/completed-maintenance', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
     const where: any = { appointments: { some: { workStatus: 'COMPLETED' } } };
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
     const total = await prisma.customer.count({ where });
-    const data = await prisma.customer.findMany({
+    let data: any[] = await prisma.customer.findMany({
       where, include: {
         address: true,
         appointments: { where: { workStatus: 'COMPLETED' }, orderBy: { scheduledDate: 'desc' }, take: 5 }
@@ -144,11 +145,14 @@ router.get('/completed-maintenance', requireRole('ADMIN', 'SCHEDULING'), async (
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { updatedAt: 'desc' }
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- these are
+    // completed appointments, so the amount is populated here more than anywhere else.
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromCustomers(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });
 
-router.get('/this-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/this-month', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -158,16 +162,19 @@ router.get('/this-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, n
     const where: any = { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: start, lt: end } };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
-    const data = await prisma.appointment.findMany({
+    let data: any[] = await prisma.appointment.findMany({
       where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- this
+    // range can include an appointment already completed earlier this month.
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });
 
-router.get('/next-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/next-month', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -177,23 +184,25 @@ router.get('/next-month', requireRole('ADMIN', 'SCHEDULING'), async (req, res, n
     const where: any = { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: start, lte: end } };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
-    const data = await prisma.appointment.findMany({
+    let data: any[] = await prisma.appointment.findMany({
       where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });
 
-router.get('/postponed', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/postponed', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
     const where: any = { appointments: { some: { workStatus: 'POSTPONED' } } };
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
     const total = await prisma.customer.count({ where });
-    const data = await prisma.customer.findMany({
+    let data: any[] = await prisma.customer.findMany({
       where, include: {
         address: true,
         appointments: {
@@ -204,11 +213,13 @@ router.get('/postponed', requireRole('ADMIN', 'SCHEDULING'), async (req, res, ne
       },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromCustomers(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });
 
-router.get('/overdue', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/overdue', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -222,16 +233,18 @@ router.get('/overdue', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next
     };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
-    const data = await prisma.appointment.findMany({
+    let data: any[] = await prisma.appointment.findMany({
       where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });
 
-router.get('/today', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/today', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
@@ -247,11 +260,13 @@ router.get('/today', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) 
     };
     if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
     const total = await prisma.appointment.count({ where });
-    const data = await prisma.appointment.findMany({
+    let data: any[] = await prisma.appointment.findMany({
       where, include: { customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'asc' }
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });
@@ -329,8 +344,14 @@ router.put('/appointment/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: A
       include: { customer: { include: { address: true } }, urgentVisitRecord: true },
     });
     // No technician subscriber for this event name -- confirmed via frontend audit.
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
-    res.json({ success: true, data: appt });
+    // Modification #6: strip completionAmount before it reaches the SCHEDULING
+    // room/response -- this route is SCHEDULING-callable and can target an
+    // already-completed appointment (e.g. editing its notes afterward).
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    const schedSafeAppt = stripCompletionAmount(appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    const out = req.user!.role === 'SCHEDULING' ? schedSafeAppt : appt;
+    res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });
 

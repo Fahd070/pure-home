@@ -34,7 +34,7 @@ async function compressImage(file: File): Promise<string> {
   });
 }
 
-const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod };
+const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentMethod: "CASH" as PaymentMethod, nextMaintenanceNote: "" };
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -71,6 +71,7 @@ export default function TaskDetail() {
       completionAmount: parseFloat(completeForm.amount),
       completionPaymentMethod: completeForm.paymentMethod,
       ...(completionImage ? { completionImage } : {}),
+      ...(completeForm.nextMaintenanceNote.trim() ? { nextMaintenanceNote: completeForm.nextMaintenanceNote } : {}),
     }),
     onSuccess: () => { toast.success(t("common.success")); navigate("/technician/queue"); },
     onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
@@ -207,6 +208,15 @@ export default function TaskDetail() {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  {t("tasks.nextMaintenanceNote")}
+                  <span className="text-slate-400 font-normal ms-1">({isAr ? "اختياري" : "Optional"})</span>
+                </label>
+                <textarea value={completeForm.nextMaintenanceNote} onChange={e => setCompleteForm(f => ({ ...f, nextMaintenanceNote: e.target.value }))} rows={2}
+                  placeholder={isAr ? "مثال: يجب استبدال الفلتر في الزيارة القادمة..." : "e.g. filter should be replaced next visit..."}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">

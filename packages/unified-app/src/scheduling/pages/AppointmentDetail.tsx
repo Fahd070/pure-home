@@ -35,6 +35,12 @@ export default function AppointmentDetail() {
           <div><span className="text-slate-400">{t("appointments.technician")}: </span>{a.task?.technician?.name || "—"}</div>
         </div>
         {a.notes && <p className="text-sm text-slate-500 border-t pt-2">{a.notes}</p>}
+        {a.nextMaintenanceNote && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+            <p className="font-medium text-blue-700 mb-1">{t("tasks.nextMaintenanceNote")}</p>
+            <p className="text-slate-700">{a.nextMaintenanceNote}</p>
+          </div>
+        )}
         <div className="border-t pt-3">
           <p className="text-sm font-medium mb-2">{t("common.status")}</p>
           <div className="flex gap-2 flex-wrap">

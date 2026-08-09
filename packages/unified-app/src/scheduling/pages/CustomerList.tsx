@@ -192,28 +192,37 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
               </thead>
               <tbody>
                 {appointments.map((a: any) => (
-                  <tr key={a.id} className="border-b hover:bg-slate-50">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(a.scheduledDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 py-2">
-                      {a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={"text-xs px-2 py-0.5 rounded font-medium " + apptStatusColor(a)}>
-                        {t(apptStatusKey(a))}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">{a.technician?.name || "—"}</td>
-                    <td className="px-3 py-2">
-                      {(a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING") && (
-                        <button onClick={() => cancelAppt.mutate(a.id)} disabled={cancelAppt.isPending}
-                          className="text-xs text-red-600 hover:underline disabled:opacity-50">
-                          {t("appointments.cancelled")}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                  <React.Fragment key={a.id}>
+                    <tr className="border-b hover:bg-slate-50">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {new Date(a.scheduledDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-3 py-2">
+                        {a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={"text-xs px-2 py-0.5 rounded font-medium " + apptStatusColor(a)}>
+                          {t(apptStatusKey(a))}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{a.technician?.name || "—"}</td>
+                      <td className="px-3 py-2">
+                        {(a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING") && (
+                          <button onClick={() => cancelAppt.mutate(a.id)} disabled={cancelAppt.isPending}
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50">
+                            {t("appointments.cancelled")}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {a.nextMaintenanceNote && (
+                      <tr className="border-b bg-blue-50/50">
+                        <td colSpan={5} className="px-3 py-1.5 text-xs text-blue-700">
+                          <span className="font-medium">{t("tasks.nextMaintenanceNote")}:</span> {a.nextMaintenanceNote}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

@@ -192,6 +192,12 @@ export default function Technicians() {
                       <span className="text-slate-700 text-xs break-words">{taskDetail.task.workNotes}</span>
                     </div>
                   )}
+                  {taskDetail.task.nextMaintenanceNote && (
+                    <div className="flex gap-2">
+                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "ملاحظة الصيانة القادمة" : "Next Maintenance Note"}:</span>
+                      <span className="text-slate-700 text-xs break-words">{taskDetail.task.nextMaintenanceNote}</span>
+                    </div>
+                  )}
                   {!taskDetail.task.serviceDetails && !taskDetail.task.workNotes && (
                     <p className="text-xs text-slate-400 italic">{isAr ? "لا توجد تفاصيل مُدخلة" : "No details provided"}</p>
                   )}

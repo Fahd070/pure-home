@@ -8,6 +8,7 @@ import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
 import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransactionConflict, sendTransactionConflict } from '../services/bulkDelete.service';
+import { stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 
 const router = Router();
 router.use(authenticate);
@@ -60,10 +61,12 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
       includeOpts.appointments = { orderBy: { scheduledDate: 'desc' as const } };
     }
 
-    const customers = await prisma.customer.findMany({
+    let customers = await prisma.customer.findMany({
       where, include: includeOpts,
       skip: (parseInt(page)-1)*safeLimit, take: safeLimit, orderBy: { createdAt: 'desc' }
     });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
+    if (req.user!.role === 'SCHEDULING') customers = stripCompletionAmountFromCustomers(customers);
 
     if (includeSchedule !== 'true') {
       return res.json({ success: true, data: customers, meta: { total, page: parseInt(page), limit: safeLimit } });
@@ -95,14 +98,17 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
   } catch (e) { next(e); }
 });
 
-router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const customer = await prisma.customer.findUnique({
       where: { id: req.params.id },
       include: { address: true, appointments: { include: { technician: { select: { id: true, name: true } } }, orderBy: { scheduledDate: 'desc' }, take: 10 } },
     });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ success: true, data: customer });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- this is
+    // the API behind Scheduling's "Maintenance History" view.
+    const out = req.user!.role === 'SCHEDULING' ? stripCompletionAmountFromCustomers([customer])[0] : customer;
+    res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });
 

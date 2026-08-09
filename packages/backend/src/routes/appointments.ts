@@ -6,6 +6,7 @@ import { emitToRole, emitToRoles, emitToTechnician } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
+import { stripCompletionAmount } from '../services/completionPrivacy.service';
 
 const router = Router();
 router.use(authenticate);
@@ -157,7 +158,11 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
       include: WORK_INCLUDE,
     });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ success: true, data: appt });
+    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN. The list
+    // endpoint (GET /) already strips it for SCHEDULING; this single-record
+    // endpoint needs the same treatment.
+    const out = req.user!.role === 'SCHEDULING' ? stripCompletionAmount(appt) : appt;
+    res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });
 
@@ -249,8 +254,12 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       after: apptFields(updated),
     });
     // No technician subscriber for this event name -- confirmed via frontend audit.
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
-    res.json({ success: true, data: updated });
+    // Modification #6: completionAmount must never reach the SCHEDULING room --
+    // an already-completed appointment can still be rescheduled/edited here.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, stripCompletionAmount(updated));
+    const out = req.user!.role === 'SCHEDULING' ? stripCompletionAmount(updated) : updated;
+    res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });
 
@@ -263,8 +272,11 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
       data: { visibleToScheduling: true, adminApproved: true, version: { increment: 1 } },
       include: { customer: { include: { address: true } }, technician: true },
     });
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, updated);
+    // Modification #6: strip completionAmount before it reaches the SCHEDULING room.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
+    const schedSafe = stripCompletionAmount(updated);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, schedSafe);
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }
 });
@@ -313,8 +325,13 @@ router.patch('/:id/export-to-technicians', requireRole('SCHEDULING'), async (req
     });
     // Admin/Scheduling-only status update -- deliberately never reaches any
     // technician room; the appointment is not (or no longer) technician-visible.
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
-    res.json({ success: true, data: appt });
+    // Modification #6: strip completionAmount before it reaches the SCHEDULING
+    // room/response -- the caller here IS Scheduling, and this appointment could
+    // already carry a completed amount from a previous cycle.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    const schedSafeAppt = stripCompletionAmount(appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    res.json({ success: true, data: schedSafeAppt });
   } catch (e) { next(e); }
 });
 
@@ -345,7 +362,9 @@ router.patch('/:id/approve-export', requireRole('ADMIN'), async (req: AuthReques
       labelAr: `تم اعتماد تصدير موعد '${custNameAr}' بواسطة الإدارة — أصبح مرئياً للفنيين`,
       before: apptFields(before), after: apptFields(appt),
     });
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    // Modification #6: strip completionAmount before it reaches the SCHEDULING room.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, stripCompletionAmount(appt));
     // Reveal to Technicians now that Admin has approved -- same routing convention
     // as broadcastAppointmentCreated: the assigned technician if one exists,
     // otherwise the shared/unassigned pool (whole TECHNICIAN room). This is the
@@ -396,8 +415,14 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
     });
     const eventType = status === 'CANCELLED' ? EVENT_TYPES.APPOINTMENT_UPDATED : EVENT_TYPES.SCHEDULE_CHANGED;
     await emitEvent({ type: eventType, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING], SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
-    res.json({ success: true, data: appt });
+    // Modification #6: strip completionAmount before it reaches the SCHEDULING
+    // room/response -- SCHEDULING can call this route directly, including on an
+    // appointment that already has a completed amount from a previous cycle.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    const schedSafeStatus = stripCompletionAmount(appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeStatus);
+    const outStatus = req.user!.role === 'SCHEDULING' ? schedSafeStatus : appt;
+    res.json({ success: true, data: outStatus });
   } catch (e) { next(e); }
 });
 
@@ -457,9 +482,16 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       completionAmount: z.number().optional(),
       completionPaymentMethod: z.enum(['CASH','BANK_TRANSFER']).optional(),
       completionImage: z.string().max(5_000_000).optional(),
+      // Modification #6: optional note for the customer's next maintenance visit.
+      // Never required, regardless of role -- unlike serviceDetails/amount/method
+      // below, which are only required for a non-admin (technician) completion.
+      nextMaintenanceNote: z.string().max(2000).optional(),
       version: z.number().int().optional(),
     }).parse(req.body);
     const isAdmin = req.user!.role === 'ADMIN';
+    // Blank/whitespace-only input is treated the same as omitted -- stored as null,
+    // never as an empty string.
+    const trimmedNextMaintenanceNote = body.nextMaintenanceNote?.trim() || null;
 
     if (!isAdmin) {
       if (!body.serviceDetails?.trim()) return res.status(400).json({ success: false, message: 'Service details are required' });
@@ -489,6 +521,7 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
         completionAmount: body.completionAmount,
         completionPaymentMethod: body.completionPaymentMethod,
         completionImage: body.completionImage ?? null,
+        nextMaintenanceNote: trimmedNextMaintenanceNote,
         version: { increment: 1 },
       },
       include: { technician: true, customer: true },
