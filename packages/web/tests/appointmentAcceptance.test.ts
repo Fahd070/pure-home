@@ -12,7 +12,10 @@ import i18n from '../../unified-app/src/i18n';
 const adminSidebarSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/admin/components/Sidebar.tsx'), 'utf-8');
 const schedSidebarSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/scheduling/components/Sidebar.tsx'), 'utf-8');
 const techSidebarSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/components/Sidebar.tsx'), 'utf-8');
-const appSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/App.tsx'), 'utf-8');
+// Normalized to LF: this file is edited across sessions where git's
+// core.autocrlf can rewrite it to CRLF on checkout, which would otherwise
+// silently break the literal "\n\n"-based block-boundary regexes below.
+const appSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/App.tsx'), 'utf-8').replace(/\r\n/g, '\n');
 const layoutSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/admin/components/Layout.tsx'), 'utf-8');
 const pageSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/admin/pages/AppointmentAcceptance.tsx'), 'utf-8');
 

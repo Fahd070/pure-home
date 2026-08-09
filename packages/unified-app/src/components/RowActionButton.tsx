@@ -1,13 +1,13 @@
 import React from "react";
 
-type RowActionVariant = "edit" | "delete";
+type RowActionVariant = "edit" | "delete" | "call";
 type EditTheme = "blue" | "green";
 
 interface RowActionButtonProps {
   variant: RowActionVariant;
   onClick: () => void;
   title: string;
-  /** Edit-button accent color, matched to each department's existing theme (delete is always red). */
+  /** Edit-button accent color, matched to each department's existing theme (delete is always red, call is always emerald). */
   theme?: EditTheme;
 }
 
@@ -17,6 +17,7 @@ const EDIT_THEME_CLASSES: Record<EditTheme, string> = {
 };
 
 const DELETE_CLASSES = "text-red-500 hover:bg-red-100 focus:ring-red-500";
+const CALL_CLASSES = "text-emerald-600 hover:bg-emerald-100 focus:ring-emerald-500";
 
 function EditIcon() {
   return (
@@ -39,13 +40,21 @@ function DeleteIcon() {
   );
 }
 
+function CallIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
 /**
  * Shared edit/delete row-action button for Dashboard drill-down tables
  * (admin + scheduling). Larger, clearer touch target than a bare emoji
  * glyph, reusing the app's existing rounded-lg + focus:ring conventions.
  */
 export default function RowActionButton({ variant, onClick, title, theme = "blue" }: RowActionButtonProps) {
-  const colorClasses = variant === "delete" ? DELETE_CLASSES : EDIT_THEME_CLASSES[theme];
+  const colorClasses = variant === "delete" ? DELETE_CLASSES : variant === "call" ? CALL_CLASSES : EDIT_THEME_CLASSES[theme];
   return (
     <button
       type="button"
@@ -54,7 +63,7 @@ export default function RowActionButton({ variant, onClick, title, theme = "blue
       aria-label={title}
       className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 ${colorClasses}`}
     >
-      {variant === "edit" ? <EditIcon /> : <DeleteIcon />}
+      {variant === "edit" ? <EditIcon /> : variant === "call" ? <CallIcon /> : <DeleteIcon />}
     </button>
   );
 }
