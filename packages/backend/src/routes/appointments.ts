@@ -22,6 +22,12 @@ const apptSchema = z.object({
   urgentLocation: z.string().max(2000).optional(),
 });
 
+// Modification #13: one Unicode letter "word" (Latin or Arabic), optionally
+// joined by a single internal hyphen/apostrophe (e.g. "Jean-Paul", "O'Brien").
+// Whitespace of any kind fails this by construction, which is what rejects a
+// multi-word full name like "Ahmed Ali" -- no separate whitespace check needed.
+const FIRST_NAME_RE = /^[\p{L}]+(?:['-][\p{L}]+)*$/u;
+
 function conflict(res: any, current: number, yours: number) {
   return res.status(409).json({
     success: false,
@@ -516,18 +522,29 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       // the submission timestamp below). Required for a non-admin completion,
       // same as serviceDetails/amount/method.
       actualCompletionDate: z.string().refine(v => !isNaN(Date.parse(v)), { message: 'Invalid completion date' }).optional(),
+      // Modification #13: the Technician's first name, entered fresh at
+      // completion. Business/report data only -- it is validated for format
+      // here but never used as identity; the authenticated actor remains
+      // req.user!.userId (JWT) via the existing technicianId-ownership check
+      // below, and is never persisted (Appointment.technician relation,
+      // which cannot be reassigned after creation, already identifies who
+      // completed the job -- see inline note further down).
+      technicianName: z.string().max(100).optional(),
       version: z.number().int().optional(),
     }).parse(req.body);
     const isAdmin = req.user!.role === 'ADMIN';
     // Blank/whitespace-only input is treated the same as omitted -- stored as null,
     // never as an empty string.
     const trimmedNextMaintenanceNote = body.nextMaintenanceNote?.trim() || null;
+    const trimmedTechnicianName = body.technicianName?.trim() || '';
 
     if (!isAdmin) {
       if (!body.serviceDetails?.trim()) return res.status(400).json({ success: false, message: 'Service details are required' });
       if (body.completionAmount == null || body.completionAmount < 0) return res.status(400).json({ success: false, message: 'Amount is required' });
       if (!body.completionPaymentMethod) return res.status(400).json({ success: false, message: 'Payment method is required' });
       if (!body.actualCompletionDate) return res.status(400).json({ success: false, message: 'Completion date is required' });
+      if (!trimmedTechnicianName) return res.status(400).json({ success: false, message: 'Technician name is required' });
+      if (!FIRST_NAME_RE.test(trimmedTechnicianName)) return res.status(400).json({ success: false, message: 'Please enter first name only' });
     }
 
     let actualCompletionDate: Date | null = null;

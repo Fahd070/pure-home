@@ -75,7 +75,10 @@ describe('Modification #8: Completion Date + Maintenance Confirmation', () => {
     return id;
   }
 
-  const validCompleteBody = { serviceDetails: 'Serviced units', completionAmount: 300, completionPaymentMethod: 'CASH' };
+  // Modification #13: technicianName is now also required for a Technician
+  // completion -- included in the shared base body so every call site below
+  // (which spreads this object) keeps working unchanged.
+  const validCompleteBody = { serviceDetails: 'Serviced units', completionAmount: 300, completionPaymentMethod: 'CASH', technicianName: 'Ahmed' };
 
   // 1. Cannot complete without Completion Date
   it('Technician cannot complete without a Completion Date', async () => {
