@@ -14,6 +14,7 @@ import Customers from "./admin/pages/Customers";
 import AddCustomer from "./admin/pages/AddCustomer";
 import CustomerDetail from "./admin/pages/CustomerDetail";
 import AdminAppointments from "./admin/pages/Appointments";
+import AppointmentAcceptance from "./admin/pages/AppointmentAcceptance";
 import Technicians from "./admin/pages/Technicians";
 import AdminMessages from "./admin/pages/Messages";
 import AdminNotifications from "./admin/pages/Notifications";
@@ -81,6 +82,7 @@ function AppShell() {
             <Route path="customers/add" element={<AddCustomer />} />
             <Route path="customers/:id" element={<CustomerDetail />} />
             <Route path="appointments" element={<AdminAppointments />} />
+            <Route path="appointment-acceptance" element={<AppointmentAcceptance />} />
             <Route path="urgent-appointments" element={<AdminUrgentAppointments />} />
             <Route path="technicians" element={<Technicians />} />
             <Route path="expenses" element={<AdminExpenses />} />

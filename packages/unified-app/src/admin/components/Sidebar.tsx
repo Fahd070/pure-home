@@ -27,6 +27,7 @@ const links: NavItem[] = [
   { to: "/admin/customers",             label: "nav.customers",          icon: "👥", badgeKey: "customers" },
   { to: "/admin/reports",               label: "nav.reports",            icon: "📊", badgeKey: "reports" },
   { to: "/admin/appointments",          label: "nav.appointments",       icon: "📅" },
+  { to: "/admin/appointment-acceptance", label: "nav.appointmentAcceptance", icon: "✅" },
   { to: "/admin/urgent-appointments",   label: "nav.urgentAppointments", icon: "🚨", badgeKey: "urgentAppts" },
   { to: "/admin/technicians",           label: "nav.technicians",        icon: "🔧" },
   { to: "/admin/call-reports",          label: "nav.callReports",        icon: "📞", badgeKey: "callReports" },

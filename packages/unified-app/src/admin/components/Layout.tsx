@@ -14,6 +14,7 @@ const titles: Record<string, string> = {
   "/admin/customers/add":        "nav.customers",
   "/admin/customers":            "nav.customers",
   "/admin/appointments":         "nav.appointments",
+  "/admin/appointment-acceptance": "nav.appointmentAcceptance",
   "/admin/urgent-appointments":  "nav.urgentAppointments",
   "/admin/technicians":          "nav.technicians",
   "/admin/expenses":             "nav.expenses",
