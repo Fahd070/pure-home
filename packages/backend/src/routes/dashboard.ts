@@ -5,6 +5,7 @@ import { emitToRole, emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { stripCompletionAmount, stripCompletionAmountFromList, stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
+import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 
 const router = Router();
 router.use(authenticate);
@@ -40,10 +41,19 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
 
     const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
       prisma.customer.count(),
-      prisma.appointment.count({ where: { workStatus: 'COMPLETED', isUrgent: false } }),
+      // customerId: not null -- matches this counter's own drill-down (GET
+      // /completed-maintenance, which is customer-driven and so already
+      // naturally excludes an orphaned appointment left behind by an explicit
+      // customer deletion). Without this filter the count stayed stale
+      // forever for a deleted customer's completed appointment, since that
+      // row is deliberately preserved (customerId set to null, not deleted)
+      // for its historical/financial data.
+      prisma.appointment.count({ where: { workStatus: 'COMPLETED', isUrgent: false, customerId: { not: null } } }),
       prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
       prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfNextMonth, lte: endOfNextMonth } } }),
-      prisma.appointment.count({ where: { workStatus: 'POSTPONED', isUrgent: false } }),
+      // Same reasoning as `completed` above -- matches GET /postponed's own
+      // customer-driven drill-down.
+      prisma.appointment.count({ where: { workStatus: 'POSTPONED', isUrgent: false, customerId: { not: null } } }),
       prisma.appointment.count({
         where: {
           isUrgent: false,
@@ -290,13 +300,14 @@ router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
 
 router.delete('/customer/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({
-      where: { id: req.params.id },
-      include: { appointments: { select: { id: true } } },
-    });
-    if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
-    const apptIds = customer.appointments.map((a: any) => a.id);
-    await prisma.customer.delete({ where: { id: req.params.id } });
+    // Same shared cleanup as DELETE /api/customers/:id -- see
+    // services/customerDeletion.service.ts. This route is a genuinely
+    // separate, live call site (the Admin Dashboard drill-down's delete
+    // button), which is exactly why it must use the same shared function
+    // rather than its own copy of the business rule.
+    const result = await deleteCustomerWithOperationalCleanup(req.params.id);
+    if (!result) return res.status(404).json({ success: false, message: 'Not found' });
+    const { customer, operationalAppointmentIds: apptIds } = result;
     await writeAudit({
       action: 'DELETE', entityType: 'customer', entityId: req.params.id, userId: req.user!.userId,
       label: `Customer '${customer.name}' was deleted`,
