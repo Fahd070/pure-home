@@ -10,7 +10,7 @@ Start here before reading the sections below.
 
 ```
 1. Is the Render service running?   → https://dashboard.render.com
-2. Does /health respond?            → GET https://pure-home.onrender.com/health
+2. Does /health respond?            → GET https://wfm-system.onrender.com/health
 3. Is Supabase reachable?           → https://app.supabase.com → your project → home
 ```
 
@@ -269,7 +269,7 @@ UPDATE system_configs SET value = 'XXXX' WHERE key = 'ADMIN_CODE';
 
 **Health check:**
 ```
-GET https://pure-home.onrender.com/health
+GET https://wfm-system.onrender.com/health
 ```
 
 **Report a bug:**

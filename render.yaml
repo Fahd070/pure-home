@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: pure-home
+    name: wfm-system
     runtime: node
     rootDir: packages/backend
     buildCommand: npm install && npx prisma generate && npm run build

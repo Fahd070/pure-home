@@ -11,7 +11,7 @@ Employee PCs  →  Electron Desktop App (v1.4.0)
                         │  HTTPS + Socket.IO
                         ▼
                Render Web Service (Node.js)
-               https://pure-home.onrender.com
+               https://wfm-system.onrender.com
                         │  Prisma ORM
                         ▼
                Supabase (PostgreSQL)
@@ -122,11 +122,11 @@ VALUES (
 
 ```bash
 # Health check
-curl https://pure-home.onrender.com/health
+curl https://wfm-system.onrender.com/health
 # Expected: {"status":"ok","database":"connected","dbResponseMs":...}
 
 # Auth check
-curl -X POST https://pure-home.onrender.com/api/auth/code-login \
+curl -X POST https://wfm-system.onrender.com/api/auth/code-login \
   -H "Content-Type: application/json" \
   -d '{"code":"9012","dept":"admin"}'
 # Expected: {"success":true,"data":{"token":"...","user":{...}}}
