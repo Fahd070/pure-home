@@ -298,10 +298,15 @@ export default function Technicians() {
         </div>
       )}
 
-      {/* Technician cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Technician cards grid -- centered, bounded-width container so a small
+          number of cards reads as an intentional, balanced panel instead of
+          floating in the corner of the page's full layout width. Purely a
+          layout wrapper: the grid, cards, data, and click handlers below are
+          unchanged. */}
+      <div className="max-w-5xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {(data || []).map((tech: any) => (
-          <div key={tech.id} className="bg-white rounded-xl shadow-sm p-5">
+          <div key={tech.id} className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg">
                 {tech.name?.[0] || "?"}
@@ -337,6 +342,7 @@ export default function Technicians() {
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       {/* Task list modal */}

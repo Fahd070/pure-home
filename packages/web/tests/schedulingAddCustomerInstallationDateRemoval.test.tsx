@@ -83,9 +83,10 @@ describe('Scheduling Add Customer: Installation Date field removed', () => {
     expect(el.textContent).not.toContain('تاريخ التركيب');
   });
 
-  it('does not render a date-type input at all (no leftover date picker)', () => {
+  it('does not render a leftover Installation Date picker -- exactly one date input exists, for the unrelated optional Previous Service Date field added in a later batch', () => {
     const el = render();
-    expect(el.querySelector('input[type="date"]')).toBeNull();
+    const dateInputs = el.querySelectorAll('input[type="date"]');
+    expect(dateInputs.length).toBe(1);
   });
 
   it('creates a customer successfully without ever collecting installationDate, and the submitted payload has no installationDate key', async () => {
@@ -122,10 +123,14 @@ describe('Scheduling Add Customer: source-level confirmation (field fully remove
     path.resolve(__dirname, '../../unified-app/src/scheduling/pages/AddCustomer.tsx'), 'utf-8'
   );
 
-  it('no installationDate state key, label, input, or payload key remains in the component', () => {
+  it('no installationDate state key, label, or payload key remains in the component', () => {
     expect(src).not.toMatch(/installationDate/);
     expect(src).not.toMatch(/تاريخ التركيب/);
-    expect(src).not.toMatch(/type="date"/);
+    // A type="date" input now legitimately exists for the unrelated optional
+    // Previous Service Date field (previousServiceDate, added in a later
+    // batch) -- this no longer asserts a blanket absence of any date input;
+    // the DOM-level test above confirms exactly one exists (not a leftover
+    // Installation Date picker).
   });
 
   it('the required-field validation logic is untouched (name, phone, city, district) -- no empty layout gap introduced by removing an unrelated required check', () => {

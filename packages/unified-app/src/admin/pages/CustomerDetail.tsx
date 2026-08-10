@@ -72,6 +72,11 @@ ${addr?.buildingNo ? `<div><div class="lbl">${isAr ? "رقم المبنى" : "Bu
 <div><div class="lbl">${isAr ? "تاريخ التسجيل" : "Registered"}</div><div class="val" dir="ltr">${formatGregorianDate(c.createdAt)}</div></div>
 <div><div class="lbl">${isAr ? "دورة الصيانة" : "Cycle"}</div><div class="val">${formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr)}</div></div>
 </div></div>
+${c.previousServiceType ? `<div class="sec"><div class="sec-t">${isAr ? "الخدمة السابقة" : "Previous Service"}</div>
+<div class="grid">
+<div><div class="lbl">${isAr ? "الخدمة السابقة" : "Previous Service"}</div><div class="val">${c.previousServiceType === "INSTALLATION" ? (isAr ? "تركيب سابق" : "Previous Installation") : (isAr ? "صيانة سابقة" : "Previous Maintenance")}</div></div>
+<div><div class="lbl">${isAr ? "تاريخ الخدمة السابقة" : "Previous Service Date"}</div><div class="val" dir="ltr">${formatGregorianDate(c.previousServiceDate)}</div></div>
+</div>${c.previousServiceNote ? `<p style="font-size:11px;margin:6px 0 0">${esc(c.previousServiceNote)}</p>` : ""}</div>` : ""}
 ${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "Notes"}</div><p style="font-size:11px;margin:0">${esc(c.notes)}</p></div>` : ""}
 ${(c.appointments || []).length > 0 ? `
 <div class="sec"><div class="sec-t">${isAr ? "سجل المواعيد" : "Appointment History"}</div>
@@ -122,6 +127,25 @@ ${(c.appointments || []).length > 0 ? `
           </div>
         )}
         {c.notes && <p className="mt-3 text-sm text-slate-500">{c.notes}</p>}
+        {c.previousServiceType && (
+          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
+            <p className="font-medium mb-1">{t("customers.previousService")}</p>
+            <p>
+              <span className="text-slate-400">{t("customers.previousService")}: </span>
+              {c.previousServiceType === "INSTALLATION" ? t("customers.previousInstallation") : t("customers.previousMaintenance")}
+            </p>
+            <p>
+              <span className="text-slate-400">{t("customers.previousServiceDate")}: </span>
+              <span dir="ltr">{formatGregorianDate(c.previousServiceDate)}</span>
+            </p>
+            {c.previousServiceNote && (
+              <p>
+                <span className="text-slate-400">{t("customers.previousServiceNote")}: </span>
+                {c.previousServiceNote}
+              </p>
+            )}
+          </div>
+        )}
       </div>
       {c.appointments?.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-4">
