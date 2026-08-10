@@ -193,6 +193,26 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
           </div>
         </div>
 
+        {customer.previousServiceType && (
+          <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
+            <p className="text-xs text-slate-500 mb-1 font-medium">{t("customers.previousService")}</p>
+            <p>
+              <span className="text-slate-400">{t("customers.previousService")}: </span>
+              {customer.previousServiceType === "INSTALLATION" ? t("customers.previousInstallation") : t("customers.previousMaintenance")}
+            </p>
+            <p>
+              <span className="text-slate-400">{t("customers.previousServiceDate")}: </span>
+              <span dir="ltr">{formatGregorianDate(customer.previousServiceDate)}</span>
+            </p>
+            {customer.previousServiceNote && (
+              <p>
+                <span className="text-slate-400">{t("customers.previousServiceNote")}: </span>
+                {customer.previousServiceNote}
+              </p>
+            )}
+          </div>
+        )}
+
         {isLoading ? (
           <p className="text-center py-6 text-slate-400">{t("common.loading")}</p>
         ) : !appointments.length ? (

@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
+import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
 
 const PHONE_RE = /^05\d{8}$/;
 
@@ -15,6 +16,7 @@ export default function AddCustomer() {
   const [form, setForm] = useState({
     name: "", phone: "", secondaryPhone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
     city: "", district: "", street: "", postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "",
+    previousServiceType: "", previousServiceDate: "", previousServiceNote: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
@@ -30,6 +32,14 @@ export default function AddCustomer() {
     }
     if (!form.city.trim()) e.city = t("customers.city") + " required";
     if (!form.district.trim()) e.district = t("customers.district") + " required";
+    // Previous Service is optional as a whole, but once any of its three
+    // fields has content, type and date both become required -- a half-record
+    // like a date with no type is rejected (note alone stays optional).
+    const hasAnyPreviousService = !!form.previousServiceType || !!form.previousServiceDate || !!form.previousServiceNote.trim();
+    if (hasAnyPreviousService) {
+      if (!form.previousServiceType) e.previousServiceType = t("customers.previousServiceTypeRequired");
+      if (!form.previousServiceDate) e.previousServiceDate = t("customers.previousServiceDateRequired");
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -39,8 +49,14 @@ export default function AddCustomer() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo, name, phone, secondaryPhone, maintenanceCycle, maintenanceFrequency, notes } = form;
-      await api.post("/customers", { name, phone, secondaryPhone: secondaryPhone.trim() || undefined, maintenanceCycle, maintenanceFrequency: Number(maintenanceFrequency), notes: notes || undefined, address: { city, district, street, postalCode: postalCode || undefined, buildingNo: buildingNo || undefined, floorNo: floorNo || undefined, apartmentNo: apartmentNo || undefined } });
+      const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo, name, phone, secondaryPhone, maintenanceCycle, maintenanceFrequency, notes, previousServiceType, previousServiceDate, previousServiceNote } = form;
+      await api.post("/customers", {
+        name, phone, secondaryPhone: secondaryPhone.trim() || undefined, maintenanceCycle, maintenanceFrequency: Number(maintenanceFrequency), notes: notes || undefined,
+        previousServiceType: previousServiceType || undefined,
+        previousServiceDate: previousServiceDate ? (dateOnlyToApiDate(previousServiceDate) ?? undefined) : undefined,
+        previousServiceNote: previousServiceNote.trim() || undefined,
+        address: { city, district, street, postalCode: postalCode || undefined, buildingNo: buildingNo || undefined, floorNo: floorNo || undefined, apartmentNo: apartmentNo || undefined },
+      });
       toast.success(t("common.success"));
       navigate("/admin/customers");
     } catch (err: any) {
@@ -113,6 +129,37 @@ export default function AddCustomer() {
             placeholder={t("customers.enterNotes")}
             className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y min-h-[120px]"
           />
+        </div>
+        {/* Optional: historical service that happened before this customer
+            existed in the system. Entirely optional as a whole; once any of
+            the three fields below has content, type + date become required
+            (validated in validate() above). */}
+        <div className="flex items-center gap-2 border-t pt-3">
+          <p className="text-sm font-semibold text-slate-600">{t("customers.previousService")}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("customers.previousServiceType")}</label>
+            <select value={form.previousServiceType} onChange={e => set("previousServiceType", e.target.value)}
+              className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.previousServiceType ? "border-red-400" : ""}`}>
+              <option value=""></option>
+              <option value="INSTALLATION">{t("customers.previousInstallation")}</option>
+              <option value="MAINTENANCE">{t("customers.previousMaintenance")}</option>
+            </select>
+            {errors.previousServiceType && <p className="text-red-500 text-xs mt-1">{errors.previousServiceType}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("customers.previousServiceDate")}</label>
+            <input type="date" lang="en-GB" dir="ltr" value={form.previousServiceDate}
+              onChange={e => set("previousServiceDate", e.target.value)}
+              className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.previousServiceDate ? "border-red-400" : ""}`} />
+            {errors.previousServiceDate && <p className="text-red-500 text-xs mt-1">{errors.previousServiceDate}</p>}
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("customers.previousServiceNote")}</label>
+          <textarea value={form.previousServiceNote} onChange={e => set("previousServiceNote", e.target.value)} rows={3}
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
         </div>
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={loading} className="bg-blue-700 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-800 disabled:opacity-50">

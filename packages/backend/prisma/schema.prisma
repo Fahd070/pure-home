@@ -70,6 +70,18 @@ model Customer {
   activityDismissed    Boolean          @default(false)
   notes                String?
   installationDate     DateTime?
+  // Optional, one-time historical record of a service that happened BEFORE
+  // this customer existed in the system. Deliberately plain nullable fields
+  // (not a Prisma enum, not a separate history table) -- matches this
+  // schema's existing convention for a small, business-validated "type tag"
+  // (see Appointment.completionPaymentMethod) rather than the true
+  // AppointmentType enum, since this is explicitly NOT an Appointment and
+  // must never be confused with one. All three are null together or set
+  // together (enforced at the API layer): a half-record such as a date with
+  // no type is rejected before it reaches the database.
+  previousServiceType  String?
+  previousServiceDate  DateTime?
+  previousServiceNote  String?
   version              Int              @default(1)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt

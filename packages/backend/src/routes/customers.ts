@@ -35,6 +35,14 @@ const customerSchema = z.object({
   maintenanceFrequency: z.number().int().positive().max(365).default(1),
   notes: z.string().max(2000).optional(),
   installationDate: z.string().optional(),
+  // Optional one-time historical service record (see resolvePreviousService
+  // below for the all-or-nothing business rule). Loose string types here too,
+  // same reasoning as secondaryPhone -- an empty string is a meaningful
+  // "not provided/cleared" signal that a `.enum()`/date-refine directly on
+  // the Zod schema can't express alongside a real value.
+  previousServiceType: z.string().max(20).optional(),
+  previousServiceDate: z.string().max(40).optional(),
+  previousServiceNote: z.string().max(2000).optional(),
   address: addressSchema,
 });
 // PUT-only: adds the optimistic-concurrency `version` field on top of the partial
@@ -55,8 +63,47 @@ function conflict(res: any, current: number, yours: number) {
 }
 
 function customerFields(c: any) {
-  return { id: c.id, name: c.name, phone: c.phone, secondaryPhone: c.secondaryPhone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version };
+  return { id: c.id, name: c.name, phone: c.phone, secondaryPhone: c.secondaryPhone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version, previousServiceType: c.previousServiceType, previousServiceDate: c.previousServiceDate, previousServiceNote: c.previousServiceNote };
 }
+
+const PREVIOUS_SERVICE_TYPES = ['INSTALLATION', 'MAINTENANCE'];
+
+// Merges a submitted previous-service trio (any subset may be present in this
+// request; a key absent from `req.body` arrives here as `undefined` and means
+// "not provided this request", not "clear it") against the customer's
+// existing stored values, then validates the RESULTING effective state as a
+// whole: this is historical metadata only (never an Appointment -- see
+// PART B's business distinction), so it is either fully present or fully
+// absent. An incomplete state (e.g. a date with no type) is rejected. `''`
+// for a given key is the explicit "clear that field" signal, matching
+// secondaryPhone's convention elsewhere in this file. Reused identically for
+// both create (existing is always the all-null shape) and update.
+function resolvePreviousService(
+  submittedType: string | undefined,
+  submittedDate: string | undefined,
+  submittedNote: string | undefined,
+  existing: { previousServiceType: string | null; previousServiceDate: Date | null; previousServiceNote: string | null }
+): { previousServiceType: string | null; previousServiceDate: Date | null; previousServiceNote: string | null } | { error: string } {
+  const effectiveType = submittedType !== undefined ? (submittedType.trim() || null) : existing.previousServiceType;
+  if (effectiveType && !PREVIOUS_SERVICE_TYPES.includes(effectiveType)) {
+    return { error: 'نوع الخدمة السابقة غير صالح' };
+  }
+  const effectiveDateRaw = submittedDate !== undefined
+    ? (submittedDate.trim() || null)
+    : (existing.previousServiceDate ? existing.previousServiceDate.toISOString() : null);
+  if (effectiveDateRaw && isNaN(Date.parse(effectiveDateRaw))) {
+    return { error: 'تاريخ الخدمة السابقة غير صالح' };
+  }
+  const effectiveNote = submittedNote !== undefined ? (submittedNote.trim() || null) : existing.previousServiceNote;
+
+  const hasAny = !!effectiveType || !!effectiveDateRaw || !!effectiveNote;
+  if (!hasAny) return { previousServiceType: null, previousServiceDate: null, previousServiceNote: null };
+  if (!effectiveType) return { error: 'نوع الخدمة السابقة مطلوب عند إدخال بيانات الخدمة السابقة' };
+  if (!effectiveDateRaw) return { error: 'تاريخ الخدمة السابقة مطلوب عند إدخال بيانات الخدمة السابقة' };
+  return { previousServiceType: effectiveType, previousServiceDate: new Date(effectiveDateRaw), previousServiceNote: effectiveNote };
+}
+
+const NO_EXISTING_PREVIOUS_SERVICE = { previousServiceType: null, previousServiceDate: null, previousServiceNote: null };
 
 // Normalizes a submitted secondaryPhone against the resolved primary phone.
 // Returns { value } with value being a trimmed valid phone or null (blank/
@@ -173,13 +220,16 @@ router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), a
 router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
-    const { address, installationDate, secondaryPhone, ...rest } = body as any;
+    const { address, installationDate, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
     const secondaryPhoneResult = normalizeSecondaryPhone(secondaryPhone, body.phone);
     if ('error' in secondaryPhoneResult) return res.status(400).json({ success: false, message: secondaryPhoneResult.error });
+    const previousServiceResult = resolvePreviousService(previousServiceType, previousServiceDate, previousServiceNote, NO_EXISTING_PREVIOUS_SERVICE);
+    if ('error' in previousServiceResult) return res.status(400).json({ success: false, message: previousServiceResult.error });
     const customer = await prisma.customer.create({
       data: {
         ...rest,
         secondaryPhone: secondaryPhoneResult.value,
+        ...previousServiceResult,
         installationDate: installationDate ? new Date(installationDate) : undefined,
         createdById: req.user!.userId,
         address: { create: address },
@@ -203,7 +253,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
 router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerUpdateSchema.parse(req.body);
-    const { address, version, installationDate, secondaryPhone, ...rest } = body as any;
+    const { address, version, installationDate, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
 
     const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
@@ -222,12 +272,22 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       if ('error' in result) return res.status(400).json({ success: false, message: result.error });
       secondaryPhoneUpdate = result;
     }
+    // Same omitted-vs-provided distinction as secondaryPhone: only re-resolve
+    // (and re-validate the all-or-nothing rule) the previous-service trio if
+    // this request actually touches at least one of its three keys.
+    let previousServiceUpdate: { previousServiceType: string | null; previousServiceDate: Date | null; previousServiceNote: string | null } | undefined;
+    if (previousServiceType !== undefined || previousServiceDate !== undefined || previousServiceNote !== undefined) {
+      const result = resolvePreviousService(previousServiceType, previousServiceDate, previousServiceNote, before);
+      if ('error' in result) return res.status(400).json({ success: false, message: result.error });
+      previousServiceUpdate = result;
+    }
 
     const customer = await prisma.customer.update({
       where: { id: req.params.id },
       data: {
         ...rest,
         ...(secondaryPhoneUpdate ? { secondaryPhone: secondaryPhoneUpdate.value } : {}),
+        ...(previousServiceUpdate ? previousServiceUpdate : {}),
         ...(installationDate !== undefined ? { installationDate: installationDate ? new Date(installationDate) : null } : {}),
         version: { increment: 1 },
         ...(address ? { address: { update: address } } : {}),
