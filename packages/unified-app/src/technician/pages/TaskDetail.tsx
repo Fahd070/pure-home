@@ -193,7 +193,12 @@ export default function TaskDetail() {
         <div className="flex justify-between items-start">
           <div>
             <h2 className="text-xl font-bold">{customer?.name || (isAr ? "موعد عاجل" : "Urgent Task")}</h2>
-            <p className="text-slate-500">{customer?.phone}</p>
+            <p className="text-slate-500">
+              {customer?.secondaryPhone ? `${t("customers.primaryPhone")}: ${customer.phone}` : customer?.phone}
+            </p>
+            {customer?.secondaryPhone && (
+              <p className="text-slate-500">{t("customers.secondaryPhone")}: {customer.secondaryPhone}</p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${workStatus === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" : "bg-yellow-100 text-yellow-700"}`}>

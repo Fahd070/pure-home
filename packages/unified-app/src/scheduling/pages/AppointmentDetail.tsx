@@ -40,7 +40,12 @@ export default function AppointmentDetail() {
       <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700">← {t("common.back")}</button>
       <div className="bg-white rounded-xl shadow-sm p-6 space-y-3">
         <h2 className="text-lg font-bold">{a.customer?.name}</h2>
-        <p className="text-slate-500 text-sm">{a.customer?.phone}</p>
+        <p className="text-slate-500 text-sm">
+          {a.customer?.secondaryPhone ? `${t("customers.primaryPhone")}: ${a.customer.phone}` : a.customer?.phone}
+        </p>
+        {a.customer?.secondaryPhone && (
+          <p className="text-slate-500 text-sm">{t("customers.secondaryPhone")}: {a.customer.secondaryPhone}</p>
+        )}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></div>
           <div><span className="text-slate-400">{t("appointments.type")}: </span>{a.type}</div>

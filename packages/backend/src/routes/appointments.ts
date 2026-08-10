@@ -539,9 +539,11 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       // completion. Business/report data only -- it is validated for format
       // here but never used as identity; the authenticated actor remains
       // req.user!.userId (JWT) via the existing technicianId-ownership check
-      // below, and is never persisted (Appointment.technician relation,
-      // which cannot be reassigned after creation, already identifies who
-      // completed the job -- see inline note further down).
+      // below. Persisted as completionTechnicianName (a completion-record
+      // field, distinct from the `technician` relation, which remains the
+      // sole source of truth for permissions/ownership/audit) so the exact
+      // submitted name can be shown later in Admin -> Technicians completion
+      // details -- see the persistence below and the inline note there.
       technicianName: z.string().max(100).optional(),
       version: z.number().int().optional(),
     }).parse(req.body);
@@ -596,6 +598,12 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
         completionImage: body.completionImage ?? null,
         nextMaintenanceNote: trimmedNextMaintenanceNote,
         actualCompletionDate,
+        // Completion-record field only -- see the schema comment and the Zod
+        // field comment above. Admin completions never submit this, so it
+        // stays null there (the display layer falls back to the technician
+        // relation); a Technician completion always has a validated value by
+        // this point.
+        completionTechnicianName: trimmedTechnicianName || null,
         // Modification #8: every completion submission starts a fresh Maintenance
         // review cycle -- the Technician can never self-confirm it, regardless of
         // whether this appointment was ever previously completed/confirmed.

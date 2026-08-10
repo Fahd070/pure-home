@@ -127,7 +127,7 @@ export default function Appointments() {
   const filteredCustomers = useMemo(() => {
     if (!form.customerSearch.trim()) return allCustomers;
     const q = form.customerSearch.toLowerCase();
-    return allCustomers.filter((c: any) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q));
+    return allCustomers.filter((c: any) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.secondaryPhone?.includes(q));
   }, [allCustomers, form.customerSearch]);
 
   function openCreate() {

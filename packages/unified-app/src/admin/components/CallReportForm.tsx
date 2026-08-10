@@ -90,7 +90,7 @@ export default function CallReportForm({
   const filteredFormCustomers = useMemo(() => {
     if (!formSearch.trim()) return allCustomers;
     const q = formSearch.toLowerCase();
-    return allCustomers.filter((c: any) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q));
+    return allCustomers.filter((c: any) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q) || c.secondaryPhone?.includes(q));
   }, [allCustomers, formSearch]);
 
   return (

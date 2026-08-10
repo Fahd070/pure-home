@@ -60,7 +60,8 @@ tr:nth-child(even){background:#f9f9f9}
 <span class="${c.isActive ? "active-badge" : "inactive-badge"}">${c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive")}</span>
 <div class="sec"><div class="sec-t">${isAr ? "معلومات التواصل" : "Contact Info"}</div>
 <div class="grid">
-<div><div class="lbl">${isAr ? "الجوال" : "Phone"}</div><div class="val">${esc(c.phone)}</div></div>
+<div><div class="lbl">${isAr ? (c.secondaryPhone ? "الجوال الأساسي" : "الجوال") : (c.secondaryPhone ? "Primary Mobile" : "Phone")}</div><div class="val">${esc(c.phone)}</div></div>
+${c.secondaryPhone ? `<div><div class="lbl">${isAr ? "الجوال الإضافي" : "Additional Mobile"}</div><div class="val">${esc(c.secondaryPhone)}</div></div>` : ""}
 <div><div class="lbl">${isAr ? "المدينة" : "City"}</div><div class="val">${esc(addr?.city) || "—"}</div></div>
 <div><div class="lbl">${isAr ? "الحي" : "District"}</div><div class="val">${esc(addr?.district) || "—"}</div></div>
 <div><div class="lbl">${isAr ? "الشارع" : "Street"}</div><div class="val">${esc(addr?.street) || "—"}</div></div>
@@ -102,7 +103,8 @@ ${(c.appointments || []).length > 0 ? `
         <div className="flex justify-between items-start">
           <div>
             <h2 className="text-xl font-bold">{c.name}</h2>
-            <p className="text-slate-500">{c.phone}</p>
+            <p className="text-slate-500">{c.secondaryPhone ? `${t("customers.primaryPhone")}: ${c.phone}` : c.phone}</p>
+            {c.secondaryPhone && <p className="text-slate-500">{t("customers.secondaryPhone")}: {c.secondaryPhone}</p>}
           </div>
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.isActive ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
             {c.isActive ? t("common.active") : t("common.inactive")}
