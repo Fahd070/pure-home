@@ -162,9 +162,15 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800">
-            {t("scheduling.maintenanceHistory")} — {customer.name}
-          </h3>
+          <div>
+            <h3 className="font-semibold text-slate-800">
+              {t("scheduling.maintenanceHistory")} — {customer.name}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {customer.secondaryPhone ? `${t("customers.primaryPhone")}: ${customer.phone}` : customer.phone}
+              {customer.secondaryPhone && <span className="ms-2">{t("customers.secondaryPhone")}: {customer.secondaryPhone}</span>}
+            </p>
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
 

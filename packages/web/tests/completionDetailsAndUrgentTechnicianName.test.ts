@@ -38,8 +38,8 @@ describe('Part A: Admin Technicians backend select includes the two new fields',
 });
 
 describe('Part A: Admin Technicians detail modal shows full completion details', () => {
-  it('1. shows the Technician name', () => {
-    expect(adminTechniciansSrc).toMatch(/\{taskDetail\.techName\}/);
+  it('1. shows the Technician name -- the submitted completion name when present, falling back to the technician relation\'s first name otherwise (completion-technician-name-display batch)', () => {
+    expect(adminTechniciansSrc).toMatch(/\{taskDetail\.task\.completionTechnicianName \|\| firstNameOf\(taskDetail\.techName\)\}/);
   });
   it('2. shows customer name and phone', () => {
     expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.customer\?\.name/);

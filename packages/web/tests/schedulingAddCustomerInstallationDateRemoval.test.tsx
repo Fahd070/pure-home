@@ -54,8 +54,10 @@ function fillRequiredFields(el: HTMLElement) {
     nativeSetter.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  // Order in the form: name, phone, city, district (the four `required` text fields).
-  const [nameInput, phoneInput, cityInput, districtInput] = inputs;
+  // Order in the form: name, phone, secondaryPhone (optional, left blank here --
+  // completion-technician-name-display batch), city, district (the four
+  // `required` text fields).
+  const [nameInput, phoneInput, , cityInput, districtInput] = inputs;
   act(() => {
     setValue(nameInput, 'New Customer');
     setValue(phoneInput, '0501234567');

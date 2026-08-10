@@ -59,6 +59,11 @@ model Customer {
   id                   String           @id @default(uuid())
   name                 String
   phone                String
+  // Optional second contact number. Nullable so every existing customer stays
+  // valid with no value; same 05XXXXXXXX format as `phone` when present, and
+  // must differ from it (enforced at the API layer, not the DB, matching this
+  // schema's existing convention of validating business rules in the routes).
+  secondaryPhone       String?
   maintenanceCycle     MaintenanceCycle
   maintenanceFrequency Int              @default(1)
   isActive             Boolean          @default(true)
@@ -146,6 +151,15 @@ model Appointment {
   // Deliberately its own field, not a repurposing of adminApproved (Modification
   // #5's distinct Admin export-approval flow) or visibleToTechnician.
   maintenanceConfirmed Boolean           @default(false)
+  // Completion-record field only: the first name the Technician actually typed
+  // into the "Technician Name" field at the moment of a NORMAL (non-urgent)
+  // completion. Deliberately separate from the `technician` relation above --
+  // that relation remains the sole source of truth for permissions, ownership,
+  // and audit identity, and is never derived from this string. Nullable so
+  // every pre-existing completed appointment (submitted before this field
+  // existed) stays valid; the Admin Technicians completion-details view falls
+  // back to the technician relation's first name when this is null.
+  completionTechnicianName String?
   startedAt           DateTime?
   completedAt         DateTime?
   customerId          String?

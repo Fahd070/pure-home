@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { firstNameOf } from "../../technician/pages/TaskDetail";
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
@@ -139,8 +140,16 @@ export default function Technicians() {
                   </div>
                   {taskDetail.task.customer?.phone && (
                     <div className="flex gap-2">
-                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "رقم الجوال" : "Phone"}:</span>
+                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">
+                        {taskDetail.task.customer?.secondaryPhone ? (isAr ? "الجوال الأساسي" : "Primary Mobile") : (isAr ? "رقم الجوال" : "Phone")}:
+                      </span>
                       <span className="text-slate-700 text-xs">{taskDetail.task.customer.phone}</span>
+                    </div>
+                  )}
+                  {taskDetail.task.customer?.secondaryPhone && (
+                    <div className="flex gap-2">
+                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "الجوال الإضافي" : "Additional Mobile"}:</span>
+                      <span className="text-slate-700 text-xs">{taskDetail.task.customer.secondaryPhone}</span>
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -159,7 +168,7 @@ export default function Technicians() {
                   )}
                   <div className="flex gap-2">
                     <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "اسم الفني" : "Technician"}:</span>
-                    <span className="text-slate-700 text-xs">{taskDetail.techName}</span>
+                    <span className="text-slate-700 text-xs">{taskDetail.task.completionTechnicianName || firstNameOf(taskDetail.techName)}</span>
                   </div>
                 </div>
               </div>

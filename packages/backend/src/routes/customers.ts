@@ -14,13 +14,23 @@ import { deleteCustomerWithOperationalCleanup } from '../services/customerDeleti
 const router = Router();
 router.use(authenticate);
 
+// Reused for both the primary phone's Zod-level check and the optional
+// secondary phone's route-level check below (same format, single source).
+const PHONE_RE = /^05\d{8}$/;
+
 const addressSchema = z.object({
   city: z.string().max(100), district: z.string().max(100), street: z.string().max(200),
   postalCode: z.string().max(20).optional(), buildingNo: z.string().max(20).optional(),
   floorNo: z.string().max(20).optional(), apartmentNo: z.string().max(20).optional(),
 });
 const customerSchema = z.object({
-  name: z.string().min(1).max(200), phone: z.string().regex(/^05\d{8}$/),
+  name: z.string().min(1).max(200), phone: z.string().regex(PHONE_RE),
+  // Optional second contact number. Kept as a loose max-length string here
+  // (not `.regex()`) so blank/omitted passes Zod -- format is validated in
+  // the route below, same pattern as technicianName's FIRST_NAME_RE check in
+  // routes/appointments.ts, because "blank is valid, malformed is not" isn't
+  // expressible as a single regex without also accepting the empty string.
+  secondaryPhone: z.string().max(20).optional(),
   maintenanceCycle: z.enum(['DAILY','WEEKLY','MONTHLY']),
   maintenanceFrequency: z.number().int().positive().max(365).default(1),
   notes: z.string().max(2000).optional(),
@@ -45,7 +55,22 @@ function conflict(res: any, current: number, yours: number) {
 }
 
 function customerFields(c: any) {
-  return { id: c.id, name: c.name, phone: c.phone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version };
+  return { id: c.id, name: c.name, phone: c.phone, secondaryPhone: c.secondaryPhone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version };
+}
+
+// Normalizes a submitted secondaryPhone against the resolved primary phone.
+// Returns { value } with value being a trimmed valid phone or null (blank/
+// omitted -- explicit clear), or { error } with a user-facing message.
+// Never invents a global cross-customer uniqueness rule -- only checks this
+// one customer's own primary vs. secondary, per the existing primary-phone
+// business rules (no such global constraint exists on `phone` either).
+function normalizeSecondaryPhone(raw: string | undefined, primaryPhone: string): { value: string | null } | { error: string } {
+  if (raw === undefined) return { value: null };
+  const trimmed = raw.trim();
+  if (!trimmed) return { value: null };
+  if (!PHONE_RE.test(trimmed)) return { error: 'رقم الجوال الإضافي غير صالح' };
+  if (trimmed === primaryPhone) return { error: 'رقم الجوال الإضافي يجب أن يكون مختلفًا عن رقم الجوال الأساسي' };
+  return { value: trimmed };
 }
 
 router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
@@ -53,7 +78,7 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
     const { search = '', page = '1', limit = '20', active, includeSchedule } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
     const where: any = {};
-    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
+    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }, { secondaryPhone: { contains: search } }];
     if (active !== undefined) where.isActive = active === 'true';
     const total = await prisma.customer.count({ where });
 
@@ -148,10 +173,13 @@ router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), a
 router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
-    const { address, installationDate, ...rest } = body as any;
+    const { address, installationDate, secondaryPhone, ...rest } = body as any;
+    const secondaryPhoneResult = normalizeSecondaryPhone(secondaryPhone, body.phone);
+    if ('error' in secondaryPhoneResult) return res.status(400).json({ success: false, message: secondaryPhoneResult.error });
     const customer = await prisma.customer.create({
       data: {
         ...rest,
+        secondaryPhone: secondaryPhoneResult.value,
         installationDate: installationDate ? new Date(installationDate) : undefined,
         createdById: req.user!.userId,
         address: { create: address },
@@ -175,16 +203,31 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
 router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerUpdateSchema.parse(req.body);
-    const { address, version, installationDate, ...rest } = body as any;
+    const { address, version, installationDate, secondaryPhone, ...rest } = body as any;
 
     const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
 
+    // Effective primary phone: the newly submitted one if this update changes
+    // it, otherwise the customer's existing one -- either way, the secondary
+    // must differ from whichever primary the customer will actually have.
+    const effectivePrimaryPhone = body.phone !== undefined ? body.phone : before.phone;
+    // Omitted entirely (key absent from the request body) -- leave the
+    // existing secondaryPhone untouched, same partial-update semantics as
+    // every other field on this route (Prisma skips an `undefined` value).
+    let secondaryPhoneUpdate: { value: string | null } | undefined;
+    if (secondaryPhone !== undefined) {
+      const result = normalizeSecondaryPhone(secondaryPhone, effectivePrimaryPhone);
+      if ('error' in result) return res.status(400).json({ success: false, message: result.error });
+      secondaryPhoneUpdate = result;
+    }
+
     const customer = await prisma.customer.update({
       where: { id: req.params.id },
       data: {
         ...rest,
+        ...(secondaryPhoneUpdate ? { secondaryPhone: secondaryPhoneUpdate.value } : {}),
         ...(installationDate !== undefined ? { installationDate: installationDate ? new Date(installationDate) : null } : {}),
         version: { increment: 1 },
         ...(address ? { address: { update: address } } : {}),

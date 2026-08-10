@@ -13,7 +13,7 @@ export default function AddCustomer() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    name: "", phone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
+    name: "", phone: "", secondaryPhone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
     city: "", district: "", street: "", postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -23,6 +23,11 @@ export default function AddCustomer() {
     const e: Record<string, string> = {};
     if (!form.name.trim()) e.name = t("common.name") + " required";
     if (!PHONE_RE.test(form.phone)) e.phone = t("customers.phoneInvalid");
+    const trimmedSecondary = form.secondaryPhone.trim();
+    if (trimmedSecondary) {
+      if (!PHONE_RE.test(trimmedSecondary)) e.secondaryPhone = t("customers.secondaryPhoneInvalid");
+      else if (trimmedSecondary === form.phone) e.secondaryPhone = t("customers.secondaryPhoneSameAsPrimary");
+    }
     if (!form.city.trim()) e.city = t("customers.city") + " required";
     if (!form.district.trim()) e.district = t("customers.district") + " required";
     setErrors(e);
@@ -34,8 +39,8 @@ export default function AddCustomer() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo, name, phone, maintenanceCycle, maintenanceFrequency, notes } = form;
-      await api.post("/customers", { name, phone, maintenanceCycle, maintenanceFrequency: Number(maintenanceFrequency), notes: notes || undefined, address: { city, district, street, postalCode: postalCode || undefined, buildingNo: buildingNo || undefined, floorNo: floorNo || undefined, apartmentNo: apartmentNo || undefined } });
+      const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo, name, phone, secondaryPhone, maintenanceCycle, maintenanceFrequency, notes } = form;
+      await api.post("/customers", { name, phone, secondaryPhone: secondaryPhone.trim() || undefined, maintenanceCycle, maintenanceFrequency: Number(maintenanceFrequency), notes: notes || undefined, address: { city, district, street, postalCode: postalCode || undefined, buildingNo: buildingNo || undefined, floorNo: floorNo || undefined, apartmentNo: apartmentNo || undefined } });
       toast.success(t("common.success"));
       navigate("/admin/customers");
     } catch (err: any) {
@@ -61,7 +66,10 @@ export default function AddCustomer() {
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           {field("name", t("common.name"), "text", true)}
-          {field("phone", t("common.phone"), "text", true)}
+          {field("phone", t("customers.primaryPhone"), "text", true)}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {field("secondaryPhone", t("customers.secondaryPhone"))}
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>

@@ -1,9 +1,13 @@
 // Modification #13: PATCH /appointments/:id/complete now requires a
 // Technician-submitted "technicianName" (first name only) for a non-admin
-// completion. This is validated server-side and used purely as business/
-// report data -- it is never persisted (no schema change), never used as
-// the audit actor (the authenticated req.user!.userId/appt.technician
-// relation remain authoritative), and never changes technicianId/assignment.
+// completion. This is validated server-side and used as business/report
+// data. As of the completion-technician-name-display batch it IS persisted
+// (Appointment.completionTechnicianName -- see
+// completionTechnicianNameAndSecondaryPhone.test.ts for persistence/display
+// coverage), but it is still never used as the audit actor (the
+// authenticated req.user!.userId/appt.technician relation remain
+// authoritative -- see test #16 below) and never changes
+// technicianId/assignment.
 // Everything else about /complete (Modification #8's actualCompletionDate,
 // Modification #6's completion-amount privacy, maintenanceConfirmed reset,
 // the Scheduling confirm-operation flow) must keep working unchanged.

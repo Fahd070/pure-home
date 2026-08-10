@@ -21,6 +21,7 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
             completionAmount: true, completionPaymentMethod: true,
             completionImage: true, nextMaintenanceNote: true,
             actualCompletionDate: true, maintenanceConfirmed: true,
+            completionTechnicianName: true,
             type: true, scheduledDate: true,
             customer: { select: { id: true, name: true, phone: true } },
             postponements: { orderBy: { createdAt: 'desc' as const }, take: 1 },
