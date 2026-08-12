@@ -172,7 +172,7 @@ describe('Appointment approval flow: creator-role rule', () => {
     const res = await request(ts.baseUrl)
       .post('/api/appointments')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ type: 'MAINTENANCE', scheduledDate: new Date(Date.now() + 86400000).toISOString(), isUrgent: true, urgentLocation: JSON.stringify({ city: 'Riyadh' }) });
+      .send({ type: 'MAINTENANCE', scheduledDate: new Date(Date.now() + 86400000).toISOString(), isUrgent: true, urgentLocation: JSON.stringify({ city: 'Riyadh' }), customerName: 'Approval Flow Urgent Customer', customerPhone: testPhone() });
     expect(res.status).toBe(201);
     createdAppointmentIds.push(res.body.data.id);
     expect(res.body.data.isUrgent).toBe(true);

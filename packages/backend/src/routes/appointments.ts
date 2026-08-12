@@ -7,6 +7,7 @@ import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
 import { stripCompletionAmount } from '../services/completionPrivacy.service';
+import { resolveOrCreateUrgentCustomer, validateUrgentCustomerIdentity, InvalidCustomerIdentityError } from '../services/customerResolve.service';
 
 const router = Router();
 router.use(authenticate);
@@ -20,6 +21,15 @@ const apptSchema = z.object({
   isUrgent: z.boolean().optional(),
   visibleToScheduling: z.boolean().optional(),
   urgentLocation: z.string().max(2000).optional(),
+  // Part A: Admin owns the customer identity for an urgent appointment at
+  // creation time -- the Technician no longer enters it at completion (see
+  // routes/urgent-visits.ts). Only meaningful when isUrgent is true; ignored
+  // for a normal appointment (which is identified by customerId instead).
+  // Loosely typed here (format is validated below, only for the urgent path,
+  // via validateUrgentCustomerIdentity) -- same "loose Zod, business rule in
+  // the route" pattern this file already uses for technicianName/FIRST_NAME_RE.
+  customerName: z.string().max(200).optional(),
+  customerPhone: z.string().max(20).optional(),
 });
 
 // Modification #13: one Unicode letter "word" (Latin or Arabic), optionally
@@ -210,37 +220,89 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
       return res.status(400).json({ success: false, message: 'customerId is required for non-urgent appointments' });
     }
 
-    const appt = await prisma.appointment.create({
-      data: {
-        customerId: body.customerId || null,
-        type: body.type as any,
-        scheduledDate: new Date(body.scheduledDate),
-        notes: body.notes,
-        urgentLocation: body.urgentLocation || null,
-        isUrgent,
-        visibleToScheduling,
-        adminApproved,
-        // Approval-flow fix: a normal (non-urgent) appointment CREATED BY
-        // SCHEDULING must start hidden from Technicians -- exactly the same
-        // pending state the export-to-technicians endpoint below used to
-        // require a separate manual action to reach -- so it lands directly
-        // in Admin's Appointment Acceptance queue instead of ever having been
-        // technician-visible. An Admin-created appointment (or any urgent
-        // appointment, which only Admin can create here -- see `isUrgent`
-        // above) needs no separate approval and stays immediately visible,
-        // exactly as before. The client can never override this: visibleToTechnician
-        // is not one of apptSchema's accepted fields, so a Scheduling-supplied
-        // value is silently dropped by Zod before this line ever runs.
-        visibleToTechnician: isAdmin || isUrgent,
-        createdByRole: req.user!.role,
-        createdById: req.user!.userId,
-        technicianId: body.technicianId ?? null,
-        workStatus: 'WAITING',
-      },
-      include: { customer: { include: { address: true } }, technician: true },
+    // Part A: Admin owns the customer identity for an urgent appointment --
+    // validated up front (before any DB write) so a malformed identity never
+    // reaches resolveOrCreateUrgentCustomer. See services/customerResolve.service.ts.
+    let urgentIdentity: { name: string; phone: string } | null = null;
+    if (isUrgent) {
+      try {
+        urgentIdentity = validateUrgentCustomerIdentity(body.customerName, body.customerPhone);
+      } catch (err) {
+        if (err instanceof InvalidCustomerIdentityError) {
+          return res.status(400).json({ success: false, message: err.message });
+        }
+        throw err;
+      }
+    }
+
+    // Customer resolve/create + appointment creation happen in one transaction
+    // so a new Customer can never be committed without the urgent appointment
+    // that triggered it (or vice versa) -- no orphan records on partial failure.
+    let urgentCustomerCreated = false;
+    let urgentCustomerForEvents: { id: string; name: string; phone: string } | null = null;
+    const appt = await prisma.$transaction(async (tx) => {
+      let effectiveCustomerId: string | null = body.customerId || null;
+
+      if (isUrgent && urgentIdentity) {
+        let loc: Record<string, string> = {};
+        if (body.urgentLocation) {
+          try { loc = JSON.parse(body.urgentLocation); } catch {}
+        }
+        const resolved = await resolveOrCreateUrgentCustomer(tx, urgentIdentity, {
+          addressFallback: loc,
+          createdById: req.user!.userId,
+        });
+        effectiveCustomerId = resolved.customer.id;
+        urgentCustomerCreated = resolved.created;
+        urgentCustomerForEvents = resolved.customer;
+      }
+
+      return tx.appointment.create({
+        data: {
+          customerId: effectiveCustomerId,
+          type: body.type as any,
+          scheduledDate: new Date(body.scheduledDate),
+          notes: body.notes,
+          urgentLocation: body.urgentLocation || null,
+          isUrgent,
+          visibleToScheduling,
+          adminApproved,
+          // Approval-flow fix: a normal (non-urgent) appointment CREATED BY
+          // SCHEDULING must start hidden from Technicians -- exactly the same
+          // pending state the export-to-technicians endpoint below used to
+          // require a separate manual action to reach -- so it lands directly
+          // in Admin's Appointment Acceptance queue instead of ever having been
+          // technician-visible. An Admin-created appointment (or any urgent
+          // appointment, which only Admin can create here -- see `isUrgent`
+          // above) needs no separate approval and stays immediately visible,
+          // exactly as before. The client can never override this: visibleToTechnician
+          // is not one of apptSchema's accepted fields, so a Scheduling-supplied
+          // value is silently dropped by Zod before this line ever runs.
+          visibleToTechnician: isAdmin || isUrgent,
+          createdByRole: req.user!.role,
+          createdById: req.user!.userId,
+          technicianId: body.technicianId ?? null,
+          workStatus: 'WAITING',
+        },
+        include: { customer: { include: { address: true } }, technician: true },
+      });
     });
-    if (body.customerId) {
-      await prisma.customer.update({ where: { id: body.customerId }, data: { activityDismissed: false } });
+    if (appt.customerId) {
+      await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
+    }
+    if (urgentCustomerCreated && urgentCustomerForEvents) {
+      const newCust = urgentCustomerForEvents as { id: string; name: string; phone: string };
+      await writeAudit({
+        action: 'CREATE', entityType: 'customer', entityId: newCust.id, userId: req.user!.userId,
+        label: `Customer '${newCust.name}' created from urgent appointment`,
+        labelAr: `تم إنشاء العميل '${newCust.name}' من موعد عاجل`,
+        after: { id: newCust.id, name: newCust.name, phone: newCust.phone },
+      });
+      await emitEvent({ type: EVENT_TYPES.CUSTOMER_CREATED, entityType: 'customer', entityId: newCust.id, userId: req.user!.userId, payload: newCust });
+      // Customer PII must not leak to TECHNICIAN role via socket -- same rule as
+      // routes/customers.ts's own POST /.
+      emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, newCust);
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, newCust);
     }
     const dateStr = new Date(body.scheduledDate).toLocaleDateString('en-GB');
     const urgentLabel = isUrgent ? ' [URGENT]' : '';

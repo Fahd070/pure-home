@@ -25,11 +25,12 @@ export default function WorkQueue() {
 
   // Read-on-open fix: the sidebar's "queue" badge (badge-queue-tech) increments
   // on every appointment:created socket event but had no corresponding clear
-  // site anywhere -- unlike every other local sidebar badge in this app (see
-  // clear-badge-urgent-tech in UrgentAppointments.tsx for the identical,
-  // already-correct pattern this reuses), it never cleared once the Technician
-  // actually opened this section. "Opening the section" = this component
-  // mounting, i.e. the user navigating here -- not app start or sidebar render.
+  // site anywhere -- unlike every other local sidebar badge in this app, it
+  // never cleared once the Technician actually opened this section. "Opening
+  // the section" = this component mounting, i.e. the user navigating here --
+  // not app start or sidebar render. (The urgent badge used to follow this
+  // same localStorage clear-on-open pattern too, but is now derived directly
+  // from unresolved DB state instead -- see components/Sidebar.tsx.)
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-queue-tech"));
   }, []);

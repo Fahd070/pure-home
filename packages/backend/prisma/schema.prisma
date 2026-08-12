@@ -65,7 +65,16 @@ model Customer {
   // schema's existing convention of validating business rules in the routes).
   secondaryPhone       String?
   maintenanceCycle     MaintenanceCycle
-  maintenanceFrequency Int              @default(1)
+  // Part D: recurrence must support half-month increments (1, 1.5, 2, 2.5, ...).
+  // Float (Postgres DOUBLE PRECISION) rather than Decimal -- every value this
+  // column will ever hold is a positive multiple of 0.5 (enforced by Zod's
+  // half-step refine in routes/customers.ts), and 0.5 is exactly representable
+  // in IEEE-754 double precision (binary fraction 2^-1), so there is no
+  // rounding/precision-loss risk for this restricted value set. Kept as a
+  // plain JS number end-to-end (unlike Prisma's Decimal type, which would
+  // require Decimal-object handling through every read site) -- smallest safe
+  // change compatible with the existing Int-typed call sites.
+  maintenanceFrequency Float            @default(1)
   isActive             Boolean          @default(true)
   activityDismissed    Boolean          @default(false)
   notes                String?

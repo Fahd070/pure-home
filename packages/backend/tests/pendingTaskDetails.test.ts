@@ -181,6 +181,8 @@ describe('Modification #9: pending Technician task details', () => {
         isUrgent: true,
         urgentLocation: JSON.stringify({ city: 'Jeddah', district: 'Al Hamra' }),
         notes: 'Customer reports leak under sink',
+        customerName: 'Pending Task Urgent Customer',
+        customerPhone: testPhone(),
       });
     const id = res.body.data.id;
     createdAppointmentIds.push(id);

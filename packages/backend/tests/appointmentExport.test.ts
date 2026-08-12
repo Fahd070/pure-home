@@ -209,6 +209,8 @@ describe('Appointment export-to-technician approval workflow', () => {
         scheduledDate: new Date(Date.now() + 3600000).toISOString(),
         isUrgent: true,
         urgentLocation: 'Test urgent location',
+        customerName: 'Export Regression Urgent Customer',
+        customerPhone: testPhone(),
       });
     expect(urgentRes.status).toBe(201);
     createdAppointmentIds.push(urgentRes.body.data.id);

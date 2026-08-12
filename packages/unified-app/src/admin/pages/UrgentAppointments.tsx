@@ -7,11 +7,12 @@ import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { dateOnlyToApiDate, formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
+import { isValidPrimaryPhone } from "../../utils/phone";
 
 type Tab = "list" | "records";
 
 const EMPTY_FORM = {
-  date: "", city: "", district: "", street: "",
+  date: "", customerName: "", customerPhone: "", city: "", district: "", street: "",
   postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "", notes: "",
 };
 
@@ -24,10 +25,6 @@ export default function UrgentAppointments() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [visitDetail, setVisitDetail] = useState<any | null>(null);
-
-  useEffect(() => {
-    window.dispatchEvent(new Event("clear-badge-urgent-admin"));
-  }, []);
 
   useEffect(() => {
     if (!socket) return;
@@ -89,8 +86,18 @@ export default function UrgentAppointments() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const scheduledDate = dateOnlyToApiDate(form.date);
+    const customerName = form.customerName.trim();
+    const customerPhone = form.customerPhone.trim();
     if (!scheduledDate || !form.city || !form.district || !form.street) {
       toast.error(isAr ? "الحقول المطلوبة: المدينة، الحي، الشارع، التاريخ" : "Required: City, District, Street, Date");
+      return;
+    }
+    if (!customerName) {
+      toast.error(isAr ? "اسم العميل مطلوب" : "Customer name is required");
+      return;
+    }
+    if (!isValidPrimaryPhone(customerPhone)) {
+      toast.error(t("customers.phoneInvalid"));
       return;
     }
     const urgentLocation = JSON.stringify({
@@ -105,6 +112,8 @@ export default function UrgentAppointments() {
       urgentLocation,
       isUrgent: true,
       visibleToScheduling: false,
+      customerName,
+      customerPhone,
     });
   }
 
@@ -131,10 +140,22 @@ export default function UrgentAppointments() {
     VISIT_ONLY: isAr ? "زيارة فقط" : "Visit Only",
   };
 
+  // Outstanding = unresolved urgent appointments (isUrgent, no urgentVisitRecord
+  // submitted yet) -- state/data-driven, matches the badge in the sidebar (see
+  // components/Sidebar.tsx), never a localStorage-only counter.
+  const outstandingCount = (apptData || []).filter((a: any) => !a.urgentVisitRecord).length;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-800">{t("urgentAppts.title")}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-slate-800">{t("urgentAppts.title")}</h1>
+          {outstandingCount > 0 && (
+            <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-semibold">
+              {isAr ? `${outstandingCount} بانتظار الفني` : `${outstandingCount} awaiting technician`}
+            </span>
+          )}
+        </div>
         <button onClick={() => setShowForm(v => !v)}
           style={{ backgroundColor: "#000080" }}
           className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90">
@@ -154,6 +175,21 @@ export default function UrgentAppointments() {
               <input type="date" lang="en-GB" dir="ltr" required value={form.date}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">
+              {t("urgentAppts.customerInfo")}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerName")} *</label>
+                <input required value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerPhone")} *</label>
+                <input required dir="ltr" value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
             <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">
               {t("urgentAppts.locationInfo")}
