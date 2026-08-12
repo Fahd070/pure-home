@@ -137,12 +137,12 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
   });
 
   const appointments: any[] = detail?.appointments || [];
-  const upcoming = appointments
-    .filter((a: any) => a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING")
-    .sort((a: any, b: any) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
   const completed = appointments.filter((a: any) => a.workStatus === "COMPLETED");
-  const nextMaint = upcoming[0];
   const lastMaint = completed[0];
+  // Source of truth: backend-computed from actualCompletionDate + recurrence
+  // (see maintenanceSchedule.service.ts) -- NOT the earliest upcoming
+  // scheduledDate, which may not exist or may not reflect the real cycle.
+  const nextMaintenance: string | null = detail?.nextMaintenance || null;
 
   function apptStatusKey(a: any) {
     if (a.status === "CANCELLED") return "appointments.cancelled";
@@ -186,8 +186,8 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
           <div className="bg-slate-50 rounded-lg p-3">
             <p className="text-xs text-slate-500 mb-1">{t("scheduling.nextMaintenance")}</p>
             <p className="text-sm font-medium">
-              {nextMaint
-                ? formatGregorianDate(nextMaint.scheduledDate)
+              {nextMaintenance
+                ? formatGregorianDate(nextMaintenance)
                 : t("scheduling.noNext")}
             </p>
           </div>

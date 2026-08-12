@@ -10,13 +10,31 @@ import { emitEvent, EVENT_TYPES } from '../services/event.service';
 import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransactionConflict, sendTransactionConflict } from '../services/bulkDelete.service';
 import { stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
+import { computeNextMaintenanceDate } from '../services/maintenanceSchedule.service';
 
 const router = Router();
 router.use(authenticate);
 
 // Reused for both the primary phone's Zod-level check and the optional
 // secondary phone's route-level check below (same format, single source).
-const PHONE_RE = /^05\d{8}$/;
+// Exported so it stays the single source of truth for other routes/services
+// that need the same primary-phone validation (see services/customerResolve.service.ts,
+// used by the urgent-appointment creation flow) instead of a second implementation.
+export const PHONE_RE = /^05\d{8}$/;
+
+// Part D: maintenance recurrence must support half-month increments (1, 1.5,
+// 2, 2.5, 3, 3.5, ...) but reject an arbitrary decimal (1.2, 2.37) -- i.e. the
+// value must be a positive multiple of 0.5. Epsilon compare (not exact `%`)
+// because a value round-tripped through JSON/float parsing can land a tiny
+// distance off an exact half-step; the epsilon is far tighter than the
+// smallest real gap between two valid steps (0.5), so it can never accept a
+// value like 1.2 or 2.37. Exported for reuse in services/maintenanceSchedule.service.ts
+// consumers/tests -- single source of truth for this business rule.
+export function isHalfMonthStep(value: number): boolean {
+  if (!Number.isFinite(value)) return false;
+  const doubled = value * 2;
+  return Math.abs(doubled - Math.round(doubled)) < 1e-9;
+}
 
 const addressSchema = z.object({
   city: z.string().max(100), district: z.string().max(100), street: z.string().max(200),
@@ -32,7 +50,12 @@ const customerSchema = z.object({
   // expressible as a single regex without also accepting the empty string.
   secondaryPhone: z.string().max(20).optional(),
   maintenanceCycle: z.enum(['DAILY','WEEKLY','MONTHLY']),
-  maintenanceFrequency: z.number().int().positive().max(365).default(1),
+  // Part D: no longer `.int()` -- half-month increments are required (see
+  // isHalfMonthStep above). `1.2`/`2.37`/`0`/negative values are all rejected;
+  // `1`/`1.5`/`2`/`2.5`/`3`/`3.5`/... are all accepted, and never rounded.
+  maintenanceFrequency: z.number().positive().max(365)
+    .refine(isHalfMonthStep, { message: 'Maintenance frequency must be in half-month steps (e.g. 1, 1.5, 2, 2.5)' })
+    .default(1),
   notes: z.string().max(2000).optional(),
   installationDate: z.string().optional(),
   // Optional one-time historical service record (see resolvePreviousService
@@ -151,13 +174,14 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
       const completed = appts
         .filter(a => a.workStatus === 'COMPLETED')
         .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
-      const upcoming = appts
-        .filter(a => new Date(a.scheduledDate) >= now && a.status !== 'CANCELLED' && a.workStatus !== 'COMPLETED')
-        .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
       const overdue = appts.filter(a =>
         new Date(a.scheduledDate) < now && a.status !== 'CANCELLED' && a.workStatus !== 'COMPLETED'
       );
-      const nextMaintenance = upcoming[0]?.scheduledDate || null;
+      // Source of truth: actualCompletionDate of the most recent completed
+      // appointment + recurrence -- NOT the earliest upcoming scheduledDate
+      // (a manually-scheduled future appointment may not exist, or may not
+      // reflect the real recurrence cycle at all). See maintenanceSchedule.service.ts.
+      const nextMaintenance = computeNextMaintenanceDate(c, appts);
       const daysUntil = nextMaintenance
         ? Math.ceil((new Date(nextMaintenance).getTime() - now.getTime()) / 86400000)
         : null;
@@ -180,7 +204,12 @@ router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- this is
     // the API behind Scheduling's "Maintenance History" view.
-    const out = req.user!.role === 'SCHEDULING' ? stripCompletionAmountFromCustomers([customer])[0] : customer;
+    const stripped: any = req.user!.role === 'SCHEDULING' ? stripCompletionAmountFromCustomers([customer])[0] : customer;
+    // Same source of truth as GET / (includeSchedule) and GET /reports/customers --
+    // see maintenanceSchedule.service.ts. The "Maintenance History" modal (Scheduling)
+    // reads this field instead of deriving its own next-maintenance date from the raw
+    // appointments list.
+    const out = { ...stripped, nextMaintenance: computeNextMaintenanceDate(customer as any, (customer as any).appointments || []) };
     res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });

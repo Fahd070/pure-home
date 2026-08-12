@@ -63,6 +63,10 @@ describe('Visit Only + Bank Transfer subtype (Parts B/C/D)', () => {
         scheduledDate: new Date(Date.now() + 3600000).toISOString(),
         isUrgent: true,
         urgentLocation: JSON.stringify({ city: 'Riyadh' }),
+        // Part A of the urgent-ownership batch: Admin now owns customer identity
+        // at creation time, required for every isUrgent appointment.
+        customerName: 'Visit Only Batch Urgent Customer',
+        customerPhone: testPhone(),
         ...(technicianId ? { technicianId } : {}),
       });
     const id = res.body.data.id;

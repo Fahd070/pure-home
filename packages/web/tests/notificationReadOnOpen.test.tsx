@@ -155,9 +155,22 @@ describe('System Activity and Urgent Appointments: already-correct read-on-open 
     expect(src).toMatch(/localStorage\.setItem\("msg-last-seen-tech", Date\.now\(\)\.toString\(\)\)/);
   });
 
-  it('technician Urgent Appointments already dispatches its own clear-badge event on mount', () => {
+  // Urgent-ownership batch (Part C): the urgent badge is no longer a
+  // localStorage increment/clear counter -- it must reflect real unresolved
+  // urgent work (state/data-driven) so it survives refresh/restart and never
+  // disappears just because the page was opened. UrgentAppointments.tsx no
+  // longer dispatches the old clear event, and Sidebar.tsx now derives the
+  // badge from a DB query instead of a localStorage counter.
+  it('technician Urgent Appointments no longer dispatches the old localStorage clear-badge event on mount (badge is now DB-derived)', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/pages/UrgentAppointments.tsx'), 'utf-8');
-    expect(src).toMatch(/window\.dispatchEvent\(new Event\("clear-badge-urgent-tech"\)\)/);
+    expect(src).not.toMatch(/clear-badge-urgent-tech/);
+  });
+
+  it('technician Sidebar computes the urgent badge from a DB query (unresolved urgentVisitRecord-less appointments), not localStorage', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/components/Sidebar.tsx'), 'utf-8');
+    expect(src).not.toMatch(/badge-urgent-tech/);
+    expect(src).toMatch(/urgent-unresolved-tech/);
+    expect(src).toMatch(/!a\.urgentVisitRecord/);
   });
 
   // 13. Opening Work Queue must not clear System Activity's unread state --

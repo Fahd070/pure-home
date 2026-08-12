@@ -38,29 +38,43 @@ export default function Sidebar() {
   const BG_ACTIVE = colorAdjust(BG, 50);
   const BORDER = BG_HOVER;
   const [queueBadge, setQueueBadge] = useState(() => Number(localStorage.getItem("badge-queue-tech") || 0));
-  const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-tech") || 0));
+
+  // Urgent badge: derived from actual unresolved urgent work (isUrgent
+  // appointments with no urgentVisitRecord submitted yet) -- NOT a localStorage
+  // increment/clear counter, so it survives refresh/restart and never disappears
+  // just because the page was opened.
+  const { data: urgentBadge, refetch: refetchUrgentBadge } = useQuery({
+    queryKey: ["urgent-unresolved-tech"],
+    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } })
+      .then(r => (r.data.data || []).filter((a: any) => !a.urgentVisitRecord).length),
+    refetchInterval: 30000,
+    initialData: 0,
+  });
 
   useEffect(() => {
     if (!socket) return;
     const incQueue = () => setQueueBadge(c => { const v = c + 1; localStorage.setItem("badge-queue-tech", String(v)); return v; });
-    const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-tech", String(v)); return v; });
-    const onApptCreated = (a: any) => { if (a?.isUrgent) incUrgent(); else incQueue(); };
+    const onApptCreated = (a: any) => { if (!a?.isUrgent) incQueue(); };
     socket.on("appointment:created", onApptCreated);
+    // Urgent count changes: a new urgent appointment (created) or this
+    // technician's own completion (urgent_visit:submitted, which resolves
+    // one) -- refetch the real count rather than incrementing/decrementing a
+    // local guess.
+    socket.on("appointment:created", refetchUrgentBadge);
+    socket.on("appointment:deleted", refetchUrgentBadge);
+    socket.on("urgent_visit:submitted", refetchUrgentBadge);
     return () => {
       socket.off("appointment:created", onApptCreated);
+      socket.off("appointment:created", refetchUrgentBadge);
+      socket.off("appointment:deleted", refetchUrgentBadge);
+      socket.off("urgent_visit:submitted", refetchUrgentBadge);
     };
-  }, [socket]);
+  }, [socket, refetchUrgentBadge]);
 
   useEffect(() => {
     const clear = () => { localStorage.removeItem("badge-queue-tech"); setQueueBadge(0); };
     window.addEventListener("clear-badge-queue-tech", clear);
     return () => window.removeEventListener("clear-badge-queue-tech", clear);
-  }, []);
-
-  useEffect(() => {
-    const clear = () => { localStorage.removeItem("badge-urgent-tech"); setUrgentBadge(0); };
-    window.addEventListener("clear-badge-urgent-tech", clear);
-    return () => window.removeEventListener("clear-badge-urgent-tech", clear);
   }, []);
 
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-tech"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
@@ -74,7 +88,7 @@ export default function Sidebar() {
     messaging: dmCount as number,
     messages: newMessages,
     queue: queueBadge,
-    urgentAppts: urgentBadge,
+    urgentAppts: urgentBadge as number,
   };
 
   return (

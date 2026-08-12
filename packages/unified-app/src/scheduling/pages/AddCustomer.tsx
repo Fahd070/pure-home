@@ -6,8 +6,8 @@ import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
-
-const PHONE_RE = /^05\d{8}$/;
+import { PHONE_RE } from "../../utils/phone";
+import { isValidMaintenanceFrequency } from "../../utils/maintenanceFrequency";
 
 export default function SchedAddCustomer() {
   const { t, i18n } = useTranslation();
@@ -31,6 +31,7 @@ export default function SchedAddCustomer() {
       if (!PHONE_RE.test(trimmedSecondary)) e.secondaryPhone = t("customers.secondaryPhoneInvalid");
       else if (trimmedSecondary === form.phone) e.secondaryPhone = t("customers.secondaryPhoneSameAsPrimary");
     }
+    if (!isValidMaintenanceFrequency(Number(form.maintenanceFrequency))) e.maintenanceFrequency = t("customers.frequencyInvalid");
     if (!form.city.trim()) e.city = t("customers.city") + " required";
     if (!form.district.trim()) e.district = t("customers.district") + " required";
     // Previous Service is optional as a whole, but once any of its three
@@ -116,8 +117,9 @@ export default function SchedAddCustomer() {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("customers.frequency")}</label>
-            <input type="number" min={1} value={form.maintenanceFrequency} onChange={e => set("maintenanceFrequency", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+            <input type="number" min={0.5} step={0.5} value={form.maintenanceFrequency} onChange={e => set("maintenanceFrequency", e.target.value)}
+              className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.maintenanceFrequency ? "border-red-400" : ""}`} />
+            {errors.maintenanceFrequency && <p className="text-red-500 text-xs mt-1">{errors.maintenanceFrequency}</p>}
           </div>
         </div>
 

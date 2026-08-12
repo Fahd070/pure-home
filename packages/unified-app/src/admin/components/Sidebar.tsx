@@ -60,7 +60,6 @@ export default function Sidebar() {
   const BORDER = BG_HOVER;
   const [custBadge, setCustBadge] = useState(() => Number(localStorage.getItem("badge-cust-admin") || 0));
   const [reportsBadge, setReportsBadge] = useState(() => Number(localStorage.getItem("badge-reports-admin") || 0));
-  const [urgentBadge, setUrgentBadge] = useState(() => Number(localStorage.getItem("badge-urgent-admin") || 0));
   const [expenseBadge, setExpenseBadge] = useState(() => Number(localStorage.getItem("badge-expenses-admin") || 0));
   const [callReportsBadge, setCallReportsBadge] = useState(() => Number(localStorage.getItem("badge-callreports-admin") || 0));
 
@@ -71,30 +70,51 @@ export default function Sidebar() {
     initialData: 0,
   });
 
+  // Urgent badge: derived from actual unresolved urgent work (isUrgent
+  // appointments with no urgentVisitRecord submitted yet) -- NOT a localStorage
+  // increment/clear counter, so it survives refresh/restart and never disappears
+  // just because the page was opened. Same DB-derived pattern as notif/dm-unread
+  // below. Refetched on the socket events that can change the count, with a
+  // 30s poll as a fallback (matches the other DB-derived badges here).
+  const { data: urgentBadge, refetch: refetchUrgentBadge } = useQuery({
+    queryKey: ["urgent-unresolved-admin"],
+    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } })
+      .then(r => (r.data.data || []).filter((a: any) => !a.urgentVisitRecord).length),
+    refetchInterval: 30000,
+    initialData: 0,
+  });
+
   useEffect(() => {
     if (!socket) return;
     const incCust = () => setCustBadge(c => { const v = c + 1; localStorage.setItem("badge-cust-admin", String(v)); return v; });
     const incReports = () => setReportsBadge(c => { const v = c + 1; localStorage.setItem("badge-reports-admin", String(v)); return v; });
-    const incUrgent = () => setUrgentBadge(c => { const v = c + 1; localStorage.setItem("badge-urgent-admin", String(v)); return v; });
     const incExpense = () => setExpenseBadge(c => { const v = c + 1; localStorage.setItem("badge-expenses-admin", String(v)); return v; });
     const incCallReports = () => setCallReportsBadge(c => { const v = c + 1; localStorage.setItem("badge-callreports-admin", String(v)); return v; });
     socket.on("customer:created", incCust);
     socket.on("customer:updated", incCust);
     socket.on("customer:created", incReports);
     socket.on("customer:updated", incReports);
-    socket.on("urgent_visit:submitted", incUrgent);
     socket.on("expense:new", incExpense);
     socket.on("call_report:new", incCallReports);
+    // Urgent count changes: a new urgent appointment (created) or a
+    // Technician's completion (urgent_visit:submitted, which resolves one) --
+    // refetch the real count rather than incrementing/decrementing a local
+    // guess, so it always matches actual unresolved DB state.
+    socket.on("appointment:created", refetchUrgentBadge);
+    socket.on("appointment:deleted", refetchUrgentBadge);
+    socket.on("urgent_visit:submitted", refetchUrgentBadge);
     return () => {
       socket.off("customer:created", incCust);
       socket.off("customer:updated", incCust);
       socket.off("customer:created", incReports);
       socket.off("customer:updated", incReports);
-      socket.off("urgent_visit:submitted", incUrgent);
       socket.off("expense:new", incExpense);
       socket.off("call_report:new", incCallReports);
+      socket.off("appointment:created", refetchUrgentBadge);
+      socket.off("appointment:deleted", refetchUrgentBadge);
+      socket.off("urgent_visit:submitted", refetchUrgentBadge);
     };
-  }, [socket]);
+  }, [socket, refetchUrgentBadge]);
 
   useEffect(() => {
     const clear = () => { localStorage.removeItem("badge-cust-admin"); setCustBadge(0); };
@@ -106,12 +126,6 @@ export default function Sidebar() {
     const clear = () => { localStorage.removeItem("badge-reports-admin"); setReportsBadge(0); };
     window.addEventListener("clear-badge-reports-admin", clear);
     return () => window.removeEventListener("clear-badge-reports-admin", clear);
-  }, []);
-
-  useEffect(() => {
-    const clear = () => { localStorage.removeItem("badge-urgent-admin"); setUrgentBadge(0); };
-    window.addEventListener("clear-badge-urgent-admin", clear);
-    return () => window.removeEventListener("clear-badge-urgent-admin", clear);
   }, []);
 
   useEffect(() => {
@@ -137,7 +151,7 @@ export default function Sidebar() {
     messages: newMessages,
     customers: custBadge,
     reports: reportsBadge,
-    urgentAppts: urgentBadge,
+    urgentAppts: urgentBadge as number,
     expenses: expenseBadge,
     callReports: callReportsBadge,
   };

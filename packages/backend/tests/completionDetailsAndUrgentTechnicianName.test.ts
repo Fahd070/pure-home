@@ -75,6 +75,10 @@ describe('Completion details (Admin Technicians) + Urgent Technician Name', () =
         scheduledDate: new Date(Date.now() + 3600000).toISOString(),
         isUrgent: true,
         urgentLocation: JSON.stringify({ city: 'Riyadh', district: 'Al Malqa', street: 'King Fahd Rd' }),
+        // Part A of the urgent-ownership batch: Admin now owns customer identity
+        // at creation time, required for every isUrgent appointment.
+        customerName: 'Urgent Appointment Customer',
+        customerPhone: testPhone(),
         ...(technicianId ? { technicianId } : {}),
       });
     const id = res.body.data.id;

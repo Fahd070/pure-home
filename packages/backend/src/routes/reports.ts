@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
+import { computeNextMaintenanceDate } from '../services/maintenanceSchedule.service';
 
 const router = Router();
 router.use(authenticate);
@@ -25,16 +26,16 @@ function enrichWithSchedule(customers: any[], now: Date) {
     const completed = appts
       .filter(a => a.workStatus === 'COMPLETED')
       .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
-    const upcoming = appts
-      .filter(a => new Date(a.scheduledDate) >= now && a.status !== 'CANCELLED' && a.workStatus !== 'COMPLETED')
-      .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
     const overdue = appts.filter(a =>
       new Date(a.scheduledDate) < now &&
       a.status !== 'CANCELLED' &&
       a.workStatus !== 'COMPLETED'
     );
     const lastMaintenance = completed[0]?.scheduledDate || null;
-    const nextMaintenance = upcoming[0]?.scheduledDate || null;
+    // Source of truth: actualCompletionDate of the most recent completed
+    // appointment + recurrence -- same computation as routes/customers.ts's
+    // GET / (includeSchedule) and GET /:id. See maintenanceSchedule.service.ts.
+    const nextMaintenance = computeNextMaintenanceDate(c, appts);
     const nextMaintenanceDate = nextMaintenance;
     const daysUntil = nextMaintenance
       ? Math.ceil((new Date(nextMaintenance).getTime() - now.getTime()) / 86400000)

@@ -208,7 +208,7 @@ describe('Modification #10: Appointment Acceptance (pending export approval)', (
     const urgentRes = await request(ts.baseUrl)
       .post('/api/appointments')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ type: 'MAINTENANCE', scheduledDate: new Date(Date.now() + 3600000).toISOString(), isUrgent: true, urgentLocation: 'Test' });
+      .send({ type: 'MAINTENANCE', scheduledDate: new Date(Date.now() + 3600000).toISOString(), isUrgent: true, urgentLocation: 'Test', customerName: 'Acceptance Regression Urgent Customer', customerPhone: testPhone() });
     createdAppointmentIds.push(urgentRes.body.data.id);
     const list = await request(ts.baseUrl).get('/api/appointments/pending-export-approval').set('Authorization', `Bearer ${adminToken}`);
     expect(list.body.data.map((a: any) => a.id)).not.toContain(urgentRes.body.data.id);

@@ -23,7 +23,7 @@ type ServiceType = "INSTALLATION" | "MAINTENANCE" | "VISIT_ONLY";
 // when paymentGroup is Bank Transfer, resolving to one of the two required
 // subtypes. Visit Only needs neither -- see resolvePaymentMethod() below.
 const EMPTY_RECORD = {
-  customerName: "", customerPhone: "", customerDetails: "", serviceNotes: "",
+  customerDetails: "", serviceNotes: "",
   serviceType: "MAINTENANCE" as ServiceType,
   paymentGroup: "CASH" as PaymentGroup,
   transferType: "" as TransferType,
@@ -39,10 +39,6 @@ export default function TechUrgentAppointments() {
   const { user } = useAuthStore();
   const [submitModal, setSubmitModal] = useState<{ appt: any } | null>(null);
   const [record, setRecord] = useState({ ...EMPTY_RECORD });
-
-  useEffect(() => {
-    window.dispatchEvent(new Event("clear-badge-urgent-tech"));
-  }, []);
 
   useEffect(() => {
     if (!socket) return;
@@ -66,6 +62,9 @@ export default function TechUrgentAppointments() {
     mutationFn: (body: any) => api.post("/urgent-visits", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tech-urgent-appointments"] });
+      // This technician's own completion resolves one unresolved urgent item --
+      // refresh the sidebar badge immediately rather than waiting for its 30s poll.
+      qc.invalidateQueries({ queryKey: ["urgent-unresolved-tech"] });
       toast.success(t("urgentAppts.recordSaved"));
       setSubmitModal(null);
       setRecord({ ...EMPTY_RECORD });
@@ -96,7 +95,7 @@ export default function TechUrgentAppointments() {
   const technicianNameError = trimmedTechnicianName && !technicianNameValid
     ? t("tasks.technicianNameFirstOnly")
     : null;
-  const isRecordValid = !!record.customerName.trim() && !!record.customerPhone.trim() && paymentValid && amountValid && technicianNameValid;
+  const isRecordValid = paymentValid && amountValid && technicianNameValid;
 
   function selectServiceType(st: ServiceType) {
     setRecord(r => {
@@ -137,8 +136,6 @@ export default function TechUrgentAppointments() {
     }
     submitMutation.mutate({
       appointmentId: submitModal.appt.id,
-      customerName: record.customerName.trim(),
-      customerPhone: record.customerPhone.trim(),
       customerDetails: record.customerDetails || undefined,
       serviceNotes: record.serviceNotes || undefined,
       serviceType: record.serviceType,
@@ -246,16 +243,17 @@ export default function TechUrgentAppointments() {
               🚨 {locationText(submitModal.appt)}
             </p>
             <form onSubmit={handleSubmitRecord} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              {/* Part B: customer identity is Admin's responsibility, entered at
+                  urgent-appointment creation time -- read-only here, never
+                  editable by the Technician. */}
+              <div className="bg-slate-50 rounded-lg p-3 grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerName")} *</label>
-                  <input required value={record.customerName} onChange={e => setRecord(r => ({ ...r, customerName: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  <p className="text-xs text-slate-400 mb-0.5">{t("urgentAppts.customerName")}</p>
+                  <p className="text-sm font-medium text-slate-700">{submitModal.appt.customer?.name || "—"}</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerPhone")} *</label>
-                  <input required value={record.customerPhone} onChange={e => setRecord(r => ({ ...r, customerPhone: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                  <p className="text-xs text-slate-400 mb-0.5">{t("urgentAppts.customerPhone")}</p>
+                  <p className="text-sm font-medium text-slate-700" dir="ltr">{submitModal.appt.customer?.phone || "—"}</p>
                 </div>
               </div>
               <div>
