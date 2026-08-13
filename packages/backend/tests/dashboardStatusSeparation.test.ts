@@ -4,7 +4,7 @@ import { startTestServer, stopTestServer, TestServer } from './helpers/testServe
 import { ensureTestUsers, signTestToken, testPhone, TestUsers } from './helpers/fixtures';
 import prisma from '../src/prisma';
 
-describe('Dashboard scheduled customer status separation', () => {
+describe('Dashboard Customers card', () => {
   let ts: TestServer;
   let users: TestUsers;
   let adminToken: string;
@@ -23,46 +23,37 @@ describe('Dashboard scheduled customer status separation', () => {
     await stopTestServer(ts.server);
   });
 
-  async function createCustomer(name: string) {
-    const res = await request(ts.baseUrl).post('/api/customers').set('Authorization', `Bearer ${adminToken}`).send({
-      name, phone: testPhone(), maintenanceCycle: 'MONTHLY', maintenanceFrequency: 1,
+  it('keeps every customer represented regardless of scheduling or completion state and removes the Scheduled category endpoint', async () => {
+    const createCustomer = await request(ts.baseUrl).post('/api/customers').set('Authorization', `Bearer ${adminToken}`).send({
+      name: 'Dashboard Permanent Customer', phone: testPhone(), maintenanceCycle: 'MONTHLY', maintenanceFrequency: 1,
       address: { city: 'Riyadh', district: 'Test', street: 'Status test' },
     });
-    expect(res.status).toBe(201);
-    customerIds.push(res.body.data.id);
-    return res.body.data.id as string;
-  }
+    expect(createCustomer.status).toBe(201);
+    const customerId = createCustomer.body.data.id as string;
+    customerIds.push(customerId);
 
-  async function dashboardCustomers(endpoint: string, search: string) {
-    const res = await request(ts.baseUrl).get(`/api/dashboard/${endpoint}`).query({ search }).set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(200);
-    return res.body.data as any[];
-  }
+    const before = await request(ts.baseUrl).get('/api/dashboard/customers-list').query({ search: 'Dashboard Permanent Customer' }).set('Authorization', `Bearer ${adminToken}`);
+    expect(before.body.data.map((customer: any) => customer.id)).toContain(customerId);
 
-  it('moves only the scheduled customer from needs-scheduling to scheduled, then moves it back when its appointment is deleted', async () => {
-    const targetId = await createCustomer('Dashboard Status Target');
-    const bystanderId = await createCustomer('Dashboard Status Bystander');
-
-    expect((await dashboardCustomers('customers-list', 'Dashboard Status')).map(c => c.id)).toEqual(expect.arrayContaining([targetId, bystanderId]));
-    expect((await dashboardCustomers('scheduled', 'Dashboard Status Target')).map(c => c.id)).not.toContain(targetId);
-
-    const create = await request(ts.baseUrl).post('/api/appointments').set('Authorization', `Bearer ${adminToken}`).send({
-      customerId: targetId, type: 'MAINTENANCE', scheduledDate: new Date(Date.now() + 86400000).toISOString(),
+    const createAppointment = await request(ts.baseUrl).post('/api/appointments').set('Authorization', `Bearer ${adminToken}`).send({
+      customerId, type: 'MAINTENANCE', scheduledDate: new Date(Date.now() + 86400000).toISOString(), technicianId: users.technician.id,
     });
-    expect(create.status).toBe(201);
-    const appointmentId = create.body.data.id as string;
-    appointmentIds.push(appointmentId);
+    expect(createAppointment.status).toBe(201);
+    appointmentIds.push(createAppointment.body.data.id);
 
-    const scheduledIds = (await dashboardCustomers('scheduled', 'Dashboard Status Target')).map(c => c.id);
-    const needsSchedulingIds = (await dashboardCustomers('customers-list', 'Dashboard Status')).map(c => c.id);
-    expect(scheduledIds).toContain(targetId);
-    expect(needsSchedulingIds).not.toContain(targetId);
-    expect(needsSchedulingIds).toContain(bystanderId);
+    const afterScheduling = await request(ts.baseUrl).get('/api/dashboard/customers-list').query({ search: 'Dashboard Permanent Customer' }).set('Authorization', `Bearer ${adminToken}`);
+    expect(afterScheduling.body.data.map((customer: any) => customer.id)).toContain(customerId);
 
-    const deleted = await request(ts.baseUrl).delete(`/api/appointments/${appointmentId}`).set('Authorization', `Bearer ${adminToken}`);
-    expect(deleted.status).toBe(200);
-    appointmentIds.splice(appointmentIds.indexOf(appointmentId), 1);
-    expect((await dashboardCustomers('customers-list', 'Dashboard Status')).map(c => c.id)).toEqual(expect.arrayContaining([targetId, bystanderId]));
-    expect((await dashboardCustomers('scheduled', 'Dashboard Status Target')).map(c => c.id)).not.toContain(targetId);
+    await prisma.appointment.update({ where: { id: createAppointment.body.data.id }, data: { workStatus: 'COMPLETED', completedAt: new Date() } });
+    const afterCompletion = await request(ts.baseUrl).get('/api/dashboard/customers-list').query({ search: 'Dashboard Permanent Customer' }).set('Authorization', `Bearer ${adminToken}`);
+    expect(afterCompletion.body.data.map((customer: any) => customer.id)).toContain(customerId);
+
+    const stats = await request(ts.baseUrl).get('/api/dashboard/stats').set('Authorization', `Bearer ${adminToken}`);
+    const allCustomers = await request(ts.baseUrl).get('/api/dashboard/customers-list').query({ limit: 100 }).set('Authorization', `Bearer ${adminToken}`);
+    expect(stats.body.data.total).toBe(allCustomers.body.meta.total);
+    expect(stats.body.data).not.toHaveProperty('scheduled');
+
+    const removed = await request(ts.baseUrl).get('/api/dashboard/scheduled').set('Authorization', `Bearer ${adminToken}`);
+    expect(removed.status).toBe(404);
   });
 });

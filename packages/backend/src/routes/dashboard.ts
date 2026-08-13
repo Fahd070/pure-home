@@ -4,22 +4,13 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRole, emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
-import { stripCompletionAmount, stripCompletionAmountFromList, stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
+import { stripCompletionAmount, stripCompletionAmountFromList } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
+import { DashboardOperationalCategory, getDashboardCategoryWheres } from '../services/dashboardCategorization.service';
 
 const router = Router();
 router.use(authenticate);
-
-// A maintenance appointment belongs in the "scheduled" customer category only
-// while it is still a valid, actionable schedule.  Keeping this predicate in
-// one place makes the counter and both drill-down lists agree.
-const validMaintenanceSchedule: any = {
-  type: 'MAINTENANCE',
-  isUrgent: false,
-  status: { in: ['SCHEDULED', 'RESCHEDULED', 'PENDING'] },
-  workStatus: { in: ['WAITING', 'IN_PROGRESS'] },
-};
 
 // Same field selections as the canonical delete routes' own customerFields()/apptFields()
 // (packages/backend/src/routes/customers.ts, appointments.ts) -- kept local here rather
@@ -41,57 +32,24 @@ function appointmentAuditFields(a: any) {
 router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59);
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 86400000);
+    const categories = getDashboardCategoryWheres(now);
 
     const urgentWhere: any = { isUrgent: true };
     if (req.user?.role === 'SCHEDULING') urgentWhere.visibleToScheduling = true;
 
-    const [total, scheduled, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
-      // This is intentionally the complement of `scheduled`: a customer can
-      // appear in exactly one of these two scheduling-status categories.
-      prisma.customer.count({ where: req.user!.role === 'SCHEDULING'
-        ? applySchedulingCustomerVisibility({ appointments: { none: validMaintenanceSchedule } })
-        : { appointments: { none: validMaintenanceSchedule } } }),
-      prisma.customer.count({ where: { appointments: { some: validMaintenanceSchedule } } }),
-      // customerId: not null -- matches this counter's own drill-down (GET
-      // /completed-maintenance, which is customer-driven and so already
-      // naturally excludes an orphaned appointment left behind by an explicit
-      // customer deletion). Without this filter the count stayed stale
-      // forever for a deleted customer's completed appointment, since that
-      // row is deliberately preserved (customerId set to null, not deleted)
-      // for its historical/financial data.
-      prisma.appointment.count({ where: { workStatus: 'COMPLETED', isUrgent: false, customerId: { not: null } } }),
-      prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfMonth, lt: startOfNextMonth } } }),
-      prisma.appointment.count({ where: { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: startOfNextMonth, lte: endOfNextMonth } } }),
-      // Same reasoning as `completed` above -- matches GET /postponed's own
-      // customer-driven drill-down.
-      prisma.appointment.count({ where: { workStatus: 'POSTPONED', isUrgent: false, customerId: { not: null } } }),
-      prisma.appointment.count({
-        where: {
-          isUrgent: false,
-          customerId: { not: null },
-          scheduledDate: { lt: now },
-          status: { not: 'CANCELLED' },
-          workStatus: { notIn: ['COMPLETED'] }
-        }
-      }),
-      prisma.appointment.count({
-        where: {
-          isUrgent: false,
-          customerId: { not: null },
-          scheduledDate: { gte: todayStart, lt: todayEnd },
-          status: { not: 'CANCELLED' },
-          workStatus: { not: 'COMPLETED' }
-        }
-      }),
+    const customerWhere = req.user!.role === 'SCHEDULING' ? applySchedulingCustomerVisibility({}) : {};
+    const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
+      prisma.customer.count({ where: customerWhere }),
+      prisma.appointment.count({ where: categories.completed }),
+      prisma.appointment.count({ where: categories.thisMonth }),
+      prisma.appointment.count({ where: categories.nextMonth }),
+      prisma.appointment.count({ where: categories.postponed }),
+      prisma.appointment.count({ where: categories.overdue }),
+      prisma.appointment.count({ where: categories.today }),
       prisma.appointment.count({ where: urgentWhere }),
     ]);
 
-    res.json({ success: true, data: { total, scheduled, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
+    res.json({ success: true, data: { total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
   } catch (e) { next(e); }
 });
 
@@ -146,9 +104,7 @@ router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req: Au
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    // The customer list is the "needs scheduling" category.  A customer with
-    // a valid maintenance schedule is represented by /scheduled instead.
-    let where: any = { appointments: { none: validMaintenanceSchedule } };
+    let where: any = {};
     if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
     const total = await prisma.customer.count({ where });
@@ -161,168 +117,33 @@ router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req: Au
   } catch (e) { next(e); }
 });
 
-router.get('/scheduled', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    let where: any = { appointments: { some: validMaintenanceSchedule } };
-    if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
-    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
-    const total = await prisma.customer.count({ where });
-    let data: any[] = await prisma.customer.findMany({
-      where,
-      include: {
-        address: true,
-        appointments: { where: validMaintenanceSchedule, orderBy: { scheduledDate: 'asc' }, take: 1 },
-      },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
-      orderBy: { updatedAt: 'desc' },
-    });
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromCustomers(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
+function registerOperationalCategoryRoute(path: string, category: DashboardOperationalCategory) {
+  router.get(path, requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
+    try {
+      const { search = '', page = '1', limit = '20' } = req.query as any;
+      const safeLimit = Math.min(parseInt(limit) || 20, 100);
+      const where: any = { ...getDashboardCategoryWheres()[category] };
+      if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
+      const total = await prisma.appointment.count({ where });
+      let data: any[] = await prisma.appointment.findMany({
+        where,
+        include: { customer: { include: { address: true } } },
+        skip: (parseInt(page) - 1) * safeLimit,
+        take: safeLimit,
+        orderBy: { scheduledDate: category === 'completed' || category === 'postponed' ? 'desc' : 'asc' },
+      });
+      if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
+      res.json({ success: true, data, meta: { total } });
+    } catch (e) { next(e); }
+  });
+}
 
-router.get('/completed-maintenance', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const where: any = { appointments: { some: { workStatus: 'COMPLETED' } } };
-    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
-    const total = await prisma.customer.count({ where });
-    let data: any[] = await prisma.customer.findMany({
-      where, include: {
-        address: true,
-        appointments: { where: { workStatus: 'COMPLETED' }, orderBy: { scheduledDate: 'desc' }, take: 5 }
-      },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
-      orderBy: { updatedAt: 'desc' }
-    });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- these are
-    // completed appointments, so the amount is populated here more than anywhere else.
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromCustomers(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
-
-router.get('/this-month', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const where: any = { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: start, lt: end } };
-    if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
-    const total = await prisma.appointment.count({ where });
-    let data: any[] = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } } },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
-      orderBy: { scheduledDate: 'asc' }
-    });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- this
-    // range can include an appointment already completed earlier this month.
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
-
-router.get('/next-month', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59);
-    const where: any = { isUrgent: false, customerId: { not: null }, scheduledDate: { gte: start, lte: end } };
-    if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
-    const total = await prisma.appointment.count({ where });
-    let data: any[] = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } } },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
-      orderBy: { scheduledDate: 'asc' }
-    });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
-
-router.get('/postponed', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const where: any = { appointments: { some: { workStatus: 'POSTPONED' } } };
-    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
-    const total = await prisma.customer.count({ where });
-    let data: any[] = await prisma.customer.findMany({
-      where, include: {
-        address: true,
-        appointments: {
-          where: { workStatus: 'POSTPONED' },
-          include: { postponements: { orderBy: { createdAt: 'desc' }, take: 1 } },
-          orderBy: { scheduledDate: 'desc' }, take: 3
-        }
-      },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit
-    });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromCustomers(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
-
-router.get('/overdue', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const now = new Date();
-    const where: any = {
-      isUrgent: false,
-      customerId: { not: null },
-      scheduledDate: { lt: now },
-      status: { not: 'CANCELLED' },
-      workStatus: { notIn: ['COMPLETED'] }
-    };
-    if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
-    const total = await prisma.appointment.count({ where });
-    let data: any[] = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } } },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
-      orderBy: { scheduledDate: 'asc' }
-    });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
-
-router.get('/today', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
-  try {
-    const { search = '', page = '1', limit = '20' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 86400000);
-    const where: any = {
-      isUrgent: false,
-      customerId: { not: null },
-      scheduledDate: { gte: todayStart, lt: todayEnd },
-      status: { not: 'CANCELLED' },
-      workStatus: { not: 'COMPLETED' }
-    };
-    if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
-    const total = await prisma.appointment.count({ where });
-    let data: any[] = await prisma.appointment.findMany({
-      where, include: { customer: { include: { address: true } } },
-      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
-      orderBy: { scheduledDate: 'asc' }
-    });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
-    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
-    res.json({ success: true, data, meta: { total } });
-  } catch (e) { next(e); }
-});
+registerOperationalCategoryRoute('/completed-maintenance', 'completed');
+registerOperationalCategoryRoute('/this-month', 'thisMonth');
+registerOperationalCategoryRoute('/next-month', 'nextMonth');
+registerOperationalCategoryRoute('/postponed', 'postponed');
+registerOperationalCategoryRoute('/overdue', 'overdue');
+registerOperationalCategoryRoute('/today', 'today');
 
 router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
@@ -331,12 +152,13 @@ router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
     const where: any = { isUrgent: true };
     if (req.user?.role === 'SCHEDULING') where.visibleToScheduling = true;
     const total = await prisma.appointment.count({ where });
-    const data = await prisma.appointment.findMany({
+    let data: any[] = await prisma.appointment.findMany({
       where,
-      include: { technician: true },
+      include: { technician: true, customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'desc' }
     });
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromList(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });

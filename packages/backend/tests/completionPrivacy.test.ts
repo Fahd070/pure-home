@@ -240,7 +240,7 @@ describe('Modification #6: Next Maintenance Note + completion amount privacy', (
     await createAndComplete({});
     const res = await request(ts.baseUrl).get('/api/dashboard/completed-maintenance').set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    const anyAmountPresent = res.body.data.some((c: any) => (c.appointments || []).some((a: any) => a.completionAmount != null));
+    const anyAmountPresent = res.body.data.some((appointment: any) => appointment.completionAmount != null);
     expect(anyAmountPresent).toBe(true);
   });
 

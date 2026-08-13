@@ -35,6 +35,7 @@ import SchedMessages from "./scheduling/pages/Messages";
 import SchedNotifications from "./scheduling/pages/Notifications";
 import SchedDirectMessages from "./scheduling/pages/DirectMessages";
 import SchedSettings from "./scheduling/pages/Settings";
+import { api as schedulingApi } from "./scheduling/api/client";
 
 import TechnicianLayout from "./technician/components/Layout";
 import WorkQueue from "./technician/pages/WorkQueue";
@@ -102,7 +103,7 @@ function AppShell() {
             <Route path="customers" element={<CustomerList />} />
             <Route path="customers/add" element={<SchedAddCustomer />} />
             <Route path="customers/:id/edit" element={<SchedAddCustomer />} />
-            <Route path="customers/:id" element={<CustomerDetail />} />
+            <Route path="customers/:id" element={<CustomerDetail apiClient={schedulingApi} queryScope="scheduling" />} />
             <Route path="call-reports" element={<SchedCallReports />} />
             <Route path="messages" element={<SchedMessages />} />
             <Route path="notifications" element={<SchedNotifications />} />

@@ -68,6 +68,27 @@ describe('Shared appointment drill-down display parity', () => {
     expect(schedSrc).toMatch(cardOrderRe);
   });
 
+  it('renames the permanent card to Customers and removes the Scheduled card and endpoint from both dashboards', () => {
+    expect(i18n.getFixedT('ar')('dashboard.customers')).toBe('العملاء');
+    expect(i18n.getFixedT('en')('dashboard.customers')).toBe('Customers');
+    for (const src of [adminSrc, schedSrc]) {
+      expect(src).not.toMatch(/dashboard\.scheduledCustomers/);
+      expect(src).not.toMatch(/endpoint:\s*"scheduled"/);
+    }
+  });
+
+  it('makes the complete card surface a keyboard-accessible button', () => {
+    for (const src of [adminSrc, schedSrc]) {
+      expect(src).toMatch(/<button type="button" onClick=\{onClick\}/);
+      expect(src).toMatch(/cursor-pointer focus:outline-none focus:ring-2/);
+    }
+  });
+
+  it('refreshes both counts and an open drill-down from the existing socket event flow', () => {
+    expect(adminSrc).toMatch(/invalidateQueries\(\{ queryKey: \["dashboard-drill"\] \}\)/);
+    expect(schedSrc).toMatch(/invalidateQueries\(\{ queryKey: \["sched-drill"\] \}\)/);
+  });
+
   it('both dashboards use the same responsive card grid', () => {
     expect(adminSrc).toMatch(/grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4/);
     expect(schedSrc).toMatch(/grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4/);
