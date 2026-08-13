@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
@@ -119,17 +120,17 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
   );
 }
 
-function HistoryModal({ customer, onClose }: { customer: any; onClose: () => void }) {
+export function HistoryModal({ customer, onClose, apiClient = api }: { customer: any; onClose: () => void; apiClient?: typeof api }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ["customer-sched-detail", customer.id],
-    queryFn: () => api.get("/customers/" + customer.id).then(r => r.data.data),
+    queryFn: () => apiClient.get("/customers/" + customer.id).then(r => r.data.data),
   });
 
   const cancelAppt = useMutation({
-    mutationFn: (id: string) => api.patch("/appointments/" + id + "/status", { status: "CANCELLED" }),
+    mutationFn: (id: string) => apiClient.patch("/appointments/" + id + "/status", { status: "CANCELLED" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["customer-sched-detail", customer.id] });
       toast.success(t("common.success"));
@@ -145,6 +146,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
   const nextMaintenance: string | null = detail?.nextMaintenance || null;
 
   function apptStatusKey(a: any) {
+    if (a.isUrgent && a.urgentVisitRecord) return "tasks.completed";
     if (a.status === "CANCELLED") return "appointments.cancelled";
     if (a.workStatus === "COMPLETED") return "tasks.completed";
     if (a.workStatus === "IN_PROGRESS") return "tasks.inProgress";
@@ -155,6 +157,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
   }
 
   function apptStatusColor(a: any) {
+    if (a.isUrgent && a.urgentVisitRecord) return STATUS_COLORS.COMPLETED;
     return STATUS_COLORS[a.workStatus || a.status] || "bg-slate-100 text-slate-600";
   }
 
@@ -237,14 +240,16 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
                         {formatGregorianDate(a.scheduledDate)}
                       </td>
                       <td className="px-3 py-2">
-                        {a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
+                        {a.isUrgent
+                          ? `${t("urgentAppts.title")} — ${a.urgentVisitRecord?.serviceType === "INSTALLATION" ? t("appointments.installation") : a.urgentVisitRecord?.serviceType === "VISIT_ONLY" ? t("urgentAppts.visitOnly") : t("appointments.maintenance")}`
+                          : a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
                       </td>
                       <td className="px-3 py-2">
                         <span className={"text-xs px-2 py-0.5 rounded font-medium " + apptStatusColor(a)}>
                           {t(apptStatusKey(a))}
                         </span>
                       </td>
-                      <td className="px-3 py-2">{a.technician?.name || "—"}</td>
+                      <td className="px-3 py-2">{a.urgentVisitRecord?.submittedBy?.name || a.technician?.name || "—"}</td>
                       <td className="px-3 py-2">
                         {(a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING") && (
                           <button onClick={() => cancelAppt.mutate(a.id)} disabled={cancelAppt.isPending}
@@ -273,6 +278,13 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
                         </td>
                       </tr>
                     )}
+                    {a.isUrgent && a.urgentVisitRecord && (
+                      <tr className="border-b bg-rose-50/50">
+                        <td colSpan={5} className="px-3 py-1.5 text-xs text-rose-700">
+                          <span className="font-medium">{t("urgentAppts.serviceDetails")}:</span> {a.urgentVisitRecord.serviceDetails || a.urgentVisitRecord.serviceNotes || a.urgentVisitRecord.notes || "—"}
+                        </td>
+                      </tr>
+                    )}
                   </React.Fragment>
                 ))}
               </tbody>
@@ -287,6 +299,7 @@ function HistoryModal({ customer, onClose }: { customer: any; onClose: () => voi
 export default function CustomerList() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const socket = useSocket();
   const [search, setSearch] = useState("");
@@ -337,7 +350,7 @@ export default function CustomerList() {
             </thead>
             <tbody>
               {(data?.data || []).map((c: any) => (
-                <tr key={c.id} className="border-b hover:bg-slate-50">
+                <tr key={c.id} onClick={() => navigate(`/scheduling/customers/${c.id}`)} className="border-b hover:bg-slate-50 cursor-pointer">
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3">{c.phone}</td>
                   <td className="px-4 py-3 text-green-700 font-medium text-xs">
@@ -354,14 +367,18 @@ export default function CustomerList() {
                   <td className="px-4 py-3">{c.address?.city || "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
-                      <button onClick={() => setScheduleModal(c)}
+                      <button onClick={event => { event.stopPropagation(); setScheduleModal(c); }}
                         style={{ backgroundColor: "#008000" }}
                         className="text-white text-xs px-3 py-1.5 rounded-lg hover:opacity-90 font-medium whitespace-nowrap">
                         📅 {t("scheduling.scheduleMaintenance")}
                       </button>
-                      <button onClick={() => setHistoryModal(c)}
+                      <button onClick={event => { event.stopPropagation(); setHistoryModal(c); }}
                         className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 whitespace-nowrap">
                         📋 {t("scheduling.viewHistory")}
+                      </button>
+                      <button onClick={event => { event.stopPropagation(); navigate(`/scheduling/customers/${c.id}/edit`); }}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 whitespace-nowrap">
+                        {t("customers.edit")}
                       </button>
                     </div>
                   </td>

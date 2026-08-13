@@ -6,9 +6,20 @@ import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { stripCompletionAmount, stripCompletionAmountFromList, stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
+import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 
 const router = Router();
 router.use(authenticate);
+
+// A maintenance appointment belongs in the "scheduled" customer category only
+// while it is still a valid, actionable schedule.  Keeping this predicate in
+// one place makes the counter and both drill-down lists agree.
+const validMaintenanceSchedule: any = {
+  type: 'MAINTENANCE',
+  isUrgent: false,
+  status: { in: ['SCHEDULED', 'RESCHEDULED', 'PENDING'] },
+  workStatus: { in: ['WAITING', 'IN_PROGRESS'] },
+};
 
 // Same field selections as the canonical delete routes' own customerFields()/apptFields()
 // (packages/backend/src/routes/customers.ts, appointments.ts) -- kept local here rather
@@ -39,8 +50,13 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
     const urgentWhere: any = { isUrgent: true };
     if (req.user?.role === 'SCHEDULING') urgentWhere.visibleToScheduling = true;
 
-    const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
-      prisma.customer.count(),
+    const [total, scheduled, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
+      // This is intentionally the complement of `scheduled`: a customer can
+      // appear in exactly one of these two scheduling-status categories.
+      prisma.customer.count({ where: req.user!.role === 'SCHEDULING'
+        ? applySchedulingCustomerVisibility({ appointments: { none: validMaintenanceSchedule } })
+        : { appointments: { none: validMaintenanceSchedule } } }),
+      prisma.customer.count({ where: { appointments: { some: validMaintenanceSchedule } } }),
       // customerId: not null -- matches this counter's own drill-down (GET
       // /completed-maintenance, which is customer-driven and so already
       // naturally excludes an orphaned appointment left behind by an explicit
@@ -75,14 +91,16 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
       prisma.appointment.count({ where: urgentWhere }),
     ]);
 
-    res.json({ success: true, data: { total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
+    res.json({ success: true, data: { total, scheduled, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
   } catch (e) { next(e); }
 });
 
-router.get('/activity', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/activity', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const customers = await prisma.customer.findMany({
-      where: { isActive: true, activityDismissed: false },
+      where: req.user!.role === 'SCHEDULING'
+        ? applySchedulingCustomerVisibility({ isActive: true, activityDismissed: false })
+        : { isActive: true, activityDismissed: false },
       include: {
         appointments: {
           select: { workStatus: true, scheduledDate: true },
@@ -124,11 +142,14 @@ router.delete('/activity', requireRole('ADMIN'), async (req: AuthRequest, res, n
   } catch (e) { next(e); }
 });
 
-router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { search = '', page = '1', limit = '20' } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const where: any = {};
+    // The customer list is the "needs scheduling" category.  A customer with
+    // a valid maintenance schedule is represented by /scheduled instead.
+    let where: any = { appointments: { none: validMaintenanceSchedule } };
+    if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
     const total = await prisma.customer.count({ where });
     const data = await prisma.customer.findMany({
@@ -136,6 +157,28 @@ router.get('/customers-list', requireRole('ADMIN', 'SCHEDULING'), async (req, re
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { createdAt: 'desc' }
     });
+    res.json({ success: true, data, meta: { total } });
+  } catch (e) { next(e); }
+});
+
+router.get('/scheduled', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
+  try {
+    const { search = '', page = '1', limit = '20' } = req.query as any;
+    const safeLimit = Math.min(parseInt(limit) || 20, 100);
+    let where: any = { appointments: { some: validMaintenanceSchedule } };
+    if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
+    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
+    const total = await prisma.customer.count({ where });
+    let data: any[] = await prisma.customer.findMany({
+      where,
+      include: {
+        address: true,
+        appointments: { where: validMaintenanceSchedule, orderBy: { scheduledDate: 'asc' }, take: 1 },
+      },
+      skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (req.user!.role === 'SCHEDULING') data = stripCompletionAmountFromCustomers(data);
     res.json({ success: true, data, meta: { total } });
   } catch (e) { next(e); }
 });

@@ -44,6 +44,7 @@
     "directories": {
       "output": "dist-installer"
     },
+    "artifactName": "Pure-Home-Setup-${version}.${ext}",
     "files": [
       "out/**/*",
       "assets/**/*"

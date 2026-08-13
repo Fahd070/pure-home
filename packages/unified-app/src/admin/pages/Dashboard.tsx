@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
@@ -144,6 +145,7 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
 // ── Drill-down modal ──────────────────────────────────────────────────────
 function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: string; onClose: () => void }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -307,14 +309,14 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <th className="px-4 py-2 w-20"></th>
                   </tr></thead>
                   <tbody>{items.map((c: any) => (
-                    <tr key={c.id} className="border-b hover:bg-slate-50">
+                    <tr key={c.id} onClick={() => navigate(`/admin/customers/${c.id}`)} className="border-b hover:bg-slate-50 cursor-pointer">
                       <td className="px-4 py-2.5 font-medium">{c.name}</td>
                       <td className="px-4 py-2.5 text-slate-500">{c.phone}</td>
                       <td className="px-4 py-2.5 text-xs">{c.maintenanceCycle}</td>
                       <td className="px-4 py-2.5 text-slate-500">{c.address?.city || "—"}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => setSchedulingCustomer({ id: c.id, name: c.name })} title="Schedule"
+                          <button onClick={event => { event.stopPropagation(); setSchedulingCustomer({ id: c.id, name: c.name }); }} title="Schedule"
                             className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-100 text-blue-600 text-xs">📅</button>
                           <RowActionButton variant="delete" onClick={() => setConfirmDelete({ id: c.id, type: "customer" })} title={t("dashboard.deleteRecord")} />
                         </div>
@@ -402,6 +404,7 @@ export default function Dashboard() {
 
   const cards = [
     { label: t("dashboard.customers"),            key: "total",          endpoint: "customers-list",          color: "border-blue-500" },
+    { label: t("dashboard.scheduledCustomers"),   key: "scheduled",      endpoint: "scheduled",               color: "border-teal-500" },
     { label: t("dashboard.completedMaintenance"),  key: "completed",      endpoint: "completed-maintenance",   color: "border-green-500" },
     { label: t("dashboard.thisMonth"),             key: "thisMonth",      endpoint: "this-month",              color: "border-indigo-500" },
     { label: t("dashboard.nextMonth"),             key: "nextMonth",      endpoint: "next-month",              color: "border-purple-500" },

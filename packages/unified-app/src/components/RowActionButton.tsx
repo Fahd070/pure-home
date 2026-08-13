@@ -58,7 +58,7 @@ export default function RowActionButton({ variant, onClick, title, theme = "blue
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={event => { event.stopPropagation(); onClick(); }}
       title={title}
       aria-label={title}
       className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors focus:outline-none focus:ring-2 ${colorClasses}`}

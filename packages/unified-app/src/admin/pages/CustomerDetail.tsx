@@ -27,6 +27,7 @@ export default function CustomerDetail() {
 
   const c = data;
   const addr = c.address;
+  const lastMaintenance = (c.appointments || []).find((appointment: any) => appointment.workStatus === "COMPLETED");
 
   async function handleExportPdf() {
     const dir = isAr ? "rtl" : "ltr";
@@ -115,15 +116,21 @@ ${(c.appointments || []).length > 0 ? `
             {c.isActive ? t("common.active") : t("common.inactive")}
           </span>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-slate-400">{t("customers.maintenanceCycle")}: </span>{c.maintenanceCycle}</div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div><span className="text-slate-400">{t("customers.maintenanceCycle")}: </span>{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr)}</div>
           <div><span className="text-slate-400">{t("customers.frequency")}: </span>{c.maintenanceFrequency}</div>
+          {c.installationDate && <div><span className="text-slate-400">{t("reports.installationDate")}: </span><span dir="ltr">{formatGregorianDate(c.installationDate)}</span></div>}
+          <div><span className="text-slate-400">{t("reports.lastMaintenance")}: </span><span dir="ltr">{lastMaintenance ? formatGregorianDate(lastMaintenance.actualCompletionDate || lastMaintenance.scheduledDate) : "—"}</span></div>
+          <div><span className="text-slate-400">{t("reports.nextMaintenance")}: </span><span dir="ltr">{c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "—"}</span></div>
+          <div><span className="text-slate-400">{t("reports.registrationDate")}: </span><span dir="ltr">{formatGregorianDate(c.createdAt)}</span></div>
         </div>
         {addr && (
           <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm">
             <p className="font-medium mb-1">{t("customers.address")}</p>
             <p>{addr.city}، {addr.district}، {addr.street}</p>
             {addr.buildingNo && <p>{t("customers.buildingNo")}: {addr.buildingNo} {addr.floorNo && `| ${t("customers.floorNo")}: ${addr.floorNo}`}</p>}
+            {addr.apartmentNo && <p>{t("customers.apartmentNo")}: {addr.apartmentNo}</p>}
+            {addr.postalCode && <p>{t("customers.postalCode")}: {addr.postalCode}</p>}
           </div>
         )}
         {c.notes && <p className="mt-3 text-sm text-slate-500">{c.notes}</p>}

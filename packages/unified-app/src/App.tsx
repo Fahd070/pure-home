@@ -80,6 +80,7 @@ function AppShell() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/add" element={<AddCustomer />} />
+            <Route path="customers/:id/edit" element={<AddCustomer />} />
             <Route path="customers/:id" element={<CustomerDetail />} />
             <Route path="appointments" element={<AdminAppointments />} />
             <Route path="appointment-acceptance" element={<AppointmentAcceptance />} />
@@ -100,6 +101,8 @@ function AppShell() {
             <Route path="dashboard" element={<SchedDashboard />} />
             <Route path="customers" element={<CustomerList />} />
             <Route path="customers/add" element={<SchedAddCustomer />} />
+            <Route path="customers/:id/edit" element={<SchedAddCustomer />} />
+            <Route path="customers/:id" element={<CustomerDetail />} />
             <Route path="call-reports" element={<SchedCallReports />} />
             <Route path="messages" element={<SchedMessages />} />
             <Route path="notifications" element={<SchedNotifications />} />

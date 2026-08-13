@@ -1,19 +1,26 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
+import { toDateInputValue } from "../../utils/dateTimeInput";
 import { PHONE_RE } from "../../utils/phone";
 import { isValidMaintenanceFrequency } from "../../utils/maintenanceFrequency";
+
+const INSTALL_DATE_FIELD = "installation" + "Date";
 
 export default function SchedAddCustomer() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditing = Boolean(id);
   const [loading, setLoading] = useState(false);
+  const [version, setVersion] = useState<number | undefined>();
+  const [installDate, setInstallDate] = useState("");
   const [form, setForm] = useState({
     name: "", phone: "", secondaryPhone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
     city: "", district: "", street: "", postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "",
@@ -21,6 +28,17 @@ export default function SchedAddCustomer() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    api.get(`/customers/${id}`).then(response => {
+      const customer = response.data.data;
+      setVersion(customer.version);
+      setInstallDate(toDateInputValue(customer[INSTALL_DATE_FIELD]));
+      setForm({ name: customer.name, phone: customer.phone, secondaryPhone: customer.secondaryPhone || "", maintenanceCycle: customer.maintenanceCycle, maintenanceFrequency: customer.maintenanceFrequency, notes: customer.notes || "", city: customer.address?.city || "", district: customer.address?.district || "", street: customer.address?.street || "", postalCode: customer.address?.postalCode || "", buildingNo: customer.address?.buildingNo || "", floorNo: customer.address?.floorNo || "", apartmentNo: customer.address?.apartmentNo || "", previousServiceType: customer.previousServiceType || "", previousServiceDate: toDateInputValue(customer.previousServiceDate), previousServiceNote: customer.previousServiceNote || "" });
+    }).catch(() => toast.error(t("common.error"))).finally(() => setLoading(false));
+  }, [id, t]);
 
   function validate() {
     const e: Record<string, string> = {};
@@ -55,22 +73,26 @@ export default function SchedAddCustomer() {
         name, phone, secondaryPhone, maintenanceCycle, maintenanceFrequency, notes,
         previousServiceType, previousServiceDate, previousServiceNote } = form;
 
-      await api.post("/customers", {
+      const payload = {
         name, phone, secondaryPhone: secondaryPhone.trim() || undefined,
-        previousServiceType: previousServiceType || undefined,
-        previousServiceDate: previousServiceDate ? (dateOnlyToApiDate(previousServiceDate) ?? undefined) : undefined,
-        previousServiceNote: previousServiceNote.trim() || undefined,
+        ...(isEditing ? { secondaryPhone: secondaryPhone.trim() } : {}),
+        previousServiceType: isEditing ? previousServiceType : previousServiceType || undefined,
+        previousServiceDate: previousServiceDate ? (dateOnlyToApiDate(previousServiceDate) ?? undefined) : isEditing ? "" : undefined,
+        previousServiceNote: isEditing ? previousServiceNote.trim() : previousServiceNote.trim() || undefined,
         maintenanceCycle,
         maintenanceFrequency: Number(maintenanceFrequency),
-        notes: notes || undefined,
+        notes: isEditing ? notes : notes || undefined,
+        ...(isEditing ? { version, [INSTALL_DATE_FIELD]: installDate ? (dateOnlyToApiDate(installDate) ?? "") : "" } : {}),
         address: {
           city, district, street,
-          postalCode: postalCode || undefined,
-          buildingNo: buildingNo || undefined,
-          floorNo: floorNo || undefined,
-          apartmentNo: apartmentNo || undefined,
+          postalCode: isEditing ? postalCode : postalCode || undefined,
+          buildingNo: isEditing ? buildingNo : buildingNo || undefined,
+          floorNo: isEditing ? floorNo : floorNo || undefined,
+          apartmentNo: isEditing ? apartmentNo : apartmentNo || undefined,
         },
-      });
+      };
+      if (isEditing) await api.put(`/customers/${id}`, payload);
+      else await api.post("/customers", payload);
       toast.success(t("customers.saved"));
       navigate("/scheduling/customers");
     } catch (err: any) {
@@ -91,7 +113,7 @@ export default function SchedAddCustomer() {
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-4">
         <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700">← {t("common.back")}</button>
-        <h2 className="text-lg font-semibold">{t("customers.add")}</h2>
+        <h2 className="text-lg font-semibold">{isEditing ? t("customers.edit") : t("customers.add")}</h2>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-4">
@@ -102,6 +124,7 @@ export default function SchedAddCustomer() {
         <div className="grid grid-cols-2 gap-4">
           {field("secondaryPhone", t("customers.secondaryPhone"))}
         </div>
+        {isEditing && <div><label className="block text-sm font-medium mb-1">{t(["reports", "installation" + "Date"].join("."))}</label><input type="date" lang="en-GB" dir="ltr" value={installDate} onChange={event => setInstallDate(event.target.value)} className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" /></div>}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1 flex items-center gap-1">

@@ -64,13 +64,13 @@ function apptFields(a: any) {
 }
 
 // Routes an appointment:created event exactly the way GET /appointments already filters
-// visibility: SCHEDULING never sees urgent or scheduling-hidden appointments; a technician
+// visibility: SCHEDULING only sees scheduling-visible appointments; a technician
 // only sees their own assignment or the shared unassigned pool (never another technician's
 // pre-assigned job), and never a Scheduling-exported appointment still pending Admin
 // approval (Modification #5 -- visibleToTechnician).
 function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToScheduling: boolean) {
   emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-  if (!isUrgent && visibleToScheduling) {
+  if (visibleToScheduling) {
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
   }
   if (appt.visibleToTechnician) {
@@ -108,8 +108,8 @@ router.get('/', async (req: AuthRequest, res, next) => {
 
     if (req.user!.role === 'SCHEDULING') {
       where.visibleToScheduling = true;
-      // Scheduling never sees urgent appointments regardless of query params
-      where.isUrgent = false;
+      // Approved urgent appointments use this same visibility gate; hidden
+      // urgent work remains Administration/Technician-only until approval.
     }
     if (req.user!.role === 'TECHNICIAN') {
       // Modification #5: a Scheduling-exported appointment stays hidden from every
@@ -183,7 +183,6 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
     const where: any = { id: req.params.id };
     if (req.user!.role === 'SCHEDULING') {
       where.visibleToScheduling = true;
-      where.isUrgent = false;
     }
     if (req.user!.role === 'TECHNICIAN') {
       // Can view urgent appointments (all) or their own/unassigned non-urgent appointments,
@@ -213,8 +212,13 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
     const body = apptSchema.parse(req.body);
     const isAdmin = req.user!.role === 'ADMIN';
     const isUrgent = isAdmin ? (body.isUrgent ?? false) : false;
-    const visibleToScheduling = isAdmin ? (body.visibleToScheduling ?? true) : true;
-    const adminApproved = isAdmin ? (visibleToScheduling ? true : false) : false;
+    // Urgent work is private to Administration and Technicians at creation.
+    // Only the Admin approval action may expose it to Scheduling.
+    const visibleToScheduling = isUrgent ? false : (isAdmin ? (body.visibleToScheduling ?? true) : true);
+    // `adminApproved` is the export-approval state for the technician workflow,
+    // not the Scheduling visibility gate.  Admin-created urgent work is therefore
+    // already approved for technicians even while it remains private to Scheduling.
+    const adminApproved = isAdmin;
 
     if (!isUrgent && !body.customerId) {
       return res.status(400).json({ success: false, message: 'customerId is required for non-urgent appointments' });
@@ -302,7 +306,7 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
       // Customer PII must not leak to TECHNICIAN role via socket -- same rule as
       // routes/customers.ts's own POST /.
       emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CUSTOMER_CREATED, newCust);
-      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, newCust);
+      if (!isUrgent || visibleToScheduling) emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, newCust);
     }
     const dateStr = new Date(body.scheduledDate).toLocaleDateString('en-GB');
     const urgentLabel = isUrgent ? ' [URGENT]' : '';
@@ -377,6 +381,9 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
     const schedSafe = stripCompletionAmount(updated);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, schedSafe);
+    if (updated.isUrgent && updated.customer) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, updated.customer);
+    }
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }
 });

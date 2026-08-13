@@ -7,6 +7,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
+import { HistoryModal } from "../../scheduling/pages/CustomerList";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -96,6 +97,7 @@ export default function Customers() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
   const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [historyModal, setHistoryModal] = useState<any>(null);
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-customers-admin"));
@@ -234,8 +236,8 @@ export default function Customers() {
             </thead>
             <tbody>
               {(data?.data || []).map((c: any) => (
-                <tr key={c.id} className="border-b hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium cursor-pointer text-blue-700 hover:underline" onClick={() => navigate(`/admin/customers/${c.id}`)}>{c.name}</td>
+                <tr key={c.id} onClick={() => navigate(`/admin/customers/${c.id}`)} className="border-b hover:bg-slate-50 cursor-pointer">
+                  <td className="px-4 py-3 font-medium text-blue-700">{c.name}</td>
                   <td className="px-4 py-3">{c.phone}</td>
                   <td className="px-4 py-3 text-xs font-medium text-slate-600">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</td>
                   <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap" dir="ltr">
@@ -259,13 +261,15 @@ export default function Customers() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <button onClick={() => toggle.mutate(c.id)} className="text-xs text-slate-500 hover:text-slate-700">{t("customers.toggleActive")}</button>
-                      <button onClick={() => {
+                      <button onClick={event => { event.stopPropagation(); toggle.mutate(c.id); }} className="text-xs text-slate-500 hover:text-slate-700">{t("customers.toggleActive")}</button>
+                      <button onClick={event => { event.stopPropagation(); navigate(`/admin/customers/${c.id}/edit`); }} className="text-xs text-blue-600 hover:text-blue-800">{t("customers.edit")}</button>
+                      <button onClick={event => { event.stopPropagation(); setHistoryModal(c); }} className="text-xs text-slate-600 hover:text-slate-800">📋 {t("scheduling.viewHistory")}</button>
+                      <button onClick={event => { event.stopPropagation();
                         exportCustomerPdf(c, isAr, t)
                           .then(fp => toast.success(`${t("reports.savedTo")}: ${fp}`))
                           .catch(() => toast.error(t("common.error")));
                       }} className="text-xs text-blue-600 hover:text-blue-800">📄</button>
-                      <button onClick={() => setDeleteTarget({ id: c.id, name: c.name })}
+                      <button onClick={event => { event.stopPropagation(); setDeleteTarget({ id: c.id, name: c.name }); }}
                         className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-0.5 rounded hover:bg-red-50">
                         {t("common.delete")}
                       </button>
@@ -285,6 +289,8 @@ export default function Customers() {
           <button disabled={page * 20 >= data.meta.total} onClick={() => setPage(p => p+1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">›</button>
         </div>
       )}
+
+      {historyModal && <HistoryModal customer={historyModal} onClose={() => setHistoryModal(null)} apiClient={api} />}
 
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">

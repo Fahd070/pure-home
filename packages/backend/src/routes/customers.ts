@@ -11,6 +11,7 @@ import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransac
 import { stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 import { computeNextMaintenanceDate } from '../services/maintenanceSchedule.service';
+import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 
 const router = Router();
 router.use(authenticate);
@@ -147,14 +148,18 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
   try {
     const { search = '', page = '1', limit = '20', active, includeSchedule } = req.query as any;
     const safeLimit = Math.min(parseInt(limit) || 20, 100);
-    const where: any = {};
+    let where: any = {};
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }, { secondaryPhone: { contains: search } }];
     if (active !== undefined) where.isActive = active === 'true';
+    if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
     const total = await prisma.customer.count({ where });
 
     const includeOpts: any = { address: true };
     if (includeSchedule === 'true') {
-      includeOpts.appointments = { orderBy: { scheduledDate: 'desc' as const } };
+      includeOpts.appointments = {
+        include: { urgentVisitRecord: { include: { submittedBy: { select: { id: true, name: true } } } } },
+        orderBy: { scheduledDate: 'desc' as const },
+      };
     }
 
     let customers = await prisma.customer.findMany({
@@ -197,9 +202,21 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
 
 router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({
-      where: { id: req.params.id },
-      include: { address: true, appointments: { include: { technician: { select: { id: true, name: true } } }, orderBy: { scheduledDate: 'desc' }, take: 10 } },
+    const customer = await prisma.customer.findFirst({
+      where: req.user!.role === 'SCHEDULING'
+        ? applySchedulingCustomerVisibility({ id: req.params.id })
+        : { id: req.params.id },
+      include: {
+        address: true,
+        appointments: {
+          include: {
+            technician: { select: { id: true, name: true } },
+            urgentVisitRecord: { include: { submittedBy: { select: { id: true, name: true } } } },
+          },
+          orderBy: { scheduledDate: 'desc' },
+          take: 10,
+        },
+      },
     });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
     // Modification #6: completionAmount is private to ADMIN/TECHNICIAN -- this is
@@ -220,9 +237,14 @@ router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
 // Reuses the existing field -- no new note storage. Only the minimal fields the
 // UI needs are selected; completionAmount/completionPaymentMethod are never
 // touched here, so there is nothing to strip.
-router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), async (req, res, next) => {
+router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const customer = await prisma.customer.findFirst({
+      where: req.user!.role === 'SCHEDULING'
+        ? applySchedulingCustomerVisibility({ id: req.params.id })
+        : { id: req.params.id },
+      select: { id: true },
+    });
     if (!customer) return res.status(404).json({ success: false, message: 'Not found' });
 
     // A handful of the most recent completed appointments, newest first. Most of

@@ -33,6 +33,20 @@ export default function AppointmentAcceptance() {
     onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.approveExportError")),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/appointments/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pending-export-approval"] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
+      toast.success(t("dashboard.deleted"));
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
+  });
+
+  const confirmDelete = (id: string) => {
+    if (window.confirm(t("dashboard.deleteConfirm"))) deleteMutation.mutate(id);
+  };
+
   // appointment:status: Modification #5's export-to-technicians/approve-export
   // actions on an existing appointment (still relevant for any legacy
   // appointment created before the approval-flow fix below). appointment:created:
@@ -44,7 +58,8 @@ export default function AppointmentAcceptance() {
     const refresh = () => qc.invalidateQueries({ queryKey: ["pending-export-approval"] });
     socket.on("appointment:status", refresh);
     socket.on("appointment:created", refresh);
-    return () => { socket.off("appointment:status", refresh); socket.off("appointment:created", refresh); };
+    socket.on("appointment:deleted", refresh);
+    return () => { socket.off("appointment:status", refresh); socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh); };
   }, [socket, qc]);
 
   const appointments: any[] = data || [];
@@ -71,12 +86,14 @@ export default function AppointmentAcceptance() {
                   <th className="text-start px-4 py-3">{t("appointments.technician")}</th>
                   <th className="text-start px-4 py-3">{t("common.notes")}</th>
                   <th className="text-start px-4 py-3">{t("appointments.approveExport")}</th>
+                  <th className="text-start px-4 py-3">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {appointments.map((a: any) => {
                   const addr = a.customer?.address;
                   const approving = approveMutation.isPending && approveMutation.variables === a.id;
+                  const deleting = deleteMutation.isPending && deleteMutation.variables === a.id;
                   return (
                     <tr key={a.id} className="border-b hover:bg-slate-50">
                       <td className="px-4 py-3">
@@ -100,6 +117,14 @@ export default function AppointmentAcceptance() {
                           disabled={approving}
                           className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 transition-colors">
                           {approving ? t("common.loading") : t("appointments.approveExport")}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => confirmDelete(a.id)}
+                          disabled={deleting}
+                          className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 whitespace-nowrap disabled:opacity-50 transition-colors">
+                          {deleting ? t("common.loading") : t("dashboard.deleteRecord")}
                         </button>
                       </td>
                     </tr>
