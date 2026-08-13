@@ -37,7 +37,7 @@ describe('Admin Dashboard: realtime refresh + query invalidation on deletion (un
 
   it("the drill-down modal's delete button targets the fixed DELETE /dashboard/:type/:id route", () => {
     expect(adminDashboardSrc).toMatch(/api\.delete\(`\/dashboard\/\$\{type\}\/\$\{id\}`\)/);
-    expect(adminDashboardSrc).toMatch(/qc\.invalidateQueries\(\{ queryKey: \[endpoint\] \}\)/);
+    expect(adminDashboardSrc).toMatch(/qc\.invalidateQueries\(\{ queryKey: \["dashboard-drill", endpoint\] \}\)/);
   });
 });
 

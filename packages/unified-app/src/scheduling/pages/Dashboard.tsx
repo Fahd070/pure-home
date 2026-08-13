@@ -10,13 +10,13 @@ import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNote
 import CallReportModal from "../components/CallReportModal";
 import { toDateInputValue, dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
 
-const APPT_ENDPOINTS = ["this-month","next-month","overdue","today","urgent"];
-const CUSTOMER_ENDPOINTS = ["customers-list","completed-maintenance","postponed"];
+const APPT_ENDPOINTS = ["completed-maintenance","this-month","next-month","postponed","overdue","today","urgent"];
+const CUSTOMER_ENDPOINTS = ["customers-list"];
 
 function StatCard({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
   const { t } = useTranslation();
   return (
-    <button onClick={onClick} className={`bg-white rounded-xl p-4 border-s-4 shadow-sm text-start hover:shadow-md hover:-translate-y-0.5 transition-all w-full ${color}`}>
+    <button type="button" onClick={onClick} className={`bg-white rounded-xl p-4 border-s-4 shadow-sm text-start hover:shadow-md hover:-translate-y-0.5 transition-all w-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${color}`}>
       <p className="text-2xl font-bold text-slate-800">{value ?? "—"}</p>
       <p className="text-slate-500 text-sm mt-1">{label}</p>
       <p className="text-xs text-blue-500 mt-2">{t("dashboard.clickToView")}</p>
@@ -250,7 +250,12 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "زيارة عاجلة";
                     const displayPhone = a.customer?.phone || "—";
                     return (
-                      <tr key={a.id} className="border-b hover:bg-slate-50">
+                      <tr
+                        key={a.id}
+                        onClick={a.customer ? () => navigate(`/scheduling/customers/${a.customer.id}`) : undefined}
+                        onKeyDown={a.customer ? event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/scheduling/customers/${a.customer.id}`); } } : undefined}
+                        tabIndex={a.customer ? 0 : undefined}
+                        className={`border-b hover:bg-slate-50 ${a.customer ? "cursor-pointer focus:outline-none focus:bg-green-50" : ""}`}>
                         <td className="px-4 py-2">{displayName}</td>
                         <td className="px-4 py-2 text-slate-500">{displayPhone}</td>
                         <td className="px-4 py-2" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
@@ -337,6 +342,7 @@ export default function SchedDashboard() {
     const refresh = () => {
       qc.invalidateQueries({ queryKey: ["sched-dashboard-stats"] });
       qc.invalidateQueries({ queryKey: ["sched-dashboard-activity"] });
+      qc.invalidateQueries({ queryKey: ["sched-drill"] });
     };
     socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh);
     socket.on("appointment:status", refresh); socket.on("appointment:completed", refresh); socket.on("appointment:postponed", refresh);
@@ -363,7 +369,6 @@ export default function SchedDashboard() {
   // Admin Dashboard exactly (both consume the same GET /dashboard/stats).
   const cards = [
     { label: t("dashboard.customers"),           key: "total",          endpoint: "customers-list",        color: "border-blue-500" },
-    { label: t("dashboard.scheduledCustomers"),  key: "scheduled",      endpoint: "scheduled",             color: "border-teal-500" },
     { label: t("dashboard.completedMaintenance"), key: "completed",      endpoint: "completed-maintenance", color: "border-green-500" },
     { label: t("dashboard.thisMonth"),            key: "thisMonth",      endpoint: "this-month",            color: "border-indigo-500" },
     { label: t("dashboard.nextMonth"),            key: "nextMonth",      endpoint: "next-month",            color: "border-purple-500" },

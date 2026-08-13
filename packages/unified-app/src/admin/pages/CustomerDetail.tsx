@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
+import type { AxiosInstance } from "axios";
 
 function formatCycle(cycle: string, freq: number, isAr: boolean) {
   const n = Number(freq) || 1;
@@ -15,12 +16,12 @@ function formatCycle(cycle: string, freq: number, isAr: boolean) {
   return cycle;
 }
 
-export default function CustomerDetail() {
+export default function CustomerDetail({ apiClient = api, queryScope = "admin" }: { apiClient?: AxiosInstance; queryScope?: "admin" | "scheduling" }) {
   const { id } = useParams<{ id: string }>();
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const navigate = useNavigate();
-  const { data, isLoading } = useQuery({ queryKey: ["customer", id], queryFn: () => api.get(`/customers/${id}`).then(r => r.data.data) });
+  const { data, isLoading } = useQuery({ queryKey: ["customer", queryScope, id], queryFn: () => apiClient.get(`/customers/${id}`).then(r => r.data.data) });
 
   if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;
   if (!data) return <p className="text-center py-12">{t("common.error")}</p>;

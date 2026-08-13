@@ -39,7 +39,6 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
         ...rest,
         completedTasks: completedTasksList.length,
         postponedTasks: postponedTasksList.length,
-        pendingTasks: postponedTasksList.length,
         completedTasksList,
         postponedTasksList,
       };

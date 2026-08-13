@@ -335,10 +335,6 @@ export default function Technicians() {
                   <p className="text-xs text-orange-400 mt-0.5">{isAr ? "انقر للتفاصيل" : "click for details"}</p>
                 )}
               </button>
-              <div className="col-span-2 bg-yellow-50 rounded-lg p-3">
-                <p className="text-xl font-bold text-yellow-700">{tech.pendingTasks || 0}</p>
-                <p className="text-xs text-yellow-600">{t("technicians.pendingTasks")}</p>
-              </div>
             </div>
           </div>
         ))}

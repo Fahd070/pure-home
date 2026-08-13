@@ -23,14 +23,15 @@ describe('Part A: Admin Technicians page layout (design only)', () => {
     expect(adminTechniciansSrc).toMatch(/grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5/);
     expect(adminTechniciansSrc).toMatch(/bg-white rounded-xl shadow-sm p-6/);
   });
-  it('3. technician data/actions are byte-for-byte unchanged: same click handlers, same count fields, same API query', () => {
+  it('3. technician data/actions retain completed and postponed summaries while removing pending', () => {
     expect(adminTechniciansSrc).toMatch(/queryKey: \["technicians-detail"\]/);
     expect(adminTechniciansSrc).toMatch(/api\.get\("\/technicians"\)/);
     expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => \(tech\.completedTasksList\?\.length \|\| 0\) > 0 \? setModal\(\{ tech, type: "completed" \}\) : undefined\}/);
     expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => \(tech\.postponedTasksList\?\.length \|\| 0\) > 0 \? setModal\(\{ tech, type: "postponed" \}\) : undefined\}/);
     expect(adminTechniciansSrc).toMatch(/\{tech\.completedTasks \|\| 0\}/);
     expect(adminTechniciansSrc).toMatch(/\{tech\.postponedTasks \|\| 0\}/);
-    expect(adminTechniciansSrc).toMatch(/\{tech\.pendingTasks \|\| 0\}/);
+    expect(adminTechniciansSrc).not.toMatch(/tech\.pendingTasks/);
+    expect(adminTechniciansSrc).not.toMatch(/technicians\.pendingTasks/);
   });
   it('4/5. the new wrapper uses no direction-specific (LTR-only) styling -- mx-auto centers identically in Arabic RTL and English LTR', () => {
     const wrapperMatch = adminTechniciansSrc.match(/\{\/\* Technician cards grid[\s\S]*?<div className="max-w-5xl mx-auto">/)?.[0] || '';
