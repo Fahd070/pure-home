@@ -72,6 +72,15 @@ jobs:
           echo "Resolved: $(psql --version)"
 
       # ── Create the backup ────────────────────────────────────────────────────
+      # NOTE: despite the secret's name, it is expected to hold the Supabase
+      # Session Pooler URI (port 5432), not the IPv6-only Direct Connection --
+      # GitHub Actions runners cannot reach the direct host ("Network is
+      # unreachable"). The pooler enforces a small per-project session limit
+      # (pool_size), so pg_dump can transiently fail with EMAXCONNSESSION
+      # ("max clients reached in session mode") whenever the pool is briefly
+      # saturated by other connections. That failure clears on its own once a
+      # slot frees up, so this step retries with a bounded, backing-off delay
+      # instead of failing the whole workflow on the first collision.
       - name: Create pg_dump
         env:
           SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
@@ -84,22 +93,62 @@ jobs:
           TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
           FILENAME="wfm-backup-${TIMESTAMP}.dump"
 
-          # WFM owns every application table exclusively in the "public" schema
-          # (confirmed: no @@schema/multi-schema use in prisma/schema.prisma, no
-          # raw SQL referencing any other schema anywhere in the backend, and WFM
-          # does not use Supabase Vault). Scoping to --schema=public is a positive
-          # inclusion of exactly what WFM owns, and excludes Supabase-managed
-          # platform internals (auth, storage, realtime, vault/supabase_vault,
-          # extensions, etc.) that a standalone restore-verification database
-          # cannot and should not attempt to recreate.
-          pg_dump \
-            "$SUPABASE_DIRECT_URL" \
-            --format=custom \
-            --no-acl \
-            --no-owner \
-            --compress=9 \
-            --schema=public \
-            --file="${FILENAME}"
+          MAX_ATTEMPTS=5
+          BACKOFFS=(10 20 30 45) # seconds between attempts; 4 gaps across 5 attempts
+
+          ATTEMPT=1
+          while :; do
+            echo "::notice::pg_dump attempt ${ATTEMPT}/${MAX_ATTEMPTS}..."
+            ERR_LOG="$(mktemp)"
+
+            # WFM owns every application table exclusively in the "public" schema
+            # (confirmed: no @@schema/multi-schema use in prisma/schema.prisma, no
+            # raw SQL referencing any other schema anywhere in the backend, and WFM
+            # does not use Supabase Vault). Scoping to --schema=public is a positive
+            # inclusion of exactly what WFM owns, and excludes Supabase-managed
+            # platform internals (auth, storage, realtime, vault/supabase_vault,
+            # extensions, etc.) that a standalone restore-verification database
+            # cannot and should not attempt to recreate.
+            if pg_dump \
+              "$SUPABASE_DIRECT_URL" \
+              --format=custom \
+              --no-acl \
+              --no-owner \
+              --compress=9 \
+              --schema=public \
+              --file="${FILENAME}" 2> "$ERR_LOG"; then
+              rm -f "$ERR_LOG"
+              break
+            fi
+
+            # Best-effort classification for the log only -- retry/exit behavior
+            # never depends on this, it's purely to help a human triage faster.
+            if grep -qiE 'max clients|too many clients|EMAXCONNSESSION|remaining connection slots' "$ERR_LOG"; then
+              REASON="temporary session-pool saturation"
+            elif grep -qiE 'password authentication failed|role .* does not exist' "$ERR_LOG"; then
+              REASON="authentication failure"
+            elif grep -qiE 'network is unreachable|could not translate host name|temporary failure in name resolution|connection timed out' "$ERR_LOG"; then
+              REASON="DNS/network failure"
+            else
+              REASON="pg_dump command failure"
+            fi
+
+            # Show pg_dump's diagnostic output with any embedded connection string
+            # redacted, so the failure is debuggable without ever logging the secret.
+            echo "pg_dump stderr (connection string redacted):"
+            sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' "$ERR_LOG"
+            rm -f "$ERR_LOG"
+
+            if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+              echo "::error::pg_dump failed after ${MAX_ATTEMPTS} attempts (last failure: ${REASON}). Backup NOT created."
+              exit 1
+            fi
+
+            WAIT="${BACKOFFS[$((ATTEMPT-1))]}"
+            echo "pg_dump attempt ${ATTEMPT} failed (${REASON}). Retrying in ${WAIT}s..."
+            sleep "$WAIT"
+            ATTEMPT=$((ATTEMPT+1))
+          done
 
           echo "BACKUP_FILE=${FILENAME}" >> "$GITHUB_ENV"
           echo "BACKUP_TIMESTAMP=${TIMESTAMP}"  >> "$GITHUB_ENV"
