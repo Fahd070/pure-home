@@ -141,9 +141,23 @@ export default function Sidebar() {
   }, []);
 
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-admin"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
-  const { data: activityData } = useQuery({ queryKey: ["activity-feed"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
+  // Shares the ["activity-feed"] cache entry with admin/pages/Messages.tsx (the
+  // System Activity page), which also reads GET /messages under the same key --
+  // both MUST resolve to the identical response shape ({ data, meta }), or
+  // whichever one populates the cache first (this Sidebar mounts on every admin
+  // route, so it usually wins) silently corrupts what the other reads. This
+  // previously returned a bare array here while Messages.tsx expected
+  // `{ data: [...], meta: { total } }` and read `.data`, so `.data` on this
+  // array was `undefined` -- Messages.tsx rendered its "no activity" empty
+  // state despite real audit log entries existing on the server.
+  const { data: activityData } = useQuery({
+    queryKey: ["activity-feed"],
+    queryFn: () => api.get("/messages").then(r => r.data),
+    staleTime: 30000,
+    initialData: { data: [], meta: { total: 0 } },
+  });
   const lastSeenMessages = Number(localStorage.getItem("msg-last-seen-admin") || 0);
-  const newMessages = (activityData as any[]).filter((log: any) => new Date(log.createdAt).getTime() > lastSeenMessages).length;
+  const newMessages = ((activityData?.data || []) as any[]).filter((log: any) => new Date(log.createdAt).getTime() > lastSeenMessages).length;
 
   const badges: Record<string, number> = {
     notifications: notifData as number,
