@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-d
 import { useAppStore } from "./store/appStore";
 import AppTitleBar from "./components/AppTitleBar";
 import UpdateBanner from "./components/UpdateBanner";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import DepartmentSelector from "./pages/DepartmentSelector";
 import CodeEntry from "./pages/CodeEntry";
@@ -132,8 +133,10 @@ function AppShell() {
 
 export default function App() {
   return (
-    <HashRouter>
-      <AppShell />
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <AppShell />
+      </HashRouter>
+    </ErrorBoundary>
   );
 }

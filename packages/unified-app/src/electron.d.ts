@@ -16,6 +16,7 @@ declare global {
         onAvailable: (cb: (info: { version: string }) => void) => () => void;
         onProgress: (cb: (data: { percent: number }) => void) => () => void;
         onDownloaded: (cb: (info: { version: string }) => void) => () => void;
+        onError: (cb: (data: { message: string }) => void) => () => void;
         download: () => Promise<void>;
         install: () => Promise<void>;
       };

@@ -3,14 +3,30 @@ import { join } from "path";
 import { writeFileSync } from "fs";
 import Store from "electron-store";
 import { autoUpdater } from "electron-updater";
+import log from "electron-log/main";
+import { sanitizeUpdaterError, formatUpdaterErrorLogLine } from "./updaterErrorSanitizer";
 
 const store = new Store();
 nativeTheme.themeSource = "light";
 
-// No console noise from updater; errors are silenced (app runs on LAN, may have no internet)
-autoUpdater.logger = null;
-autoUpdater.autoDownload = true;          // download silently in background
-autoUpdater.autoInstallOnAppQuit = true;  // install automatically when the user closes the app
+// Updater events/errors are persisted locally (electron-log's default per-user
+// log file) instead of being silenced. File captures routine state
+// transitions too (useful for diagnosing "occasional update errors" after the
+// fact); console stays quiet for routine events and only surfaces warnings/
+// errors, preserving the original intent of not spamming console output on
+// LAN-only deployments that may have no internet.
+log.initialize();
+log.transports.file.level = "info";
+log.transports.console.level = "warn";
+
+autoUpdater.logger = log;
+autoUpdater.autoDownload = true;           // download silently in background
+autoUpdater.autoInstallOnAppQuit = false;  // never install just because the window was closed —
+                                            // install only happens via the explicit "Restart & Update"
+                                            // button (ipcMain "update:install" below). A silent install
+                                            // triggered by closing the app could collide with the
+                                            // requireAdministrator/perMachine UAC prompt when nobody is
+                                            // present to approve it (e.g. app closed over a remote session).
 
 const ALLOWED_STORE_KEYS = new Set(["wfm-unified", "serverUrl", "language", "theme"]);
 
@@ -19,28 +35,66 @@ let mainWindow: BrowserWindow | null = null;
 // ─── Auto-updater ────────────────────────────────────────────────────────────
 
 function setupUpdater(): void {
+  log.info(`[updater] app version ${app.getVersion()} — starting update check lifecycle`);
+
+  autoUpdater.on("checking-for-update", () => {
+    log.info("[updater] checking for update...");
+  });
+
   autoUpdater.on("update-available", (info) => {
+    log.info(`[updater] update available: v${info.version}`);
     mainWindow?.webContents.send("update:available", { version: info.version });
   });
 
+  autoUpdater.on("update-not-available", (info) => {
+    log.info(`[updater] no update available (current: v${info.version})`);
+  });
+
   autoUpdater.on("download-progress", (p) => {
-    mainWindow?.webContents.send("update:progress", { percent: Math.round(p.percent) });
+    // Rounded to the nearest 10% so this doesn't flood the log on a slow link —
+    // renderer still gets every event for a smooth progress bar.
+    const percent = Math.round(p.percent);
+    if (percent % 10 === 0) log.info(`[updater] download progress: ${percent}%`);
+    mainWindow?.webContents.send("update:progress", { percent });
   });
 
   autoUpdater.on("update-downloaded", (info) => {
+    log.info(`[updater] update downloaded and ready: v${info.version}`);
     mainWindow?.webContents.send("update:downloaded", { version: info.version });
   });
 
-  autoUpdater.on("error", () => {
-    // Silently ignore — no internet on LAN-only deployments
+  autoUpdater.on("error", (err) => {
+    // Only a sanitized, single-line summary is ever persisted (message/name/
+    // code) -- never the raw Error object or its stack, which could contain
+    // local filesystem paths or a download URL with a signed/auth query
+    // parameter. See updaterErrorSanitizer.ts.
+    log.error(formatUpdaterErrorLogLine("update check/download", err));
+    // Renderer gets the same sanitized message only — never a raw stack
+    // trace, filesystem path, or token. The app keeps running either way;
+    // a failed update check/download is never fatal.
+    mainWindow?.webContents.send("update:error", { message: sanitizeUpdaterError(err) });
   });
 
   ipcMain.handle("update:download", () => autoUpdater.downloadUpdate());
-  ipcMain.handle("update:install", () => autoUpdater.quitAndInstall(false, true));
+  ipcMain.handle("update:install", () => {
+    log.info("[updater] install requested explicitly by user");
+    return autoUpdater.quitAndInstall(false, true);
+  });
 
-  // Silent check 5 s after launch so the UI is fully ready before any banner shows
+  // One check, 5 s after launch so the UI is fully ready before any banner
+  // shows. This does NOT retry on its own -- there is no polling loop here.
+  // The next check happens the next time the app starts (see
+  // UpdateBanner.tsx's error-phase copy, which deliberately does not promise
+  // an automatic retry).
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {});
+    autoUpdater.checkForUpdates().catch((err) => {
+      // checkForUpdates() already emits "error" above in the normal case; this
+      // catch only guards against a network/DNS failure rejecting the promise
+      // itself (e.g. no internet on a LAN-only deployment) so it can never
+      // reach an unhandled rejection. Non-fatal: the app continues normally.
+      log.warn(formatUpdaterErrorLogLine("checkForUpdates()", err));
+      mainWindow?.webContents.send("update:error", { message: sanitizeUpdaterError(err) });
+    });
   }, 5000);
 }
 

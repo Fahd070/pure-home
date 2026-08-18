@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { io, Socket } from "socket.io-client";
+import { Socket } from "socket.io-client";
 import { useAppStore } from "../../store/appStore";
+import { getOrCreateSocket, SocketState } from "../../hooks/socketConnection";
 
-let adminSocket: Socket | null = null;
+const adminSocketState: SocketState = { socket: null, token: null };
 
 export function useSocket() {
   const { adminAuth, serverUrl } = useAppStore();
@@ -10,11 +11,8 @@ export function useSocket() {
   const ref = useRef<Socket | null>(null);
   useEffect(() => {
     if (!token) return;
-    if (!adminSocket || !adminSocket.connected) {
-      adminSocket = io(serverUrl, { auth: { token }, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 2000 });
-    }
-    ref.current = adminSocket;
+    ref.current = getOrCreateSocket(adminSocketState, token, serverUrl);
   }, [token, serverUrl]);
   return ref.current;
 }
-export function getSocket() { return adminSocket; }
+export function getSocket() { return adminSocketState.socket; }
