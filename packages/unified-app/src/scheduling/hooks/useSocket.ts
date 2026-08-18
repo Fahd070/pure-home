@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { io, Socket } from "socket.io-client";
+import { Socket } from "socket.io-client";
 import { useAppStore } from "../../store/appStore";
+import { getOrCreateSocket, SocketState } from "../../hooks/socketConnection";
 
-let schedSocket: Socket | null = null;
+const schedSocketState: SocketState = { socket: null, token: null };
 
 export function useSocket() {
   const { schedulingAuth, serverUrl } = useAppStore();
@@ -10,11 +11,8 @@ export function useSocket() {
   const ref = useRef<Socket | null>(null);
   useEffect(() => {
     if (!token) return;
-    if (!schedSocket || !schedSocket.connected) {
-      schedSocket = io(serverUrl, { auth: { token }, reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 2000 });
-    }
-    ref.current = schedSocket;
+    ref.current = getOrCreateSocket(schedSocketState, token, serverUrl);
   }, [token, serverUrl]);
   return ref.current;
 }
-export function getSocket() { return schedSocket; }
+export function getSocket() { return schedSocketState.socket; }
