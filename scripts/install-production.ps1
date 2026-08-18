@@ -40,7 +40,6 @@ $stagingDir    = "$dataDir\updates\staging"
 $backupDir     = "$dataDir\updates\backup"
 $backendDir    = Join-Path $repoRoot "packages\backend"
 $watchdogScript = Join-Path $scriptRoot "watchdog.ps1"
-$updateScript   = Join-Path $scriptRoot "update-manager.ps1"
 
 Write-Host ""
 Write-Host "============================================================"
@@ -252,26 +251,21 @@ Register-ScheduledTask -TaskName "WFM Watchdog" -Action $watchdogAction -Trigger
     -Settings $watchdogSettings -Principal $watchdogPrincipal -Force | Out-Null
 Write-Host "  [OK] WFM Watchdog     -- runs every 60 seconds, self-heals backend + Tailscale"
 
-# Task 3: WFM Update Manager (runs every 6 hours)
-Unregister-ScheduledTask -TaskName "WFM Update Manager" -Confirm:$false -ErrorAction SilentlyContinue
-
-$updateAction = New-ScheduledTaskAction `
-    -Execute $psExe `
-    -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$updateScript`""
-# Trigger: start at 03:00 today, repeat every 6 hours indefinitely
-$updateTrigger = New-ScheduledTaskTrigger `
-    -Once `
-    -At "03:00" `
-    -RepetitionInterval (New-TimeSpan -Hours 6) `
-    -RepetitionDuration (New-TimeSpan -Days 3650)
-$updateSettings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `
-    -StartWhenAvailable `
-    -MultipleInstances IgnoreNew
-$updatePrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-Register-ScheduledTask -TaskName "WFM Update Manager" -Action $updateAction -Trigger $updateTrigger `
-    -Settings $updateSettings -Principal $updatePrincipal -Force | Out-Null
-Write-Host "  [OK] WFM Update Manager -- checks GitHub every 6 hours, applies updates silently"
+# Task 3: WFM Update Manager -- DEPRECATED, no longer registered.
+# electron-updater (running inside the Pure Home desktop app itself) is now the
+# single canonical update mechanism -- see docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md.
+# A separate 6-hour scheduled task that could force-kill the shared backend and
+# silently install updates behind the in-app updater's back is exactly the
+# collision that caused intermittent runtime errors for employees actively
+# using the app. If an earlier run of this installer already registered it on
+# this machine, remove it now so re-running the installer also cleans up.
+$legacyUpdateTask = Get-ScheduledTask -TaskName "WFM Update Manager" -ErrorAction SilentlyContinue
+if ($legacyUpdateTask) {
+    Unregister-ScheduledTask -TaskName "WFM Update Manager" -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host "  [OK] WFM Update Manager -- removed legacy scheduled task (deprecated; see docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md)"
+} else {
+    Write-Host "  [OK] WFM Update Manager -- not registered (deprecated; desktop updates are handled by the in-app updater)"
+}
 
 # --- Start backend now ---
 Write-Host ""
@@ -323,11 +317,13 @@ Write-Host ""
 Write-Host "  Active scheduled tasks:"
 Write-Host "    'WFM Backend'       -- backend server (auto-start, auto-restart)"
 Write-Host "    'WFM Watchdog'      -- self-healing monitor (every 60 s)"
-Write-Host "    'WFM Update Manager'-- auto-update from GitHub (every 6 h)"
+Write-Host ""
+Write-Host "  Desktop app updates are handled by the in-app updater (electron-updater),"
+Write-Host "  not by a scheduled task. The legacy 'WFM Update Manager' task is no longer"
+Write-Host "  registered by this installer; see docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md."
 Write-Host ""
 Write-Host "  Logs:"
 Write-Host "    Watchdog : $dataDir\logs\watchdog.log"
-Write-Host "    Updates  : $dataDir\logs\updates.log"
 Write-Host ""
 Write-Host "  To update the Tailscale auth key:"
 Write-Host "    .\scripts\install-production.ps1 -UpdateKeyOnly -TailscaleAuthKey tskey-auth-xxxx"

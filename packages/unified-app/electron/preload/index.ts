@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld("electron", {
       ipcRenderer.on("update:downloaded", handler);
       return () => ipcRenderer.off("update:downloaded", handler);
     },
+    onError: (cb: (data: { message: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { message: string }) => cb(data);
+      ipcRenderer.on("update:error", handler);
+      return () => ipcRenderer.off("update:error", handler);
+    },
     download: () => ipcRenderer.invoke("update:download"),
     install: () => ipcRenderer.invoke("update:install"),
   },

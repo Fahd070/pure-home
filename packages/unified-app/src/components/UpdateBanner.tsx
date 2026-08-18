@@ -5,7 +5,8 @@ type UpdateState =
   | { phase: "idle" }
   | { phase: "available"; version: string }
   | { phase: "downloading"; percent: number }
-  | { phase: "ready"; version: string };
+  | { phase: "ready"; version: string }
+  | { phase: "error"; message: string };
 
 export default function UpdateBanner() {
   const { i18n } = useTranslation();
@@ -30,11 +31,18 @@ export default function UpdateBanner() {
     const offDownloaded = updater.onDownloaded((info) =>
       setState({ phase: "ready", version: info.version })
     );
+    // A failed check/download is never fatal to the app — this only ever
+    // shows a short, dismissible, non-blocking notice. Normal app use
+    // continues regardless of update state.
+    const offError = updater.onError((data) =>
+      setState({ phase: "error", message: data.message })
+    );
 
     return () => {
       offAvailable();
       offProgress();
       offDownloaded();
+      offError();
     };
   }, []);
 
@@ -75,6 +83,25 @@ export default function UpdateBanner() {
             style={{ width: `${state.percent}%` }}
           />
         </div>
+      </div>
+    );
+  }
+
+  if (state.phase === "error") {
+    return (
+      <div className="bg-amber-600 text-white text-xs px-4 py-1.5 flex items-center justify-between select-none shrink-0 z-50">
+        <span className="font-medium">
+          {isAr
+            ? "تعذر التحقق من وجود تحديث. سيتم المحاولة مرة أخرى تلقائيًا — يمكنك الاستمرار في استخدام البرنامج بشكل طبيعي."
+            : "Couldn't check for an update. It will retry automatically — you can keep using the app normally."}
+        </span>
+        <button
+          onClick={() => setDismissed(true)}
+          className="opacity-60 hover:opacity-100 transition-opacity text-base leading-none px-1 ml-3"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
       </div>
     );
   }
