@@ -46,6 +46,20 @@ jobs:
       # lockfile at all ("Dependencies lock file is not found").
       - uses: actions/checkout@v4
 
+      # ── Fail closed before doing any work if the encryption secret is missing ──
+      # Backups are no longer ever uploaded unencrypted (see "Encrypt backup" step
+      # below), so there is no safe fallback here -- if this secret isn't
+      # configured, the workflow must stop now rather than produce a dump it
+      # cannot legally persist.
+      - name: Verify backup encryption secret is configured
+        env:
+          DB_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.DB_BACKUP_ENCRYPTION_PASSPHRASE }}
+        run: |
+          if [ -z "$DB_BACKUP_ENCRYPTION_PASSPHRASE" ]; then
+            echo "::error::DB_BACKUP_ENCRYPTION_PASSPHRASE secret is not set. Add it under Settings → Secrets and variables → Actions before this workflow can run — backup artifacts are never uploaded unencrypted."
+            exit 1
+          fi
+
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update -qq
@@ -179,12 +193,53 @@ jobs:
 
           echo "::notice::Backup integrity OK — ${SIZE_KB} KB, ${OBJECT_COUNT} objects"
 
+      # ── Encrypt before it ever touches storage ───────────────────────────────
+      # The repository is public (GitHub Releases there double as the desktop
+      # updater's distribution channel, so visibility cannot change -- see
+      # docs/DATABASE-BACKUP-RECOVERY.md). On a public repo, Actions artifacts are
+      # downloadable by any authenticated GitHub user, not just collaborators, so
+      # the raw pg_dump (full customer PII) must never be the thing that gets
+      # uploaded. It is encrypted here, immediately after integrity is confirmed,
+      # and only the encrypted file is ever passed to upload-artifact below. The
+      # plaintext dump is used one more time after this (restore verification)
+      # and then deleted; it never leaves this ephemeral runner.
+      - name: Encrypt backup
+        env:
+          DB_BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.DB_BACKUP_ENCRYPTION_PASSPHRASE }}
+        run: |
+          ENCRYPTED_FILE="${{ env.BACKUP_FILE }}.gpg"
+
+          # Passphrase is piped to gpg's stdin (--passphrase-fd 0) via a bash
+          # here-string -- it is never written to a file, never passed as a CLI
+          # argument (so it cannot appear in `ps`/process-list output or in any
+          # argument-echoing log), and this step never echoes it or the dump
+          # contents itself.
+          if ! gpg --batch --yes --symmetric --cipher-algo AES256 \
+               --passphrase-fd 0 \
+               --output "$ENCRYPTED_FILE" \
+               "${{ env.BACKUP_FILE }}" <<< "$DB_BACKUP_ENCRYPTION_PASSPHRASE"; then
+            echo "::error::Backup encryption failed. Refusing to upload the unencrypted dump."
+            rm -f "$ENCRYPTED_FILE"
+            exit 1
+          fi
+
+          if [ ! -s "$ENCRYPTED_FILE" ]; then
+            echo "::error::Encrypted backup file is empty or missing after encryption. Refusing to upload."
+            rm -f "$ENCRYPTED_FILE"
+            exit 1
+          fi
+
+          echo "ENCRYPTED_FILE=${ENCRYPTED_FILE}" >> "$GITHUB_ENV"
+          echo "::notice::Backup encrypted successfully ($(stat -c%s "$ENCRYPTED_FILE") bytes)."
+
       # ── Store as a GitHub Actions artifact (90-day retention) ───────────────
-      - name: Upload backup artifact
+      # Only the encrypted (.gpg) file is ever referenced here -- the plaintext
+      # dump produced above is not an input to this step.
+      - name: Upload encrypted backup artifact
         uses: actions/upload-artifact@v4
         with:
           name: wfm-db-backup-${{ env.BACKUP_TIMESTAMP }}
-          path: ${{ env.BACKUP_FILE }}
+          path: ${{ env.ENCRYPTED_FILE }}
           retention-days: 90
           if-no-files-found: error
 
@@ -211,19 +266,30 @@ jobs:
           RESTORE_TEST_DATABASE_URL: postgresql://postgres:test@localhost:5433/wfm_restore_test
         run: npm run backup:verify -- "$GITHUB_WORKSPACE/${{ env.BACKUP_FILE }}"
 
+      # ── Remove the plaintext dump from the runner ────────────────────────────
+      # Belt-and-suspenders only: the encrypted artifact was already uploaded
+      # above and this ephemeral runner is destroyed at the end of the job
+      # regardless, so the plaintext was never persisted either way. Deleting it
+      # explicitly (rather than relying solely on runner teardown) means it also
+      # isn't sitting on disk for the remaining steps in this job.
+      - name: Remove plaintext dump from the runner
+        if: always()
+        run: rm -f "${{ env.BACKUP_FILE }}"
+
       # ── Print summary to the workflow log ───────────────────────────────────
       - name: Summary
         run: |
-          SIZE_KB=$(( $(stat -c%s "${{ env.BACKUP_FILE }}") / 1024 ))
+          SIZE_KB=$(( $(stat -c%s "${{ env.ENCRYPTED_FILE }}") / 1024 ))
           EXPIRES=$(date -u -d '+90 days' +%Y-%m-%d)
           echo "### Backup complete" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| File | \`${{ env.BACKUP_FILE }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| File | \`${{ env.ENCRYPTED_FILE }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Encryption | AES256 (GPG symmetric) — see docs/DATABASE-BACKUP-RECOVERY.md |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Size | ${SIZE_KB} KB |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Artifact | \`wfm-db-backup-${{ env.BACKUP_TIMESTAMP }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Retention | 90 days |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Expires | ${EXPIRES} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Trigger | ${{ github.event_name }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Restore verified | ✅ Yes — restored into an isolated disposable database and validated |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Restore verified | ✅ Yes — plaintext dump restored into an isolated disposable database and validated *before* being deleted; only the encrypted copy was ever uploaded |" >> "$GITHUB_STEP_SUMMARY"
