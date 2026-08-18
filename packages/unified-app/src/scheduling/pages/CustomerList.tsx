@@ -344,7 +344,7 @@ export default function CustomerList() {
                 <th className="text-start px-4 py-3">{t("common.phone")}</th>
                 <th className="text-start px-4 py-3">{t("customers.maintenanceCycle")}</th>
                 <th className="text-start px-4 py-3">{t("reports.nextMaintenance")}</th>
-                <th className="text-start px-4 py-3">{t("customers.city")}</th>
+                <th className="text-start px-4 py-3">{t("customers.district")}</th>
                 <th className="text-start px-4 py-3">{t("common.actions")}</th>
               </tr>
             </thead>
@@ -364,7 +364,7 @@ export default function CustomerList() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{c.address?.city || "—"}</td>
+                  <td className="px-4 py-3">{c.address?.district || "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button onClick={event => { event.stopPropagation(); setScheduleModal(c); }}

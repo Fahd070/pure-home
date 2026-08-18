@@ -59,6 +59,16 @@ const customerSchema = z.object({
     .default(1),
   notes: z.string().max(2000).optional(),
   installationDate: z.string().optional(),
+  // Optional installation-details section (Admin + Scheduling). Each of the
+  // three fields is independently optional -- unlike previousService* below,
+  // there is no all-or-nothing rule here (the user did not request one).
+  // installationAmount: `.nullable()` lets a request explicitly clear a
+  // previously-set amount (vs. `.optional()` alone, which only means "not
+  // included in this request" -- see the PUT handler's `!== undefined`
+  // partial-update convention used throughout this file).
+  installationNote: z.string().max(2000).optional(),
+  installationAmount: z.number().finite().min(0).nullable().optional(),
+  installationPaymentMethod: z.enum(['CASH', 'BANK_CARD_PERSONAL', 'BANK_CARD_COMMERCIAL']).nullable().optional(),
   // Optional one-time historical service record (see resolvePreviousService
   // below for the all-or-nothing business rule). Loose string types here too,
   // same reasoning as secondaryPhone -- an empty string is a meaningful
@@ -87,7 +97,7 @@ function conflict(res: any, current: number, yours: number) {
 }
 
 function customerFields(c: any) {
-  return { id: c.id, name: c.name, phone: c.phone, secondaryPhone: c.secondaryPhone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version, previousServiceType: c.previousServiceType, previousServiceDate: c.previousServiceDate, previousServiceNote: c.previousServiceNote };
+  return { id: c.id, name: c.name, phone: c.phone, secondaryPhone: c.secondaryPhone, maintenanceCycle: c.maintenanceCycle, maintenanceFrequency: c.maintenanceFrequency, isActive: c.isActive, notes: c.notes, version: c.version, previousServiceType: c.previousServiceType, previousServiceDate: c.previousServiceDate, previousServiceNote: c.previousServiceNote, installationNote: c.installationNote, installationAmount: c.installationAmount, installationPaymentMethod: c.installationPaymentMethod };
 }
 
 const PREVIOUS_SERVICE_TYPES = ['INSTALLATION', 'MAINTENANCE'];
@@ -271,7 +281,7 @@ router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), a
 router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
-    const { address, installationDate, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
+    const { address, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
     const secondaryPhoneResult = normalizeSecondaryPhone(secondaryPhone, body.phone);
     if ('error' in secondaryPhoneResult) return res.status(400).json({ success: false, message: secondaryPhoneResult.error });
     const previousServiceResult = resolvePreviousService(previousServiceType, previousServiceDate, previousServiceNote, NO_EXISTING_PREVIOUS_SERVICE);
@@ -282,6 +292,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
         secondaryPhone: secondaryPhoneResult.value,
         ...previousServiceResult,
         installationDate: installationDate ? new Date(installationDate) : undefined,
+        installationNote: installationNote || undefined,
         createdById: req.user!.userId,
         address: { create: address },
       },
@@ -304,7 +315,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
 router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerUpdateSchema.parse(req.body);
-    const { address, version, installationDate, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
+    const { address, version, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
 
     const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
@@ -340,6 +351,7 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
         ...(secondaryPhoneUpdate ? { secondaryPhone: secondaryPhoneUpdate.value } : {}),
         ...(previousServiceUpdate ? previousServiceUpdate : {}),
         ...(installationDate !== undefined ? { installationDate: installationDate ? new Date(installationDate) : null } : {}),
+        ...(installationNote !== undefined ? { installationNote: installationNote || null } : {}),
         version: { increment: 1 },
         ...(address ? { address: { update: address } } : {}),
       },

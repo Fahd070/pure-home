@@ -1,9 +1,19 @@
-// Modification #12: the Scheduling "Add Customer" form no longer asks for
-// Installation Date. Real-rendered with a mocked api client (matching the
-// established pattern for full-page components used elsewhere in this
-// project -- see callReportDashboardShortcut.test.tsx), plus a source-level
-// check confirming the field's UI block, state key, and payload key are all
-// gone, not just hidden.
+// History: Modification #12 previously removed the Installation Date field
+// from both Admin and Scheduling "Add Customer" forms entirely (locked in by
+// this file's original assertions -- an obfuscated `INSTALL_DATE_FIELD`
+// constant was used specifically so the literal substring "installationDate"
+// never appeared in either file's source, satisfying a literal source-text
+// check).
+//
+// Part 1 of the customer-installation-and-activity-fix feature explicitly
+// supersedes that: both forms now have a proper, optional "Installation
+// Details" section (date + notes + cost + payment method), reusing the same
+// pre-existing Customer.installationDate field and the same
+// INSTALL_DATE_FIELD access pattern -- just no longer hidden from the create
+// flow or gated to edit-only. This file's assertions are updated to match;
+// the still-valid, unrelated checks (Dashboard/CallReportForm untouched,
+// Admin Customers/Reports still display installationDate read-only) are
+// preserved unchanged below.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
@@ -54,9 +64,8 @@ function fillRequiredFields(el: HTMLElement) {
     nativeSetter.call(input, value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  // Order in the form: name, phone, secondaryPhone (optional, left blank here --
-  // completion-technician-name-display batch), city, district (the four
-  // `required` text fields).
+  // Order in the form: name, phone, secondaryPhone (optional, left blank here),
+  // city, district (the four `required` text fields).
   const [nameInput, phoneInput, , cityInput, districtInput] = inputs;
   act(() => {
     setValue(nameInput, 'New Customer');
@@ -70,26 +79,26 @@ function flush() {
   return act(async () => { await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0)); });
 }
 
-describe('Scheduling Add Customer: Installation Date field removed', () => {
-  it('does not render "Installation Date" in English', () => {
+describe('Scheduling Add Customer: optional Installation Details section (date now included in create flow too)', () => {
+  it('renders "Installation Details" (English) as an optional section', () => {
     act(() => { i18n.changeLanguage('en'); });
     const el = render();
-    expect(el.textContent).not.toMatch(/Installation Date/i);
+    expect(el.textContent).toMatch(/Installation Details/i);
   });
 
-  it('does not render "تاريخ التركيب" in Arabic (default language)', () => {
+  it('renders "بيانات التركيب" (Arabic, default language)', () => {
     act(() => { i18n.changeLanguage('ar'); });
     const el = render();
-    expect(el.textContent).not.toContain('تاريخ التركيب');
+    expect(el.textContent).toContain('بيانات التركيب');
   });
 
-  it('does not render a leftover Installation Date picker -- exactly one date input exists, for the unrelated optional Previous Service Date field added in a later batch', () => {
+  it('two date inputs exist: Installation Date and the unrelated Previous Service Date', () => {
     const el = render();
     const dateInputs = el.querySelectorAll('input[type="date"]');
-    expect(dateInputs.length).toBe(1);
+    expect(dateInputs.length).toBe(2);
   });
 
-  it('creates a customer successfully without ever collecting installationDate, and the submitted payload has no installationDate key', async () => {
+  it('creates a customer successfully leaving all installation fields blank -- no installation keys sent, exactly as before this section existed', async () => {
     apiPost.mockResolvedValue({ data: { success: true, data: { id: 'cust-1' } } });
     const el = render();
     fillRequiredFields(el);
@@ -99,41 +108,49 @@ describe('Scheduling Add Customer: Installation Date field removed', () => {
 
     expect(apiPost).toHaveBeenCalledTimes(1);
     const [, body] = apiPost.mock.calls[0];
-    expect(body).not.toHaveProperty('installationDate');
+    // `installationDate` is a computed object key, so it's present with value
+    // `undefined` on the raw JS object -- that's what JSON.stringify (which
+    // axios applies before this ever reaches the wire) drops, exactly like
+    // every other omitted-on-create optional field in this payload (e.g.
+    // previousServiceDate uses the identical pattern). Checking the
+    // serialized form is what actually proves no key reaches the server.
+    expect(JSON.parse(JSON.stringify(body))).not.toHaveProperty('installationDate');
+    expect(body.installationNote).toBeUndefined();
+    expect(body.installationAmount).toBeUndefined();
+    expect(body.installationPaymentMethod).toBeUndefined();
     expect(toastSuccess).toHaveBeenCalled();
   });
 
-  it("does not fabricate today's date or any other date value for the omitted field", async () => {
+  it('filling in the Installation Date on create now actually submits it (previously impossible -- the field was edit-only)', async () => {
     apiPost.mockResolvedValue({ data: { success: true, data: { id: 'cust-2' } } });
     const el = render();
     fillRequiredFields(el);
+    const dateInputs = Array.from(el.querySelectorAll('input[type="date"]')) as HTMLInputElement[];
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    act(() => {
+      nativeSetter.call(dateInputs[0], '2025-05-01');
+      dateInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+    });
     const form = el.querySelector('form')!;
     await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     await flush();
 
     const [, body] = apiPost.mock.calls[0];
-    const bodyStr = JSON.stringify(body);
-    const todayIso = new Date().toISOString().slice(0, 10);
-    expect(bodyStr).not.toContain(todayIso);
+    expect(body).toHaveProperty('installationDate');
+    expect(body.installationDate).toContain('2025-05-01');
   });
 });
 
-describe('Scheduling Add Customer: source-level confirmation (field fully removed, not just hidden)', () => {
+describe('Scheduling Add Customer: source-level confirmation', () => {
   const src = fs.readFileSync(
     path.resolve(__dirname, '../../unified-app/src/scheduling/pages/AddCustomer.tsx'), 'utf-8'
   );
 
-  it('no installationDate state key, label, or payload key remains in the component', () => {
-    expect(src).not.toMatch(/installationDate/);
-    expect(src).not.toMatch(/تاريخ التركيب/);
-    // A type="date" input now legitimately exists for the unrelated optional
-    // Previous Service Date field (previousServiceDate, added in a later
-    // batch) -- this no longer asserts a blanket absence of any date input;
-    // the DOM-level test above confirms exactly one exists (not a leftover
-    // Installation Date picker).
+  it('installationDate is now collected on both create and edit (no longer gated to isEditing-only rendering)', () => {
+    expect(src).not.toMatch(/isEditing && <div>.*installDate/);
   });
 
-  it('the required-field validation logic is untouched (name, phone, city, district) -- no empty layout gap introduced by removing an unrelated required check', () => {
+  it('the required-field validation logic is untouched (name, phone, city, district)', () => {
     expect(src).toMatch(/if \(!form\.name\.trim\(\)\)/);
     expect(src).toMatch(/PHONE_RE\.test\(form\.phone\)/);
     expect(src).toMatch(/if \(!form\.city\.trim\(\)\)/);
@@ -142,7 +159,7 @@ describe('Scheduling Add Customer: source-level confirmation (field fully remove
 });
 
 describe('Modification #11 regression: Call Report dashboard shortcut unaffected by this change', () => {
-  it('Dashboard.tsx and CallReportForm.tsx were not touched by the installationDate removal', () => {
+  it('Dashboard.tsx and CallReportForm.tsx were not touched by the installation-details section', () => {
     const dashboardSrc = fs.readFileSync(
       path.resolve(__dirname, '../../unified-app/src/scheduling/pages/Dashboard.tsx'), 'utf-8'
     );
@@ -155,12 +172,12 @@ describe('Modification #11 regression: Call Report dashboard shortcut unaffected
   });
 });
 
-describe('Admin customer workflow: unaffected (scope discipline check)', () => {
-  it('Admin Add Customer never had an Installation Date field, and is untouched by this modification', () => {
+describe('Admin customer workflow: also gets the optional Installation Details section', () => {
+  it('Admin Add Customer now includes the same optional installation section', () => {
     const adminAddCustomerSrc = fs.readFileSync(
       path.resolve(__dirname, '../../unified-app/src/admin/pages/AddCustomer.tsx'), 'utf-8'
     );
-    expect(adminAddCustomerSrc).not.toMatch(/installationDate/);
+    expect(adminAddCustomerSrc).toMatch(/customers\.installationSection/);
   });
 
   it('Admin Customers list and Reports still legitimately display historical installationDate (read-only, unchanged)', () => {

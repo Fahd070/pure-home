@@ -79,6 +79,21 @@ model Customer {
   activityDismissed    Boolean          @default(false)
   notes                String?
   installationDate     DateTime?
+  // Optional installation-details section (Admin + Scheduling). Deliberately
+  // separate from `notes` (the general customer-notes field) so installation
+  // context never gets mixed into or overwritten by unrelated notes, and
+  // separate from Appointment's completion financial fields (completionAmount/
+  // completionPaymentMethod) since this is not tied to any specific
+  // appointment. All three are independently optional -- no field here
+  // requires another to be set (unlike previousService* below, which is an
+  // all-or-nothing group). installationPaymentMethod is a plain validated
+  // string tag (CASH / BANK_CARD_PERSONAL / BANK_CARD_COMMERCIAL), matching
+  // this schema's existing convention for small business-validated tags
+  // (see previousServiceType, Appointment.completionPaymentMethod) rather
+  // than a dedicated Prisma enum for three optional values.
+  installationNote          String?
+  installationAmount        Float?
+  installationPaymentMethod String?
   // Optional, one-time historical record of a service that happened BEFORE
   // this customer existed in the system. Deliberately plain nullable fields
   // (not a Prisma enum, not a separate history table) -- matches this

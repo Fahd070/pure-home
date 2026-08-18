@@ -16,7 +16,11 @@ describe("customer editing and administration history", () => {
       const form = source(file);
       expect(form).toContain('api.get(`/customers/${id}`)');
       expect(form).toContain('api.put(`/customers/${id}`, payload)');
-      expect(form).toContain('version, [INSTALL_DATE_FIELD]');
+      // version is edit-only; installationDate is now collected on both
+      // create and edit (Part 1: optional installation-details section) --
+      // no longer coupled to the same isEditing-only expression as version.
+      expect(form).toMatch(/isEditing \? \{ version \} : \{\}/);
+      expect(form).toContain('[INSTALL_DATE_FIELD]');
       expect(form).toContain('previousServiceDate');
     }
   });
