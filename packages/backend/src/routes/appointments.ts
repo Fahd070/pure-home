@@ -178,6 +178,27 @@ router.get('/pending-export-approval', requireRole('ADMIN'), async (req: AuthReq
   } catch (e) { next(e); }
 });
 
+// Perf fix: the Admin/Technician Sidebar urgent badges previously called
+// GET /appointments?urgent=true&limit=200 (a `limit` this route never reads,
+// so it was always fully unbounded) purely to compute
+// `.filter(a => !a.urgentVisitRecord).length` client-side after transferring
+// every relation (customer+address, technician, postponements,
+// urgentVisitRecord) for every urgent appointment. This is a count-only
+// replacement with exactly the same visibility/urgency semantics GET
+// /appointments?urgent=true already applies for these two roles (ADMIN: all
+// urgent appointments; TECHNICIAN: only visibleToTechnician ones) --
+// "unresolved" is unchanged too: isUrgent && no urgentVisitRecord yet.
+router.get('/urgent-unresolved-count', requireRole('ADMIN', 'TECHNICIAN'), async (req: AuthRequest, res, next) => {
+  try {
+    const where: any = { isUrgent: true, urgentVisitRecord: null };
+    if (req.user!.role === 'TECHNICIAN') {
+      where.visibleToTechnician = true;
+    }
+    const count = await prisma.appointment.count({ where });
+    res.json({ success: true, data: count });
+  } catch (e) { next(e); }
+});
+
 router.get('/:id', async (req: AuthRequest, res, next) => {
   try {
     const where: any = { id: req.params.id };

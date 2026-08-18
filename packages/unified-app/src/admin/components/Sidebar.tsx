@@ -76,10 +76,14 @@ export default function Sidebar() {
   // just because the page was opened. Same DB-derived pattern as notif/dm-unread
   // below. Refetched on the socket events that can change the count, with a
   // 30s poll as a fallback (matches the other DB-derived badges here).
+  // Perf fix: previously fetched every urgent appointment's full relation
+  // graph (customer+address, technician, postponements, urgentVisitRecord)
+  // via GET /appointments?urgent=true just to compute this length client-side
+  // -- now a single server-side COUNT with the identical unresolved/visibility
+  // semantics (see routes/appointments.ts's urgent-unresolved-count).
   const { data: urgentBadge, refetch: refetchUrgentBadge } = useQuery({
     queryKey: ["urgent-unresolved-admin"],
-    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } })
-      .then(r => (r.data.data || []).filter((a: any) => !a.urgentVisitRecord).length),
+    queryFn: () => api.get("/appointments/urgent-unresolved-count").then(r => Number(r.data.data) || 0),
     refetchInterval: 30000,
     initialData: 0,
   });

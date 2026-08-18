@@ -43,10 +43,14 @@ export default function Sidebar() {
   // appointments with no urgentVisitRecord submitted yet) -- NOT a localStorage
   // increment/clear counter, so it survives refresh/restart and never disappears
   // just because the page was opened.
+  // Perf fix: previously fetched every urgent appointment's full relation
+  // graph (customer+address, technician, postponements, urgentVisitRecord)
+  // via GET /appointments?urgent=true just to compute this length client-side
+  // -- now a single server-side COUNT with the identical unresolved/visibility
+  // semantics (see routes/appointments.ts's urgent-unresolved-count).
   const { data: urgentBadge, refetch: refetchUrgentBadge } = useQuery({
     queryKey: ["urgent-unresolved-tech"],
-    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } })
-      .then(r => (r.data.data || []).filter((a: any) => !a.urgentVisitRecord).length),
+    queryFn: () => api.get("/appointments/urgent-unresolved-count").then(r => Number(r.data.data) || 0),
     refetchInterval: 30000,
     initialData: 0,
   });

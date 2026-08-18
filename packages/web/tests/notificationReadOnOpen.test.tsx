@@ -166,11 +166,14 @@ describe('System Activity and Urgent Appointments: already-correct read-on-open 
     expect(src).not.toMatch(/clear-badge-urgent-tech/);
   });
 
-  it('technician Sidebar computes the urgent badge from a DB query (unresolved urgentVisitRecord-less appointments), not localStorage', () => {
+  it('technician Sidebar computes the urgent badge from a DB query (unresolved-urgent count endpoint), not localStorage', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/components/Sidebar.tsx'), 'utf-8');
     expect(src).not.toMatch(/badge-urgent-tech/);
     expect(src).toMatch(/urgent-unresolved-tech/);
-    expect(src).toMatch(/!a\.urgentVisitRecord/);
+    // Perf fix: the badge now reads a server-side COUNT
+    // (GET /appointments/urgent-unresolved-count, same unresolved semantics)
+    // instead of fetching every urgent appointment and filtering client-side.
+    expect(src).toMatch(/api\.get\("\/appointments\/urgent-unresolved-count"\)/);
   });
 
   // 13. Opening Work Queue must not clear System Activity's unread state --
