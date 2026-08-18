@@ -5,6 +5,7 @@ import app from './app';
 import { initSocket } from './socket';
 import { startNotificationCron } from './services/notification.service';
 import prisma from './prisma';
+import { createGracefulShutdown } from './shutdown';
 
 // Schema is now managed exclusively through Prisma migrations
 // (packages/backend/prisma/migrations/) -- startup no longer runs any
@@ -53,9 +54,21 @@ const PORT = parseInt(process.env.PORT || '3001');
 const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 
 const server = http.createServer(app);
-initSocket(server);
-startNotificationCron();
+const io = initSocket(server);
+const notificationCronTask = startNotificationCron();
 verifySchemaIsMigrated();
+
+const shutdown = createGracefulShutdown({
+  httpServer: server,
+  io,
+  prisma,
+  stopCron: () => notificationCronTask.stop(),
+});
+// Idempotent: a second SIGTERM/SIGINT while shutdown is already in progress
+// is a no-op (see src/shutdown.ts), so this can never double-run or crash-loop.
+process.on('SIGTERM', () => { shutdown('SIGTERM'); });
+process.on('SIGINT', () => { shutdown('SIGINT'); });
+
 server.listen(PORT, BIND_HOST, () => {
   const onRender = !!process.env.RENDER;
 

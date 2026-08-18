@@ -130,7 +130,12 @@ export async function generateReminders() {
   }
 }
 
+// Returns the scheduled task so the caller can stop it during graceful
+// shutdown (see src/shutdown.ts) -- previously the return value of
+// cron.schedule() was discarded, so the hourly interval kept firing for the
+// remainder of the process's lifetime with no way to stop it cleanly.
 export function startNotificationCron() {
-  cron.schedule('0 * * * *', generateReminders); // Every hour
-  setTimeout(generateReminders, 3000);           // Also run shortly after startup
+  const task = cron.schedule('0 * * * *', generateReminders); // Every hour
+  setTimeout(generateReminders, 3000);                        // Also run shortly after startup
+  return task;
 }
