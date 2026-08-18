@@ -1,0 +1,165 @@
+name: TEMP - Deploy customer-installation-details migration
+
+# TEMPORARY, single-purpose, manually-triggered workflow. Deploys exactly one
+# migration (20260818194741_add_customer_installation_details) to production
+# via `prisma migrate deploy`, after verifying it is the ONLY pending
+# migration. Removed immediately after this one-time deployment is confirmed
+# successful -- see docs history / PR description for the companion cleanup
+# PR. Not meant to become permanent production infrastructure.
+#
+# Uses the existing SUPABASE_DIRECT_URL secret (already provisioned for the
+# Database Backup workflow) -- no new secret is introduced. The secret is
+# never echoed; every command's output that could contain it is redacted
+# before being written to logs or the step summary.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-migration:
+    name: Verify + deploy the single expected migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      EXPECTED_MIGRATION: 20260818194741_add_customer_installation_details
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify secret is configured
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          if [ -z "$SUPABASE_DIRECT_URL" ]; then
+            echo "::error::SUPABASE_DIRECT_URL secret is not set."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install backend dependencies
+        run: npm install --workspace=packages/backend --no-audit --no-fund
+
+      - name: List repository migrations
+        working-directory: packages/backend
+        run: |
+          echo "## Repository migrations (chronological)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls prisma/migrations | grep -v migration_lock.toml | sort | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Safety gate: confirm the ONLY pending migration is the expected one ──
+      - name: Check migration status (read-only) and gate the deploy
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set +e
+          npx prisma migrate status --schema=prisma/schema.prisma > /tmp/status_before.txt 2>&1
+          STATUS_EXIT=$?
+          set -e
+
+          echo "## Migration status (before deploy)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' /tmp/status_before.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # Every OTHER migration folder name must NOT appear anywhere in the
+          # status output (which would mean it's listed as unapplied/pending
+          # or otherwise flagged). Only $EXPECTED_MIGRATION may be pending.
+          OTHER_MIGRATIONS=$(ls prisma/migrations | grep -v migration_lock.toml | grep -v "^${EXPECTED_MIGRATION}$")
+          UNEXPECTED_FOUND=0
+          while IFS= read -r m; do
+            [ -z "$m" ] && continue
+            if grep -q "$m" /tmp/status_before.txt; then
+              echo "::error::Unexpected migration '$m' appears in migrate status output. Refusing to deploy."
+              UNEXPECTED_FOUND=1
+            fi
+          done <<< "$OTHER_MIGRATIONS"
+
+          if [ "$UNEXPECTED_FOUND" -eq 1 ]; then
+            echo "::error::Migration-history discrepancy detected -- stopping before any deploy."
+            exit 1
+          fi
+
+          if ! grep -q "$EXPECTED_MIGRATION" /tmp/status_before.txt; then
+            echo "::error::Expected migration '$EXPECTED_MIGRATION' was not found as pending in migrate status output. Refusing to deploy (nothing to do, or unexpected state)."
+            exit 1
+          fi
+
+          echo "::notice::Safety gate passed -- '$EXPECTED_MIGRATION' is the only pending migration."
+
+      # ── Authorized write: deploy exactly this migration ──────────────────────
+      - name: prisma migrate deploy (PRODUCTION)
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          npx prisma migrate deploy --schema=prisma/schema.prisma 2>&1 | \
+            sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee /tmp/deploy_out.txt
+          echo "## migrate deploy result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/deploy_out.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Migration status (after deploy) -- expect up to date
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## Migration status (after deploy)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          npx prisma migrate status --schema=prisma/schema.prisma 2>&1 | \
+            sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install PostgreSQL client (for read-only verification queries)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Verify _prisma_migrations row (read-only, bookkeeping only, no application data)
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## _prisma_migrations row for the deployed migration" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -A -F' | ' -c "
+            SELECT migration_name, started_at, finished_at, rolled_back_at, applied_steps_count
+            FROM \"_prisma_migrations\"
+            WHERE migration_name = '${EXPECTED_MIGRATION}';
+          " 2>&1 | sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify new columns only (read-only, schema metadata only, no customer data)
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## New customers columns (information_schema, metadata only)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -A -F' | ' -c "
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'customers'
+              AND column_name IN ('installationNote', 'installationAmount', 'installationPaymentMethod')
+            ORDER BY column_name;
+          " 2>&1 | sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Production health check (public endpoint, no secret needed)
+        run: |
+          echo "## Production /health" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          curl -s https://wfm-system.onrender.com/health | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
