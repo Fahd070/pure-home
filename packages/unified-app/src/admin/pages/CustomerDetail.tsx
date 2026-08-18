@@ -16,6 +16,15 @@ function formatCycle(cycle: string, freq: number, isAr: boolean) {
   return cycle;
 }
 
+// Never expose the raw stored tag (CASH / BANK_CARD_PERSONAL / BANK_CARD_COMMERCIAL)
+// to the user -- always shown through its translated label.
+function formatInstallationPaymentMethod(method: string, t: (key: string) => string) {
+  if (method === "CASH") return t("customers.paymentCash");
+  if (method === "BANK_CARD_PERSONAL") return t("customers.paymentBankPersonal");
+  if (method === "BANK_CARD_COMMERCIAL") return t("customers.paymentBankCommercial");
+  return method;
+}
+
 export default function CustomerDetail({ apiClient = api, queryScope = "admin" }: { apiClient?: AxiosInstance; queryScope?: "admin" | "scheduling" }) {
   const { id } = useParams<{ id: string }>();
   const { t, i18n } = useTranslation();
@@ -120,7 +129,6 @@ ${(c.appointments || []).length > 0 ? `
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div><span className="text-slate-400">{t("customers.maintenanceCycle")}: </span>{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr)}</div>
           <div><span className="text-slate-400">{t("customers.frequency")}: </span>{c.maintenanceFrequency}</div>
-          {c.installationDate && <div><span className="text-slate-400">{t("reports.installationDate")}: </span><span dir="ltr">{formatGregorianDate(c.installationDate)}</span></div>}
           <div><span className="text-slate-400">{t("reports.lastMaintenance")}: </span><span dir="ltr">{lastMaintenance ? formatGregorianDate(lastMaintenance.actualCompletionDate || lastMaintenance.scheduledDate) : "—"}</span></div>
           <div><span className="text-slate-400">{t("reports.nextMaintenance")}: </span><span dir="ltr">{c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "—"}</span></div>
           <div><span className="text-slate-400">{t("reports.registrationDate")}: </span><span dir="ltr">{formatGregorianDate(c.createdAt)}</span></div>
@@ -135,6 +143,35 @@ ${(c.appointments || []).length > 0 ? `
           </div>
         )}
         {c.notes && <p className="mt-3 text-sm text-slate-500">{c.notes}</p>}
+        {(c.installationDate || c.installationNote || c.installationAmount != null || c.installationPaymentMethod) && (
+          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
+            <p className="font-medium mb-1">{t("customers.installationSection")}</p>
+            {c.installationDate && (
+              <p>
+                <span className="text-slate-400">{t("reports.installationDate")}: </span>
+                <span dir="ltr">{formatGregorianDate(c.installationDate)}</span>
+              </p>
+            )}
+            {c.installationAmount != null && (
+              <p>
+                <span className="text-slate-400">{t("customers.installationCost")}: </span>
+                {c.installationAmount}
+              </p>
+            )}
+            {c.installationPaymentMethod && (
+              <p>
+                <span className="text-slate-400">{t("customers.installationPaymentMethod")}: </span>
+                {formatInstallationPaymentMethod(c.installationPaymentMethod, t)}
+              </p>
+            )}
+            {c.installationNote && (
+              <p>
+                <span className="text-slate-400">{t("customers.installationNote")}: </span>
+                {c.installationNote}
+              </p>
+            )}
+          </div>
+        )}
         {c.previousServiceType && (
           <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
             <p className="font-medium mb-1">{t("customers.previousService")}</p>

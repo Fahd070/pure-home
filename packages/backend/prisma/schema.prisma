@@ -31,16 +31,15 @@ enum AppointmentStatus {
   PENDING
 }
 
-
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      UserRole
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String               @id @default(uuid())
+  name                 String
+  email                String               @unique
+  password             String
+  role                 UserRole
+  isActive             Boolean              @default(true)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
   customersCreated     Customer[]           @relation("CustomerCreatedBy")
   appointmentsCreated  Appointment[]        @relation("AppointmentCreatedBy")
   assignedAppointments Appointment[]        @relation("AppointmentTechnician")
@@ -52,19 +51,20 @@ model User {
   callReports          CallReport[]         @relation("CallReportCreatedBy")
   expenses             Expense[]            @relation("ExpenseByTechnician")
   urgentVisits         UrgentVisitRecord[]  @relation("UrgentVisitBy")
+
   @@map("users")
 }
 
 model Customer {
-  id                   String           @id @default(uuid())
-  name                 String
-  phone                String
+  id                        String           @id @default(uuid())
+  name                      String
+  phone                     String
   // Optional second contact number. Nullable so every existing customer stays
   // valid with no value; same 05XXXXXXXX format as `phone` when present, and
   // must differ from it (enforced at the API layer, not the DB, matching this
   // schema's existing convention of validating business rules in the routes).
-  secondaryPhone       String?
-  maintenanceCycle     MaintenanceCycle
+  secondaryPhone            String?
+  maintenanceCycle          MaintenanceCycle
   // Part D: recurrence must support half-month increments (1, 1.5, 2, 2.5, ...).
   // Float (Postgres DOUBLE PRECISION) rather than Decimal -- every value this
   // column will ever hold is a positive multiple of 0.5 (enforced by Zod's
@@ -74,11 +74,26 @@ model Customer {
   // plain JS number end-to-end (unlike Prisma's Decimal type, which would
   // require Decimal-object handling through every read site) -- smallest safe
   // change compatible with the existing Int-typed call sites.
-  maintenanceFrequency Float            @default(1)
-  isActive             Boolean          @default(true)
-  activityDismissed    Boolean          @default(false)
-  notes                String?
-  installationDate     DateTime?
+  maintenanceFrequency      Float            @default(1)
+  isActive                  Boolean          @default(true)
+  activityDismissed         Boolean          @default(false)
+  notes                     String?
+  installationDate          DateTime?
+  // Optional installation-details section (Admin + Scheduling). Deliberately
+  // separate from `notes` (the general customer-notes field) so installation
+  // context never gets mixed into or overwritten by unrelated notes, and
+  // separate from Appointment's completion financial fields (completionAmount/
+  // completionPaymentMethod) since this is not tied to any specific
+  // appointment. All three are independently optional -- no field here
+  // requires another to be set (unlike previousService* below, which is an
+  // all-or-nothing group). installationPaymentMethod is a plain validated
+  // string tag (CASH / BANK_CARD_PERSONAL / BANK_CARD_COMMERCIAL), matching
+  // this schema's existing convention for small business-validated tags
+  // (see previousServiceType, Appointment.completionPaymentMethod) rather
+  // than a dedicated Prisma enum for three optional values.
+  installationNote          String?
+  installationAmount        Float?
+  installationPaymentMethod String?
   // Optional, one-time historical record of a service that happened BEFORE
   // this customer existed in the system. Deliberately plain nullable fields
   // (not a Prisma enum, not a separate history table) -- matches this
@@ -88,17 +103,18 @@ model Customer {
   // must never be confused with one. All three are null together or set
   // together (enforced at the API layer): a half-record such as a date with
   // no type is rejected before it reaches the database.
-  previousServiceType  String?
-  previousServiceDate  DateTime?
-  previousServiceNote  String?
-  version              Int              @default(1)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-  createdById          String?
-  createdBy            User?            @relation("CustomerCreatedBy", fields: [createdById], references: [id])
-  address              Address?
-  appointments         Appointment[]
-  callReports          CallReport[]
+  previousServiceType       String?
+  previousServiceDate       DateTime?
+  previousServiceNote       String?
+  version                   Int              @default(1)
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  createdById               String?
+  createdBy                 User?            @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  address                   Address?
+  appointments              Appointment[]
+  callReports               CallReport[]
+
   @@map("customers")
 }
 
@@ -113,19 +129,20 @@ model Address {
   apartmentNo String?
   customerId  String   @unique
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
   @@map("addresses")
 }
 
 model Appointment {
-  id                  String            @id @default(uuid())
-  type                AppointmentType
-  status              AppointmentStatus @default(SCHEDULED)
-  scheduledDate       DateTime
-  notes               String?
-  urgentLocation      String?
-  isUrgent            Boolean           @default(false)
-  adminApproved       Boolean           @default(false)
-  visibleToScheduling Boolean           @default(true)
+  id                       String               @id @default(uuid())
+  type                     AppointmentType
+  status                   AppointmentStatus    @default(SCHEDULED)
+  scheduledDate            DateTime
+  notes                    String?
+  urgentLocation           String?
+  isUrgent                 Boolean              @default(false)
+  adminApproved            Boolean              @default(false)
+  visibleToScheduling      Boolean              @default(true)
   // Modification #5: Scheduling/Maintenance -> Admin approval -> Technician
   // export workflow. Defaults true so every existing appointment (and every
   // ordinarily-created one going forward) stays immediately technician-visible,
@@ -136,26 +153,26 @@ model Appointment {
   // creator role the export/approve endpoints operate on); its pre-existing use
   // for the separate Admin<->Scheduling visibleToScheduling approval flow is
   // untouched.
-  visibleToTechnician Boolean           @default(true)
-  createdByRole       String?
-  version             Int               @default(1)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  technicianId        String?
-  technician          User?             @relation("AppointmentTechnician", fields: [technicianId], references: [id])
-  workStatus          String            @default("WAITING")
-  workNotes           String?
-  serviceDetails      String?
-  completionAmount    Float?
-  completionPaymentMethod String?
-  completionImage     String?           @db.Text
+  visibleToTechnician      Boolean              @default(true)
+  createdByRole            String?
+  version                  Int                  @default(1)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  technicianId             String?
+  technician               User?                @relation("AppointmentTechnician", fields: [technicianId], references: [id])
+  workStatus               String               @default("WAITING")
+  workNotes                String?
+  serviceDetails           String?
+  completionAmount         Float?
+  completionPaymentMethod  String?
+  completionImage          String?              @db.Text
   // Modification #6: technician-recorded note about what to check/prepare for the
   // customer's NEXT maintenance visit. Unlike completionAmount, this is not
   // financial data -- visible to Admin/Technician/Scheduling alike. A later
   // modification (#7) will surface it automatically when scheduling the next
   // appointment; for now it is just persisted and readable via the existing
   // appointment/customer APIs.
-  nextMaintenanceNote String?
+  nextMaintenanceNote      String?
   // Modification #8: the Technician-declared ACTUAL date the maintenance
   // operation took place -- distinct from `completedAt`, which continues to
   // mean "when the completion submission was received by the server" and is
@@ -163,7 +180,7 @@ model Appointment {
   // schema's existing convention for date-only business fields (see
   // Customer.installationDate) -- stored as the date the technician selected,
   // parsed the same simple way.
-  actualCompletionDate DateTime?
+  actualCompletionDate     DateTime?
   // Modification #8: whether Scheduling/Maintenance has reviewed and explicitly
   // confirmed a Technician's completion report (completion date + non-financial
   // completion details). Defaults false so every existing completed appointment
@@ -171,7 +188,7 @@ model Appointment {
   // acts -- Technician completion submission must never set this true itself.
   // Deliberately its own field, not a repurposing of adminApproved (Modification
   // #5's distinct Admin export-approval flow) or visibleToTechnician.
-  maintenanceConfirmed Boolean           @default(false)
+  maintenanceConfirmed     Boolean              @default(false)
   // Completion-record field only: the first name the Technician actually typed
   // into the "Technician Name" field at the moment of a NORMAL (non-urgent)
   // completion. Deliberately separate from the `technician` relation above --
@@ -181,30 +198,32 @@ model Appointment {
   // existed) stays valid; the Admin Technicians completion-details view falls
   // back to the technician relation's first name when this is null.
   completionTechnicianName String?
-  startedAt           DateTime?
-  completedAt         DateTime?
-  customerId          String?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  customerId               String?
   // Recorded decision: SET NULL (not Cascade) so appointment history survives a
   // customer deletion. Production's raw-SQL startup helper had been silently
   // re-asserting CASCADE on every boot -- confirmed via read-only metadata query
   // before this change (see migration 20260627000000_appointments_customer_fk_set_null).
-  customer            Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  createdById         String?
-  createdBy           User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
-  postponements       PostponementRecord[]
-  urgentVisitRecord   UrgentVisitRecord?
+  customer                 Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdById              String?
+  createdBy                User?                @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  postponements            PostponementRecord[]
+  urgentVisitRecord        UrgentVisitRecord?
+
   @@map("appointments")
 }
 
 model PostponementRecord {
-  id            String      @id @default(uuid())
+  id            String       @id @default(uuid())
   reason        String
   newDate       DateTime?
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime     @default(now())
   appointmentId String?
   appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
   requestedById String?
-  requestedBy   User?       @relation("PostponementTechnician", fields: [requestedById], references: [id])
+  requestedBy   User?        @relation("PostponementTechnician", fields: [requestedById], references: [id])
+
   @@map("postponement_records")
 }
 
@@ -217,6 +236,7 @@ model Notification {
   createdAt DateTime @default(now())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+
   @@map("notifications")
 }
 
@@ -226,6 +246,7 @@ model Message {
   createdAt DateTime @default(now())
   senderId  String
   sender    User     @relation(fields: [senderId], references: [id])
+
   @@map("messages")
 }
 
@@ -239,6 +260,7 @@ model AuditLog {
   createdAt   DateTime @default(now())
   userId      String
   user        User     @relation(fields: [userId], references: [id])
+
   @@index([entityType, entityId])
   @@index([userId])
   @@index([createdAt(sort: Desc)])
@@ -253,6 +275,7 @@ model EventLog {
   userId     String
   payload    Json
   createdAt  DateTime @default(now())
+
   @@index([eventType])
   @@index([entityType, entityId])
   @@index([createdAt(sort: Desc)])
@@ -267,6 +290,7 @@ model DirectMessage {
   recipientRole String
   isRead        Boolean  @default(false)
   createdAt     DateTime @default(now())
+
   @@map("direct_messages")
 }
 
@@ -277,6 +301,7 @@ model SystemConfig {
   updatedBy String?
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+
   @@map("system_configs")
 }
 
@@ -301,21 +326,23 @@ model UserSettings {
   cardColor            String?
   updatedAt            DateTime @default(now())
   createdAt            DateTime @default(now())
+
   @@map("user_settings")
 }
 
 model CallReport {
-  id           String   @id @default(uuid())
-  customerId   String?
-  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  employeeName String
-  callDate     DateTime
-  notes        String?
-  createdAt    DateTime @default(now())
-  createdById  String?
-  createdBy    User?    @relation("CallReportCreatedBy", fields: [createdById], references: [id])
+  id                String    @id @default(uuid())
+  customerId        String?
+  customer          Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  employeeName      String
+  callDate          DateTime
+  notes             String?
+  createdAt         DateTime  @default(now())
+  createdById       String?
+  createdBy         User?     @relation("CallReportCreatedBy", fields: [createdById], references: [id])
   unregisteredName  String?
   unregisteredPhone String?
+
   @@map("call_reports")
 }
 
@@ -331,6 +358,7 @@ model Expense {
   technicianId     String
   technician       User     @relation("ExpenseByTechnician", fields: [technicianId], references: [id])
   createdAt        DateTime @default(now())
+
   @@map("expenses")
 }
 
@@ -351,5 +379,6 @@ model UrgentVisitRecord {
   submittedById   String?
   submittedBy     User?       @relation("UrgentVisitBy", fields: [submittedById], references: [id])
   createdAt       DateTime    @default(now())
+
   @@map("urgent_visit_records")
 }

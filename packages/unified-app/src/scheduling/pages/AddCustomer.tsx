@@ -25,6 +25,9 @@ export default function SchedAddCustomer() {
     name: "", phone: "", secondaryPhone: "", maintenanceCycle: "MONTHLY", maintenanceFrequency: 1, notes: "",
     city: "", district: "", street: "", postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "",
     previousServiceType: "", previousServiceDate: "", previousServiceNote: "",
+    // Optional installation-details section (Part 1). Each of these three is
+    // independently optional -- unlike previousServiceType's all-or-nothing group.
+    installationNote: "", installationAmount: "", installationPaymentMethod: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
@@ -36,7 +39,7 @@ export default function SchedAddCustomer() {
       const customer = response.data.data;
       setVersion(customer.version);
       setInstallDate(toDateInputValue(customer[INSTALL_DATE_FIELD]));
-      setForm({ name: customer.name, phone: customer.phone, secondaryPhone: customer.secondaryPhone || "", maintenanceCycle: customer.maintenanceCycle, maintenanceFrequency: customer.maintenanceFrequency, notes: customer.notes || "", city: customer.address?.city || "", district: customer.address?.district || "", street: customer.address?.street || "", postalCode: customer.address?.postalCode || "", buildingNo: customer.address?.buildingNo || "", floorNo: customer.address?.floorNo || "", apartmentNo: customer.address?.apartmentNo || "", previousServiceType: customer.previousServiceType || "", previousServiceDate: toDateInputValue(customer.previousServiceDate), previousServiceNote: customer.previousServiceNote || "" });
+      setForm({ name: customer.name, phone: customer.phone, secondaryPhone: customer.secondaryPhone || "", maintenanceCycle: customer.maintenanceCycle, maintenanceFrequency: customer.maintenanceFrequency, notes: customer.notes || "", city: customer.address?.city || "", district: customer.address?.district || "", street: customer.address?.street || "", postalCode: customer.address?.postalCode || "", buildingNo: customer.address?.buildingNo || "", floorNo: customer.address?.floorNo || "", apartmentNo: customer.address?.apartmentNo || "", previousServiceType: customer.previousServiceType || "", previousServiceDate: toDateInputValue(customer.previousServiceDate), previousServiceNote: customer.previousServiceNote || "", installationNote: customer.installationNote || "", installationAmount: customer.installationAmount != null ? String(customer.installationAmount) : "", installationPaymentMethod: customer.installationPaymentMethod || "" });
     }).catch(() => toast.error(t("common.error"))).finally(() => setLoading(false));
   }, [id, t]);
 
@@ -60,6 +63,10 @@ export default function SchedAddCustomer() {
       if (!form.previousServiceType) e.previousServiceType = t("customers.previousServiceTypeRequired");
       if (!form.previousServiceDate) e.previousServiceDate = t("customers.previousServiceDateRequired");
     }
+    if (form.installationAmount.trim()) {
+      const n = Number(form.installationAmount);
+      if (!Number.isFinite(n) || n < 0) e.installationAmount = t("customers.installationAmountInvalid");
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -71,7 +78,8 @@ export default function SchedAddCustomer() {
     try {
       const { city, district, street, postalCode, buildingNo, floorNo, apartmentNo,
         name, phone, secondaryPhone, maintenanceCycle, maintenanceFrequency, notes,
-        previousServiceType, previousServiceDate, previousServiceNote } = form;
+        previousServiceType, previousServiceDate, previousServiceNote,
+        installationNote, installationAmount, installationPaymentMethod } = form;
 
       const payload = {
         name, phone, secondaryPhone: secondaryPhone.trim() || undefined,
@@ -79,10 +87,16 @@ export default function SchedAddCustomer() {
         previousServiceType: isEditing ? previousServiceType : previousServiceType || undefined,
         previousServiceDate: previousServiceDate ? (dateOnlyToApiDate(previousServiceDate) ?? undefined) : isEditing ? "" : undefined,
         previousServiceNote: isEditing ? previousServiceNote.trim() : previousServiceNote.trim() || undefined,
+        installationNote: isEditing ? installationNote.trim() : installationNote.trim() || undefined,
+        installationAmount: installationAmount.trim() !== "" ? Number(installationAmount) : (isEditing ? null : undefined),
+        installationPaymentMethod: installationPaymentMethod || (isEditing ? null : undefined),
         maintenanceCycle,
         maintenanceFrequency: Number(maintenanceFrequency),
         notes: isEditing ? notes : notes || undefined,
-        ...(isEditing ? { version, [INSTALL_DATE_FIELD]: installDate ? (dateOnlyToApiDate(installDate) ?? "") : "" } : {}),
+        ...(isEditing ? { version } : {}),
+        // Now collected on both create and edit (previously edit-only) --
+        // same create-vs-edit convention as previousServiceDate above.
+        [INSTALL_DATE_FIELD]: installDate ? (dateOnlyToApiDate(installDate) ?? undefined) : (isEditing ? "" : undefined),
         address: {
           city, district, street,
           postalCode: isEditing ? postalCode : postalCode || undefined,
@@ -124,7 +138,6 @@ export default function SchedAddCustomer() {
         <div className="grid grid-cols-2 gap-4">
           {field("secondaryPhone", t("customers.secondaryPhone"))}
         </div>
-        {isEditing && <div><label className="block text-sm font-medium mb-1">{t(["reports", "installation" + "Date"].join("."))}</label><input type="date" lang="en-GB" dir="ltr" value={installDate} onChange={event => setInstallDate(event.target.value)} className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" /></div>}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1 flex items-center gap-1">
@@ -164,6 +177,39 @@ export default function SchedAddCustomer() {
           <textarea value={form.notes} onChange={e => set("notes", e.target.value)} rows={4}
             placeholder={t("customers.enterNotes")}
             className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 resize-y min-h-[80px]" />
+        </div>
+        {/* Optional installation-details section. All four fields are
+            independently optional -- no field here requires another. */}
+        <div className="flex items-center gap-2 border-t pt-3">
+          <p className="text-sm font-semibold text-slate-600">{t("customers.installationSection")}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("reports.installationDate")}</label>
+            <input type="date" lang="en-GB" dir="ltr" value={installDate} onChange={event => setInstallDate(event.target.value)}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("customers.installationCost")}</label>
+            <input type="number" min={0} step="any" value={form.installationAmount} onChange={e => set("installationAmount", e.target.value)}
+              className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.installationAmount ? "border-red-400" : ""}`} />
+            {errors.installationAmount && <p className="text-red-500 text-xs mt-1">{errors.installationAmount}</p>}
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("customers.installationPaymentMethod")}</label>
+          <select value={form.installationPaymentMethod} onChange={e => set("installationPaymentMethod", e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value=""></option>
+            <option value="CASH">{t("customers.paymentCash")}</option>
+            <option value="BANK_CARD_PERSONAL">{t("customers.paymentBankPersonal")}</option>
+            <option value="BANK_CARD_COMMERCIAL">{t("customers.paymentBankCommercial")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("customers.installationNote")}</label>
+          <textarea value={form.installationNote} onChange={e => set("installationNote", e.target.value)} rows={3}
+            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 resize-y" />
         </div>
         {/* Optional: historical service that happened before this customer
             existed in the system. Entirely optional as a whole; once any of
