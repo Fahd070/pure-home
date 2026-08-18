@@ -1,0 +1,14 @@
+// TEMPORARY, standalone latency-benchmark schema. Intentionally contains no
+// application models -- the only DB operation this tool ever performs is a
+// raw `SELECT 1` (see index.js), so there is nothing here for Prisma to
+// migrate, create, or alter. Not part of the Pure Home application schema
+// and not used by packages/backend.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
