@@ -8,9 +8,16 @@ Never merged into `main`.
 ## What it does
 
 `GET /health` runs exactly one operation, `prisma.$queryRaw\`SELECT 1\``, and
-returns the elapsed time. `GET /` returns static text. Nothing else exists in
-this directory: no other routes, no auth, no Socket.IO, no cron/timers, no
-Prisma models, no migrations, no seed logic, no write SQL.
+returns the elapsed time. `GET /parallel` runs 8 `SELECT 1`s concurrently via
+`Promise.all` and returns the total elapsed time plus each individual query's
+elapsed time; `GET /sequential` runs the same 8 `SELECT 1`s one at a time in
+a loop, for comparing the effect of `connection_limit` on concurrent
+read-only queries. `GET /` returns static text. Nothing else exists in this
+directory: no other routes, no auth, no Socket.IO, no cron/timers, no
+`$executeRaw`, no transactions, no model queries (the placeholder
+`BenchmarkPlaceholder` model exists only so Prisma's client generator has a
+model to generate against — it is never queried), no migrations, no seed
+logic, no write SQL.
 
 ## Render service setup (manual — no authenticated Render access from this session)
 
