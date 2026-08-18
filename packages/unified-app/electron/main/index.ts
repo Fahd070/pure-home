@@ -4,6 +4,7 @@ import { writeFileSync } from "fs";
 import Store from "electron-store";
 import { autoUpdater } from "electron-updater";
 import log from "electron-log/main";
+import { sanitizeUpdaterError, formatUpdaterErrorLogLine } from "./updaterErrorSanitizer";
 
 const store = new Store();
 nativeTheme.themeSource = "light";
@@ -30,19 +31,6 @@ autoUpdater.autoInstallOnAppQuit = false;  // never install just because the win
 const ALLOWED_STORE_KEYS = new Set(["wfm-unified", "serverUrl", "language", "theme"]);
 
 let mainWindow: BrowserWindow | null = null;
-
-// Strips anything that could be sensitive or overly technical before an
-// updater error ever reaches the renderer: local filesystem paths, and any
-// token/key/secret/password/auth query-string value that might appear in a
-// download-URL error. Stack traces are never included at all (only
-// `err.message` is read below) — full diagnostics stay in the local log file.
-function sanitizeUpdaterError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err ?? "Unknown error");
-  return raw
-    .replace(/[A-Za-z]:\\[^\s"']+/g, "[local path]")
-    .replace(/([?&](?:token|key|password|secret|auth)=)[^&\s]+/gi, "$1[redacted]")
-    .slice(0, 300);
-}
 
 // ─── Auto-updater ────────────────────────────────────────────────────────────
 
@@ -76,11 +64,14 @@ function setupUpdater(): void {
   });
 
   autoUpdater.on("error", (err) => {
-    // Full error (including stack) goes to the local log file only.
-    log.error("[updater] error:", err);
-    // Renderer gets a short, safe, normalized message only — never a raw
-    // stack trace, filesystem path, or token. The app keeps running either
-    // way; a failed update check/download is never fatal.
+    // Only a sanitized, single-line summary is ever persisted (message/name/
+    // code) -- never the raw Error object or its stack, which could contain
+    // local filesystem paths or a download URL with a signed/auth query
+    // parameter. See updaterErrorSanitizer.ts.
+    log.error(formatUpdaterErrorLogLine("update check/download", err));
+    // Renderer gets the same sanitized message only — never a raw stack
+    // trace, filesystem path, or token. The app keeps running either way;
+    // a failed update check/download is never fatal.
     mainWindow?.webContents.send("update:error", { message: sanitizeUpdaterError(err) });
   });
 
@@ -90,14 +81,18 @@ function setupUpdater(): void {
     return autoUpdater.quitAndInstall(false, true);
   });
 
-  // Silent check 5 s after launch so the UI is fully ready before any banner shows
+  // One check, 5 s after launch so the UI is fully ready before any banner
+  // shows. This does NOT retry on its own -- there is no polling loop here.
+  // The next check happens the next time the app starts (see
+  // UpdateBanner.tsx's error-phase copy, which deliberately does not promise
+  // an automatic retry).
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch((err) => {
       // checkForUpdates() already emits "error" above in the normal case; this
       // catch only guards against a network/DNS failure rejecting the promise
       // itself (e.g. no internet on a LAN-only deployment) so it can never
       // reach an unhandled rejection. Non-fatal: the app continues normally.
-      log.warn("[updater] checkForUpdates() rejected:", err instanceof Error ? err.message : err);
+      log.warn(formatUpdaterErrorLogLine("checkForUpdates()", err));
       mainWindow?.webContents.send("update:error", { message: sanitizeUpdaterError(err) });
     });
   }, 5000);

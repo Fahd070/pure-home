@@ -46,6 +46,18 @@ export default function UpdateBanner() {
     };
   }, []);
 
+  // A download only ever completes after the user has already seen (and may
+  // have dismissed) an "available"/"downloading"/"error" banner earlier in
+  // the same session. autoInstallOnAppQuit is false, so the "ready" banner's
+  // "Restart & Update" button is the ONLY way to install — an earlier
+  // dismissal must never carry over and hide it. This does not reopen a
+  // dismissed "ready" banner itself (dismissing that one is respected for
+  // the rest of the session, since there is no repeat update-downloaded
+  // event to react to).
+  useEffect(() => {
+    if (state.phase === "ready") setDismissed(false);
+  }, [state.phase]);
+
   if (state.phase === "idle" || dismissed) return null;
 
   if (state.phase === "available") {
@@ -92,8 +104,8 @@ export default function UpdateBanner() {
       <div className="bg-amber-600 text-white text-xs px-4 py-1.5 flex items-center justify-between select-none shrink-0 z-50">
         <span className="font-medium">
           {isAr
-            ? "تعذر التحقق من وجود تحديث. سيتم المحاولة مرة أخرى تلقائيًا — يمكنك الاستمرار في استخدام البرنامج بشكل طبيعي."
-            : "Couldn't check for an update. It will retry automatically — you can keep using the app normally."}
+            ? "تعذر التحقق من وجود تحديث. يمكنك الاستمرار في استخدام البرنامج بشكل طبيعي، وسيتم التحقق مرة أخرى عند تشغيل البرنامج لاحقًا."
+            : "Couldn't check for an update. You can keep using the app normally; updates will be checked again the next time the app starts."}
         </span>
         <button
           onClick={() => setDismissed(true)}
@@ -111,8 +123,8 @@ export default function UpdateBanner() {
       <div className="bg-green-600 text-white text-xs px-4 py-1.5 flex items-center justify-between select-none shrink-0 z-50">
         <span className="font-medium">
           {isAr
-            ? `الإصدار ${state.version} جاهز — سيتم التثبيت عند إعادة التشغيل`
-            : `v${state.version} downloaded — will install on restart`}
+            ? `الإصدار ${state.version} جاهز — اضغط "إعادة التشغيل والتحديث" لتثبيته`
+            : `v${state.version} is ready — click "Restart & Update" to install`}
         </span>
         <button
           onClick={() => window.electron.updater.install()}
