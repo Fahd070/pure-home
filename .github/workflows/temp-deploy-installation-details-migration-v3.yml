@@ -1,0 +1,319 @@
+name: TEMP - Deploy customer-installation-details migration v3
+
+# TEMPORARY, single-purpose, manually-triggered workflow (v3 -- corrects v2's
+# false-positive safety check). Checks out PR #62's exact, already-reviewed,
+# already-Production-Validated head SHA for the workspace Prisma operates in
+# (the workflow *definition* itself still lives on main, required for
+# workflow_dispatch to be dispatchable at all).
+#
+# v1 checked out main alone (missing the new migration file while PR #62 is
+# intentionally unmerged) -- correctly found nothing pending and aborted.
+# v2 fixed the checkout but its migration.sql safety check used a
+# case-insensitive keyword regex across the WHOLE file, which false-matched
+# the word "rename" inside the migration's own descriptive comment -- also
+# correctly aborted, but on a false positive. v3 fixes this by stripping
+# comment/blank lines and normalizing whitespace BEFORE comparing against an
+# exact expected SQL string (a positive whitelist, not a blacklist), and adds
+# a SHA256 pin of the exact reviewed migration file content plus an explicit
+# pre-write read-only _prisma_migrations check.
+#
+# Deploys exactly one migration (20260818194741_add_customer_installation_details)
+# to production via `prisma migrate deploy`. Removed immediately after this
+# one-time deployment is confirmed successful.
+#
+# Uses the existing SUPABASE_DIRECT_URL secret (already provisioned for the
+# Database Backup workflow) -- no new secret is introduced. The secret is
+# never echoed; every command's output that could contain it is redacted
+# before being written to logs or the step summary.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-migration:
+    name: Verify + deploy the single expected migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      EXPECTED_MIGRATION: 20260818194741_add_customer_installation_details
+      EXPECTED_HEAD_SHA: f5ce213c301d48a928772b7f6a6a80626737ad70
+      EXPECTED_MIGRATION_COUNT: 14
+      # SHA256 of the migration.sql file's exact bytes at the reviewed PR #62
+      # commit above (computed locally from that exact commit before this
+      # workflow was created -- not derived from the checked-out workspace).
+      EXPECTED_SHA256: 6a145e5cd96f47e1dea1c778e4a4f81662f6565a6343a252c979a198bb0b0b29
+      # The migration's SQL with comment lines (--...), blank lines, and all
+      # runs of whitespace collapsed to single spaces -- an exact positive
+      # whitelist, not a keyword blacklist (see v2's false positive above).
+      EXPECTED_NORMALIZED_SQL: 'ALTER TABLE "customers" ADD COLUMN "installationAmount" DOUBLE PRECISION, ADD COLUMN "installationNote" TEXT, ADD COLUMN "installationPaymentMethod" TEXT;'
+
+    steps:
+      # Pinned to PR #62's exact, already-Production-Validated head -- NOT
+      # main, and NOT the branch's moving tip.
+      - uses: actions/checkout@v4
+        with:
+          ref: f5ce213c301d48a928772b7f6a6a80626737ad70
+
+      - name: Verify secret is configured
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          if [ -z "$SUPABASE_DIRECT_URL" ]; then
+            echo "::error::SUPABASE_DIRECT_URL secret is not set."
+            exit 1
+          fi
+
+      # ── Gate 1: workspace identity ───────────────────────────────────────────
+      - name: Gate 1 -- checked-out workspace is exactly the expected PR #62 head
+        run: |
+          ACTUAL_SHA=$(git rev-parse HEAD)
+          echo "## Gate 1: workspace identity" >> "$GITHUB_STEP_SUMMARY"
+          echo "Expected HEAD: \`${EXPECTED_HEAD_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Actual HEAD:   \`${ACTUAL_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ACTUAL_SHA" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "::error::Checked-out HEAD ($ACTUAL_SHA) does not match expected PR #62 head ($EXPECTED_HEAD_SHA). Refusing to proceed."
+            exit 1
+          fi
+          echo "::notice::Gate 1 passed."
+
+      # ── Gate 2: migration count + newest migration name ─────────────────────
+      - name: Gate 2 -- repository migration count and newest migration name
+        working-directory: packages/backend
+        run: |
+          MIGRATION_LIST=$(ls prisma/migrations | grep -v migration_lock.toml | sort)
+          MIGRATION_COUNT=$(echo "$MIGRATION_LIST" | grep -c .)
+          NEWEST_MIGRATION=$(echo "$MIGRATION_LIST" | tail -1)
+
+          echo "## Gate 2: migration count + newest name" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$MIGRATION_LIST" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Count: $MIGRATION_COUNT (expected: $EXPECTED_MIGRATION_COUNT)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Newest: $NEWEST_MIGRATION (expected: $EXPECTED_MIGRATION)" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$MIGRATION_COUNT" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
+            echo "::error::Migration count is $MIGRATION_COUNT, expected $EXPECTED_MIGRATION_COUNT. Refusing to proceed."
+            exit 1
+          fi
+          if [ "$NEWEST_MIGRATION" != "$EXPECTED_MIGRATION" ]; then
+            echo "::error::Newest migration is '$NEWEST_MIGRATION', expected '$EXPECTED_MIGRATION'. Refusing to proceed."
+            exit 1
+          fi
+          echo "::notice::Gate 2 passed."
+
+      # ── Gate 3: SHA256 pin of the exact reviewed migration file ──────────────
+      - name: Gate 3 -- migration.sql SHA256 matches the exact reviewed content
+        working-directory: packages/backend
+        run: |
+          SQL_FILE="prisma/migrations/${EXPECTED_MIGRATION}/migration.sql"
+          ACTUAL_SHA256=$(sha256sum "$SQL_FILE" | awk '{print $1}')
+          echo "## Gate 3: migration.sql SHA256" >> "$GITHUB_STEP_SUMMARY"
+          echo "Expected: \`${EXPECTED_SHA256}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Actual:   \`${ACTUAL_SHA256}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::migration.sql SHA256 does not match the reviewed PR #62 content. Refusing to proceed."
+            exit 1
+          fi
+          echo "::notice::Gate 3 passed."
+
+      # ── Gate 4: positive SQL whitelist (comments/blank lines stripped first) ─
+      - name: Gate 4 -- migration.sql content is exactly the expected additive ADD COLUMN statement
+        working-directory: packages/backend
+        run: |
+          SQL_FILE="prisma/migrations/${EXPECTED_MIGRATION}/migration.sql"
+          echo "## Gate 4: migration.sql content (raw, for the record)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```sql' >> "$GITHUB_STEP_SUMMARY"
+          cat "$SQL_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # Strip `--` comment lines and blank lines, then collapse all
+          # whitespace (including newlines) to single spaces, trimmed -- an
+          # exact positive whitelist compare, not a keyword blacklist scan
+          # (v2's false positive matched "rename" inside a comment).
+          NORMALIZED=$(grep -v '^[[:space:]]*--' "$SQL_FILE" | grep -v '^[[:space:]]*$' | tr -s '[:space:]' ' ' | sed -e 's/^ *//' -e 's/ *$//')
+
+          echo "Normalized SQL-only content:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$NORMALIZED" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$NORMALIZED" != "$EXPECTED_NORMALIZED_SQL" ]; then
+            echo "::error::migration.sql's normalized SQL content does not exactly match the expected additive ADD COLUMN statement. Refusing to proceed."
+            exit 1
+          fi
+          echo "::notice::Gate 4 passed -- migration.sql is exactly the three expected nullable ADD COLUMN statements, nothing else."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install backend dependencies
+        run: npm install --workspace=packages/backend --no-audit --no-fund
+
+      - name: Install PostgreSQL client (for read-only verification queries)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      # ── Gate 5: read-only _prisma_migrations check (raw SQL, before deploy) ──
+      - name: "Gate 5 -- production _prisma_migrations: 13 prior applied, target NOT yet applied"
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## Gate 5: _prisma_migrations (before deploy)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # -t (tuples-only) so the parsed file has no header/footer row to
+          # accidentally count -- this file is parsed programmatically below,
+          # not just displayed.
+          PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -t -A -F' | ' -c "
+            SELECT migration_name, finished_at IS NOT NULL AS finished, rolled_back_at IS NULL AS not_rolled_back
+            FROM \"_prisma_migrations\"
+            ORDER BY started_at;
+          " > /tmp/migrations_before.txt 2>&1
+          sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' /tmp/migrations_before.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          TOTAL_ROWS=$(grep -c ' | ' /tmp/migrations_before.txt || true)
+          if [ "$TOTAL_ROWS" -ne 13 ]; then
+            echo "::error::Expected exactly 13 rows in _prisma_migrations before deploy, found $TOTAL_ROWS. Refusing to proceed."
+            exit 1
+          fi
+          if grep -q "^${EXPECTED_MIGRATION} | " /tmp/migrations_before.txt; then
+            echo "::error::${EXPECTED_MIGRATION} already has a row in _prisma_migrations -- it should not be applied yet. Refusing to proceed."
+            exit 1
+          fi
+          if grep -E ' \| f$| \| f \|' /tmp/migrations_before.txt; then
+            echo "::error::At least one of the 13 prior migrations is not finished/not-rolled-back. Refusing to proceed."
+            exit 1
+          fi
+          echo "::notice::Gate 5 passed -- 13 prior migrations finished and not rolled back; target migration has no existing row."
+
+      # ── Gate 6: prisma migrate status confirms exactly one pending migration ─
+      - name: Gate 6 -- prisma migrate status confirms exactly the target migration is pending
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set +e
+          npx prisma migrate status --schema=prisma/schema.prisma > /tmp/status_before.txt 2>&1
+          set -e
+
+          echo "## Gate 6: prisma migrate status (before deploy)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' /tmp/status_before.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          OTHER_MIGRATIONS=$(ls prisma/migrations | grep -v migration_lock.toml | grep -v "^${EXPECTED_MIGRATION}$")
+          UNEXPECTED_FOUND=0
+          while IFS= read -r m; do
+            [ -z "$m" ] && continue
+            if grep -q "$m" /tmp/status_before.txt; then
+              echo "::error::Unexpected migration '$m' appears in migrate status output. Refusing to deploy."
+              UNEXPECTED_FOUND=1
+            fi
+          done <<< "$OTHER_MIGRATIONS"
+
+          if [ "$UNEXPECTED_FOUND" -eq 1 ]; then
+            echo "::error::Migration-history discrepancy detected -- stopping before any deploy."
+            exit 1
+          fi
+          if ! grep -q "$EXPECTED_MIGRATION" /tmp/status_before.txt; then
+            echo "::error::Expected migration '$EXPECTED_MIGRATION' was not found as pending in migrate status output. Refusing to deploy."
+            exit 1
+          fi
+          echo "::notice::Gate 6 passed -- '$EXPECTED_MIGRATION' is the only pending migration."
+
+      # ── Column count snapshot before deploy (for the "no unintended changes"
+      # ── check after deploy) ──────────────────────────────────────────────────
+      - name: Snapshot customers column count (before deploy)
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          COUNT_BEFORE=$(PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -A -t -c "
+            SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='customers';
+          ")
+          echo "COLUMN_COUNT_BEFORE=${COUNT_BEFORE}" >> "$GITHUB_ENV"
+          echo "customers column count before deploy: ${COUNT_BEFORE}" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Authorized write: deploy exactly this migration ──────────────────────
+      - name: prisma migrate deploy (PRODUCTION)
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          npx prisma migrate deploy --schema=prisma/schema.prisma 2>&1 | \
+            sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee /tmp/deploy_out.txt
+          echo "## migrate deploy result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/deploy_out.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Migration status (after deploy) -- expect up to date
+        working-directory: packages/backend
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## Migration status (after deploy)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          npx prisma migrate status --schema=prisma/schema.prisma 2>&1 | \
+            sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify _prisma_migrations row (read-only, bookkeeping only, no application data)
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## _prisma_migrations row for the deployed migration" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -A -F' | ' -c "
+            SELECT migration_name, started_at, finished_at, rolled_back_at, applied_steps_count
+            FROM \"_prisma_migrations\"
+            WHERE migration_name = '${EXPECTED_MIGRATION}';
+          " 2>&1 | sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify new columns (read-only, schema metadata only, no customer data)
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          echo "## New customers columns (information_schema, metadata only)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -A -F' | ' -c "
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'customers'
+              AND column_name IN ('installationNote', 'installationAmount', 'installationPaymentMethod')
+            ORDER BY column_name;
+          " 2>&1 | sed -E 's#(postgres(ql)?://)[^[:space:]]*#\1[REDACTED]#gI' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify no unintended columns/schema changes (column count delta must be exactly +3)
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          COUNT_AFTER=$(PGCONNECT_TIMEOUT=20 psql "$SUPABASE_DIRECT_URL" -v ON_ERROR_STOP=1 -A -t -c "
+            SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='customers';
+          ")
+          echo "customers column count after deploy: ${COUNT_AFTER} (before: ${COLUMN_COUNT_BEFORE})" >> "$GITHUB_STEP_SUMMARY"
+          EXPECTED_AFTER=$((COLUMN_COUNT_BEFORE + 3))
+          if [ "$COUNT_AFTER" -ne "$EXPECTED_AFTER" ]; then
+            echo "::error::customers column count is $COUNT_AFTER, expected exactly $EXPECTED_AFTER (before=$COLUMN_COUNT_BEFORE + 3 new). Unintended schema change detected."
+            exit 1
+          fi
+          echo "::notice::Column count delta confirmed as exactly +3 -- no unintended schema changes."
+
+      - name: Production health check (public endpoint, no secret needed)
+        run: |
+          echo "## Production /health" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          curl -s https://wfm-system.onrender.com/health | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
