@@ -55,6 +55,50 @@ describe('sanitizeUpdaterErrorDetails / sanitizeUpdaterError', () => {
     const err = new Error('x'.repeat(5000));
     expect(sanitizeUpdaterError(err).length).toBeLessThanOrEqual(300);
   });
+
+  it('strips an access_token query parameter', () => {
+    const err = new Error('request to https://example.com/asset?access_token=super-secret-value&other=1 failed');
+    const { message } = sanitizeUpdaterErrorDetails(err);
+    expect(message).not.toContain('super-secret-value');
+    expect(message).toContain('access_token=[redacted]');
+    expect(message).toContain('other=1');
+  });
+
+  it('strips a signature query parameter from a signed/private download URL', () => {
+    const err = new Error('download failed for https://cdn.example.com/file.exe?signature=abcdef123456&expires=1');
+    const { message } = sanitizeUpdaterErrorDetails(err);
+    expect(message).not.toContain('abcdef123456');
+    expect(message).toContain('signature=[redacted]');
+    expect(message).toContain('expires=1');
+  });
+
+  it('strips an X-Amz-Signature query parameter from an S3 pre-signed URL', () => {
+    const err = new Error(
+      'GET https://bucket.s3.amazonaws.com/setup.exe?X-Amz-Credential=AKIAEXAMPLE%2F20260101&X-Amz-Signature=deadbeef1234 -> 403'
+    );
+    const { message } = sanitizeUpdaterErrorDetails(err);
+    expect(message).not.toContain('deadbeef1234');
+    expect(message).not.toContain('AKIAEXAMPLE');
+    expect(message).toMatch(/X-Amz-Signature=\[redacted\]/i);
+    expect(message).toMatch(/X-Amz-Credential=\[redacted\]/i);
+  });
+
+  it('strips a credential query parameter', () => {
+    const err = new Error('request to https://example.com/asset?credential=service-account-secret&region=us-east-1 failed');
+    const { message } = sanitizeUpdaterErrorDetails(err);
+    expect(message).not.toContain('service-account-secret');
+    expect(message).toContain('credential=[redacted]');
+    expect(message).toContain('region=us-east-1'); // unrelated params still left alone
+  });
+
+  it('does not redact an unrelated parameter that merely contains a sensitive word as a substring (e.g. "apikey")', () => {
+    const err = new Error('request to https://example.com/asset?apikey=not-an-exact-match&filename=setup.exe failed');
+    const { message } = sanitizeUpdaterErrorDetails(err);
+    // "apikey" is not one of the exact sensitive parameter names, so it is
+    // harmless diagnostic information and must be left alone.
+    expect(message).toContain('apikey=not-an-exact-match');
+    expect(message).toContain('filename=setup.exe');
+  });
 });
 
 describe('formatUpdaterErrorLogLine', () => {

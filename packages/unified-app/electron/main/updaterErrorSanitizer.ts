@@ -6,19 +6,50 @@
 // Neither the renderer-facing message nor the persisted log line is ever
 // built from the raw error object or its stack trace -- only `.message`,
 // `.name`, and `.code` (when present) are read, and each is scrubbed for
-// local filesystem paths and token/key/password/secret/auth query-string
-// values before use.
+// local filesystem paths and sensitive query-string values (credentials, and
+// signed/private-URL parameters such as cloud-storage request signatures)
+// before use.
 export interface SanitizedUpdaterError {
   message: string;
   name?: string;
   code?: string;
 }
 
+// Query-string parameter names redacted wherever they appear as `?name=...`
+// or `&name=...`, matched case-insensitively as a whole parameter name (never
+// as a substring, so e.g. "apikey=" is untouched). To add another sensitive
+// parameter, add its name here -- nothing else needs to change.
+const SENSITIVE_QUERY_KEYS = [
+  // Generic credentials
+  "token",
+  "key",
+  "password",
+  "secret",
+  "auth",
+  "access_token",
+  "credential",
+  // Generic request-signing
+  "signature",
+  "sig",
+  // AWS S3 / CloudFront pre-signed URLs
+  "x-amz-signature",
+  "x-amz-credential",
+  "x-amz-security-token",
+  // Google Cloud Storage signed URLs
+  "x-goog-signature",
+  "x-goog-credential",
+];
+
+const SENSITIVE_QUERY_PATTERN = new RegExp(
+  `([?&](?:${SENSITIVE_QUERY_KEYS.join("|")})=)[^&\\s]+`,
+  "gi"
+);
+
 function scrub(value: string): string {
   return value
     .replace(/[A-Za-z]:\\[^\s"']+/g, "[local path]")
     .replace(/\/(?:home|Users)\/[^\s"']+/gi, "[local path]")
-    .replace(/([?&](?:token|key|password|secret|auth)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(SENSITIVE_QUERY_PATTERN, "$1[redacted]")
     .slice(0, 300);
 }
 
