@@ -53,16 +53,26 @@ process.on('uncaughtException', (err) => {
 const PORT = parseInt(process.env.PORT || '3001');
 const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 
+// Kill switch for a standby/test backend instance sharing the same Production
+// database as the real instance (e.g. verifying a new deploy region against
+// live data before it becomes authoritative) -- without this, two instances
+// would both run the hourly/post-boot reminder cron against the same DB,
+// which is unsafe (see services/notification.service.ts's own comment on why
+// its duplicate-check isn't safe across processes). Absent or any value other
+// than the literal string "false" (case-insensitive) leaves jobs enabled, so
+// existing deployments that don't set this variable are completely unaffected.
+const backgroundJobsEnabled = process.env.ENABLE_BACKGROUND_JOBS?.toLowerCase() !== 'false';
+
 const server = http.createServer(app);
 const io = initSocket(server);
-const notificationCronTask = startNotificationCron();
+const notificationCronTask = backgroundJobsEnabled ? startNotificationCron() : null;
 verifySchemaIsMigrated();
 
 const shutdown = createGracefulShutdown({
   httpServer: server,
   io,
   prisma,
-  stopCron: () => notificationCronTask.stop(),
+  stopCron: () => notificationCronTask?.stop(),
 });
 // Idempotent: a second SIGTERM/SIGINT while shutdown is already in progress
 // is a no-op (see src/shutdown.ts), so this can never double-run or crash-loop.
@@ -74,6 +84,7 @@ server.listen(PORT, BIND_HOST, () => {
 
   console.log('');
   console.log('  Pure Home Backend started');
+  console.log(`  Background jobs: ${backgroundJobsEnabled ? 'ENABLED' : 'DISABLED'}`);
 
   if (onRender) {
     const serviceUrl = process.env.RENDER_EXTERNAL_URL || `https://wfm-system.onrender.com`;
