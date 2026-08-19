@@ -123,6 +123,11 @@ function registerOperationalCategoryRoute(path: string, category: DashboardOpera
       const { search = '', page = '1', limit = '20' } = req.query as any;
       const safeLimit = Math.min(parseInt(limit) || 20, 100);
       const where: any = { ...getDashboardCategoryWheres()[category] };
+      // Object-level authorization: these categories are non-urgent but not
+      // necessarily Scheduling-visible (an appointment can have visibleToScheduling
+      // explicitly set to false) -- apply the same gate GET /api/appointments and
+      // GET /dashboard/urgent already use for Scheduling.
+      if (req.user!.role === 'SCHEDULING') where.visibleToScheduling = true;
       if (search) where.customer = { OR: [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }] };
       const total = await prisma.appointment.count({ where });
       let data: any[] = await prisma.appointment.findMany({
@@ -208,6 +213,14 @@ router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest,
 router.put('/appointment/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const { scheduledDate, type, status, notes } = req.body;
+    // Object-level authorization: this dashboard drill-down write must not permit
+    // Scheduling to reach an appointment that GET /api/appointments[/:id] would
+    // already hide from them. A hidden appointment's UUID is indistinguishable from
+    // a nonexistent one -- both return a plain 404.
+    const existing = req.user!.role === 'SCHEDULING'
+      ? await prisma.appointment.findFirst({ where: { id: req.params.id, visibleToScheduling: true } })
+      : await prisma.appointment.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ success: false, message: 'Not found' });
     const appt = await prisma.appointment.update({
       where: { id: req.params.id },
       data: {

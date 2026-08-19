@@ -317,7 +317,14 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
     const body = customerUpdateSchema.parse(req.body);
     const { address, version, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
 
-    const before = await prisma.customer.findUnique({ where: { id: req.params.id } });
+    // Object-level authorization: a Scheduling caller must not be able to write to a
+    // customer that GET /api/customers[/:id] would already hide from them (an
+    // admin-private urgent-only customer). Reuses the exact same visibility source of
+    // truth as those canonical read routes, so a hidden customer's UUID is indistinguishable
+    // from a nonexistent one -- both return a plain 404, never a distinguishable 403.
+    const before = req.user!.role === 'SCHEDULING'
+      ? await prisma.customer.findFirst({ where: applySchedulingCustomerVisibility({ id: req.params.id }) })
+      : await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
 
