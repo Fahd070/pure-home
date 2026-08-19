@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { computeNextMaintenanceDate } from '../services/maintenanceSchedule.service';
+import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 
 const router = Router();
 router.use(authenticate);
@@ -70,7 +71,7 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
     const safeLimit = Math.min(parseInt(limit) || 100, 200);
     const now = new Date();
 
-    const where: any = {};
+    let where: any = {};
     if (search) where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search } }
@@ -113,6 +114,11 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
     } else if (status === 'CANCELLED') {
       where.appointments = { some: { status: 'CANCELLED' } };
     }
+
+    // Object-level authorization: same hidden-customer policy as GET /api/customers
+    // and GET /dashboard/customers-list -- Scheduling must never see an admin-private
+    // urgent-only customer through this report either.
+    if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
 
     const total = await prisma.customer.count({ where });
     const customers = await prisma.customer.findMany({

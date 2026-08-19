@@ -5,6 +5,7 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
+import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 import {
   bulkDeleteAllSchema,
   StaleCountError,
@@ -20,14 +21,19 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
   try {
     const where: any = { NOT: { action: { contains: 'Scheduling visibility' } } };
     if (req.user!.role === 'SCHEDULING') {
-      // Scheduling only sees customer logs and appointment logs for visible appointments
-      const visibleAppts = await prisma.appointment.findMany({
-        where: { visibleToScheduling: true },
-        select: { id: true }
-      });
+      // Scheduling only sees customer logs for currently-visible customers and
+      // appointment logs for currently-visible appointments -- same visibility
+      // source of truth as the canonical GET /api/customers and GET /api/appointments
+      // routes, so this activity feed can never be used as a side channel to read
+      // beforeState/afterState PII for a customer those routes would otherwise hide.
+      const [visibleAppts, visibleCustomers] = await Promise.all([
+        prisma.appointment.findMany({ where: { visibleToScheduling: true }, select: { id: true } }),
+        prisma.customer.findMany({ where: applySchedulingCustomerVisibility({}), select: { id: true } }),
+      ]);
       const visibleApptIds = visibleAppts.map((a: any) => a.id);
+      const visibleCustomerIds = visibleCustomers.map((c: any) => c.id);
       where.OR = [
-        { entityType: 'customer' },
+        { entityType: 'customer', entityId: { in: visibleCustomerIds } },
         { entityType: 'appointment', entityId: { in: visibleApptIds } },
       ];
     }

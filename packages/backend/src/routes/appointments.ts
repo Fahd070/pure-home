@@ -407,7 +407,13 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       notes:               z.string().max(2000).optional().nullable(),
       visibleToScheduling: z.boolean().optional(),
     }).parse(req.body);
-    const existing = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
+    // Object-level authorization: a Scheduling caller must not be able to write to an
+    // appointment that GET /api/appointments[/:id] would already hide from them
+    // (visibleToScheduling=false). A hidden appointment's UUID is indistinguishable
+    // from a nonexistent one -- both return a plain 404, never a distinguishable 403.
+    const existing = req.user!.role === 'SCHEDULING'
+      ? await prisma.appointment.findFirst({ where: { id: req.params.id, visibleToScheduling: true }, include: { customer: true } })
+      : await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!existing) return res.status(404).json({ success: false, message: 'Not found' });
     const updated = await prisma.appointment.update({
       where: { id: req.params.id },
@@ -564,14 +570,14 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
       notes: z.string().max(1000).optional(),
     }).parse(req.body);
 
-    const before = await prisma.appointment.findUnique({
-      where: { id: req.params.id },
-      include: { customer: true },
-    });
+    // Object-level authorization: scope the lookup itself to what Scheduling is
+    // allowed to see, rather than fetching unconditionally and rejecting afterward --
+    // a hidden appointment's UUID must return the same plain 404 a nonexistent one
+    // would, not a distinguishable 403 that confirms the ID exists.
+    const before = req.user!.role === 'SCHEDULING'
+      ? await prisma.appointment.findFirst({ where: { id: req.params.id, visibleToScheduling: true }, include: { customer: true } })
+      : await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
-    if (req.user!.role === 'SCHEDULING' && !before.visibleToScheduling) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
     if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
 
     const updateData: any = { status: status as any, version: { increment: 1 } };
@@ -781,7 +787,10 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
 // submission -- never auto-approved, never confirmable by the Technician.
 router.patch('/:id/confirm-operation', requireRole('SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const before = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
+    // Object-level authorization: this route is SCHEDULING-only, so the visibility
+    // scope is unconditional -- same 404-for-hidden-or-nonexistent pattern as the
+    // other Scheduling-facing lookups in this file (e.g. export-to-technicians).
+    const before = await prisma.appointment.findFirst({ where: { id: req.params.id, visibleToScheduling: true }, include: { customer: true } });
     if (!before) return res.status(404).json({ success: false, message: 'Not found' });
 
     if (before.workStatus !== 'COMPLETED') {
