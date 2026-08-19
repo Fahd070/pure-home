@@ -87,7 +87,7 @@ server.listen(PORT, BIND_HOST, () => {
   console.log(`  Background jobs: ${backgroundJobsEnabled ? 'ENABLED' : 'DISABLED'}`);
 
   if (onRender) {
-    const serviceUrl = process.env.RENDER_EXTERNAL_URL || `https://wfm-system.onrender.com`;
+    const serviceUrl = process.env.RENDER_EXTERNAL_URL || `https://pure-home-singapore.onrender.com`;
     console.log(`  Render:     ${serviceUrl}`);
   } else {
     // Local / on-premise: detect Tailscale and LAN addresses for the startup banner

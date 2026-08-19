@@ -100,7 +100,7 @@ Write-Host "Restore complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Verify the backend health check:"
-Write-Host "     GET https://wfm-system.onrender.com/health"
+Write-Host "     GET https://pure-home-singapore.onrender.com/health"
 Write-Host "     Expect: { status: 'ok', database: 'connected' }"
 Write-Host "  2. Log into each department and verify data is present."
 Write-Host "  3. Record this restore in the audit log."

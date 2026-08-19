@@ -10,7 +10,7 @@
    - **Output Directory**: `dist`
 3. Add Environment Variable:
    - Key: `VITE_API_URL`
-   - Value: `https://wfm-system.onrender.com`
+   - Value: `https://pure-home-singapore.onrender.com`
 4. Click **Deploy**
 
 That's it — Vercel deploys in ~30 seconds.
