@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -14,7 +14,18 @@ export default function Appointments() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const socket = useSocket();
-  const { data, isLoading } = useQuery({ queryKey: ["appointments"], queryFn: () => api.get("/appointments").then(r => r.data.data) });
+  const [page, setPage] = useState(1);
+  // Perf fix: GET /appointments is now paginated (default 20/page, max 100)
+  // instead of returning every matching row. This is a plain browsable list
+  // (no filters here), so it uses the endpoint's own page/limit + meta
+  // directly, matching the existing GET /customers pagination convention
+  // used elsewhere in this app (see admin/pages/Customers.tsx).
+  const { data, isLoading } = useQuery({
+    queryKey: ["appointments", page],
+    queryFn: () => api.get("/appointments", { params: { page, limit: 20 } }).then(r => r.data),
+  });
+  const appointments: any[] = data?.data || [];
+  const meta = data?.meta;
 
   const exportMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/appointments/${id}/export-to-technicians`),
@@ -74,7 +85,7 @@ export default function Appointments() {
               </tr>
             </thead>
             <tbody>
-              {(data || []).map((a: any) => {
+              {appointments.map((a: any) => {
                 // State machine (visibleToTechnician, adminApproved): (true,false) =
                 // never exported -- eligible to export. (false,false) = pending Admin
                 // approval. (true,true) = exported and approved. Urgent appointments
@@ -129,6 +140,13 @@ export default function Appointments() {
           </table></div>
         )}
       </div>
+      {meta && (
+        <div className="flex justify-center items-center gap-2">
+          <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">‹</button>
+          <span className="px-3 py-1 text-sm">{meta.page} / {meta.totalPages}</span>
+          <button disabled={meta.page >= meta.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">›</button>
+        </div>
+      )}
     </div>
   );
 }
