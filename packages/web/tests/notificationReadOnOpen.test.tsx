@@ -150,9 +150,23 @@ describe('Technician Work Queue: badge-clear-on-open fix (source-level)', () => 
 });
 
 describe('System Activity and Urgent Appointments: already-correct read-on-open (regression confirmation, pre-existing)', () => {
-  it('technician System Activity already sets its own last-seen marker on mount', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/pages/Messages.tsx'), 'utf-8');
-    expect(src).toMatch(/localStorage\.setItem\("msg-last-seen-tech", Date\.now\(\)\.toString\(\)\)/);
+  // Polling cleanup fix: GET /messages is ADMIN/SCHEDULING-only on the
+  // backend (routes/messages.ts's requireRole) and always 403'd for
+  // TECHNICIAN -- both the Sidebar's recurring badge query and this
+  // always-broken, always-empty page were removed entirely (there is no
+  // other authorized endpoint this badge could have meant), rather than
+  // broadening backend authorization to silence the error.
+  it('technician System Activity page/route no longer exists (removed, not silently broadened)', () => {
+    const messagesPagePath = path.resolve(__dirname, '../../unified-app/src/technician/pages/Messages.tsx');
+    expect(fs.existsSync(messagesPagePath)).toBe(false);
+
+    const appSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/App.tsx'), 'utf-8');
+    expect(appSrc).not.toMatch(/TechMessages/);
+
+    const sidebarSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/components/Sidebar.tsx'), 'utf-8');
+    expect(sidebarSrc).not.toMatch(/\/technician\/messages/);
+    expect(sidebarSrc).not.toMatch(/api\.get\("\/messages"\)/);
+    expect(sidebarSrc).not.toMatch(/activity-feed-tech/);
   });
 
   // Urgent-ownership batch (Part C): the urgent badge is no longer a

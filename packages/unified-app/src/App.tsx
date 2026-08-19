@@ -43,7 +43,6 @@ import WorkQueue from "./technician/pages/WorkQueue";
 import TaskDetail from "./technician/pages/TaskDetail";
 import TechUrgentAppointments from "./technician/pages/UrgentAppointments";
 import TechExpenses from "./technician/pages/Expenses";
-import TechMessages from "./technician/pages/Messages";
 import TechNotifications from "./technician/pages/Notifications";
 import TechDirectMessages from "./technician/pages/DirectMessages";
 import TechSettings from "./technician/pages/Settings";
@@ -118,7 +117,6 @@ function AppShell() {
             <Route path="queue/:id" element={<TaskDetail />} />
             <Route path="urgent-appointments" element={<TechUrgentAppointments />} />
             <Route path="expenses" element={<TechExpenses />} />
-            <Route path="messages" element={<TechMessages />} />
             <Route path="notifications" element={<TechNotifications />} />
             <Route path="messaging" element={<TechDirectMessages />} />
             <Route path="settings" element={<TechSettings />} />
