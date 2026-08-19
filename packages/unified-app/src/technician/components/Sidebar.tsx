@@ -21,7 +21,6 @@ const links = [
   { to: "/technician/queue",              label: "nav.workQueue",          icon: "📋", badgeKey: "queue" },
   { to: "/technician/urgent-appointments",label: "nav.urgentAppointments", icon: "🚨", badgeKey: "urgentAppts" },
   { to: "/technician/expenses",           label: "nav.expenses",           icon: "💰" },
-  { to: "/technician/messages",           label: "nav.messages",           icon: "🗒️",  badgeKey: "messages" },
   { to: "/technician/notifications",      label: "nav.notifications",      icon: "🔔", badgeKey: "notifications" },
   { to: "/technician/messaging",          label: "nav.messaging",          icon: "💬", badgeKey: "messaging" },
   { to: "/technician/settings",           label: "nav.settings",           icon: "⚙️" },
@@ -83,14 +82,10 @@ export default function Sidebar() {
 
   const { data: notifData } = useQuery({ queryKey: ["notif-unread-tech"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
   const { data: dmCount } = useQuery({ queryKey: ["dm-unread-tech"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
-  const { data: activityData } = useQuery({ queryKey: ["activity-feed-tech"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
-  const lastSeenMessages = Number(localStorage.getItem("msg-last-seen-tech") || 0);
-  const newMessages = (activityData as any[]).filter((log: any) => new Date(log.createdAt).getTime() > lastSeenMessages).length;
 
   const badges: Record<string, number> = {
     notifications: notifData as number,
     messaging: dmCount as number,
-    messages: newMessages,
     queue: queueBadge,
     urgentAppts: urgentBadge as number,
   };
