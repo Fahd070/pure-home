@@ -9,7 +9,13 @@ import { persist, createJSONStorage } from "zustand/middleware";
 // which calls setServerUrl() and persists the override to localStorage) --
 // this constant is only ever that build's *initial* default, never a hard
 // requirement, so the fallback below is intentional and safe in both cases.
-const RENDER_URL = import.meta.env.VITE_API_URL || "https://wfm-system.onrender.com";
+//
+// Named separately from RENDER_URL (rather than only using the literal
+// inline) so the v4->v5 store migration below can target the exact old and
+// new URLs regardless of what VITE_API_URL happens to be at migration time.
+const OLD_OREGON_URL = "https://wfm-system.onrender.com";
+const SINGAPORE_URL = "https://pure-home-singapore.onrender.com";
+const RENDER_URL = import.meta.env.VITE_API_URL || SINGAPORE_URL;
 
 export interface AuthUser { id: string; name: string; email: string; role: string; }
 interface DeptAuth { user: AuthUser; token: string; }
@@ -47,7 +53,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "wfm-unified",
-      version: 4,
+      version: 5,
       migrate: (state: any, version: number) => {
         if (version < 4) {
           // Ensure all installs use the shared backend; clear stale tokens
@@ -55,6 +61,16 @@ export const useAppStore = create<AppStore>()(
           state.adminAuth = null;
           state.schedulingAuth = null;
           state.technicianAuth = null;
+        }
+        if (version < 5) {
+          // Production backend moved from Render Oregon to Render Singapore
+          // (closer to the Supabase Tokyo database). Only touch serverUrl if
+          // it is exactly the old Oregon production URL -- never a custom
+          // Server Setup URL, localhost, or an already-Singapore/other
+          // value -- and never clear auth tokens for this migration alone.
+          if (state.serverUrl === OLD_OREGON_URL) {
+            state.serverUrl = SINGAPORE_URL;
+          }
         }
         return state;
       },

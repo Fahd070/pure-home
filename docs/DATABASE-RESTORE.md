@@ -107,6 +107,6 @@ A real disaster-recovery restore requires, in order:
    (or the equivalent `pg_restore` invocation) against the real `SUPABASE_DIRECT_URL`,
    with the existing confirmation prompt intact.
 
-After any real production restore: verify `GET https://wfm-system.onrender.com/health`
+After any real production restore: verify `GET https://pure-home-singapore.onrender.com/health`
 returns `database: connected`, log into each department and spot-check records, and
 record the restore event (what was restored, when, and why) in the audit trail.

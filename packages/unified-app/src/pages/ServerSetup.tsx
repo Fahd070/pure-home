@@ -38,7 +38,7 @@ export default function ServerSetup() {
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-5 text-xs text-slate-600 space-y-1">
           <p className="font-semibold text-slate-700">Backend connection:</p>
           <p>All departments connect to the shared cloud backend.</p>
-          <p>Default: <code className="bg-slate-100 px-1 rounded">https://wfm-system.onrender.com</code></p>
+          <p>Default: <code className="bg-slate-100 px-1 rounded">https://pure-home-singapore.onrender.com</code></p>
           <p>Click <strong>Test &amp; Save</strong> to verify connectivity. Green = connected.</p>
           <div className="border-t border-slate-200 pt-1 mt-1">
             <p className="font-semibold text-slate-700">إعداد الخادم:</p>
@@ -53,7 +53,7 @@ export default function ServerSetup() {
             <input
               value={url}
               onChange={e => { setUrl(e.target.value); setStatus("idle"); setError(""); }}
-              placeholder="https://wfm-system.onrender.com"
+              placeholder="https://pure-home-singapore.onrender.com"
               className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-slate-400 text-xs mt-1">

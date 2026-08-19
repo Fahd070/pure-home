@@ -26,7 +26,7 @@ describe('appStore serverUrl (F-9 VITE_API_URL source of truth)', () => {
   it('falls back to the documented default when VITE_API_URL is not configured (local/dev behavior)', async () => {
     vi.stubEnv('VITE_API_URL', '');
     const { useAppStore } = await import('@/store/appStore');
-    expect(useAppStore.getState().serverUrl).toBe('https://wfm-system.onrender.com');
+    expect(useAppStore.getState().serverUrl).toBe('https://pure-home-singapore.onrender.com');
   });
 
   it('a runtime override via setServerUrl still works regardless of the build-time default (Electron Server Setup behavior preserved)', async () => {

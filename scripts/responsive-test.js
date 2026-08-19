@@ -7,7 +7,7 @@ const path = require('path');
 const fs = require('fs');
 
 const BASE = 'https://pure-home-web.vercel.app';
-const BACKEND = 'https://wfm-system.onrender.com';
+const BACKEND = 'https://pure-home-singapore.onrender.com';
 const SHOTS_DIR = path.join(__dirname, '../shots-responsive');
 if (!fs.existsSync(SHOTS_DIR)) fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
@@ -50,7 +50,7 @@ async function login(page) {
   await page.evaluate((data) => {
     localStorage.setItem('wfm-unified', JSON.stringify({
       state: {
-        serverUrl: 'https://wfm-system.onrender.com',
+        serverUrl: 'https://pure-home-singapore.onrender.com',
         adminAuth: { user: data.user, token: data.token },
         schedulingAuth: null,
         technicianAuth: null,

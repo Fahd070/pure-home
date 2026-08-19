@@ -38,4 +38,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://wfm-system.onrender.com
+        value: https://pure-home-singapore.onrender.com

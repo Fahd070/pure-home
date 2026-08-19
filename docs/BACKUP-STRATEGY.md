@@ -143,7 +143,7 @@ The script will:
 ### Step 3 — Verify
 
 ```
-GET https://wfm-system.onrender.com/health
+GET https://pure-home-singapore.onrender.com/health
 Expected: { "status": "ok", "database": "connected", "dbResponseMs": <number> }
 ```
 
@@ -182,7 +182,7 @@ configured. It requires no action to enable — it exists by default.
 The backend exposes a health endpoint used by Render for uptime monitoring:
 
 ```
-GET https://wfm-system.onrender.com/health
+GET https://pure-home-singapore.onrender.com/health
 ```
 
 **Healthy:**
