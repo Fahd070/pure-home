@@ -6,7 +6,7 @@ import { emitToRole, emitToRoles, emitToTechnician } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
-import { stripCompletionAmount } from '../services/completionPrivacy.service';
+import { stripCompletionAmount, stripCompletionAmountFromList, stripInstallationFinancialsFromCustomer } from '../services/completionPrivacy.service';
 import { resolveOrCreateUrgentCustomer, validateUrgentCustomerIdentity, InvalidCustomerIdentityError } from '../services/customerResolve.service';
 
 const router = Router();
@@ -71,7 +71,12 @@ function apptFields(a: any) {
 function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToScheduling: boolean) {
   emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
   if (visibleToScheduling) {
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+    // Privacy Patch #2: defense in depth -- completionAmount/completionImage/
+    // urgentVisitRecord financials are always null on a freshly-created
+    // appointment, but routing through the same helper every other
+    // Scheduling-facing emit uses keeps this call site from silently drifting
+    // out of sync if that ever changes.
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, stripCompletionAmount(appt));
   }
   if (appt.visibleToTechnician) {
     if (appt.technicianId) {
@@ -174,7 +179,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
       where.createdByRole = 'SCHEDULING';
     }
 
-    const [appts, total] = await Promise.all([
+    let [appts, total] = await Promise.all([
       prisma.appointment.findMany({
         where,
         include: WORK_INCLUDE,
@@ -183,19 +188,22 @@ router.get('/', async (req: AuthRequest, res, next) => {
         take: limit,
       }),
       prisma.appointment.count({ where }),
-    ]);
+    ]) as [any[], number];
 
+    // Privacy Patch #2: routed through the same centralized helper every other
+    // Scheduling-facing appointment response uses, instead of this route's own
+    // previously-separate inline delete logic -- keeps completionAmount,
+    // completionPaymentMethod, completionImage and urgentVisitRecord.amount/
+    // paymentMethod consistently redacted everywhere.
     if (req.user!.role === 'SCHEDULING') {
-      appts.forEach((a: any) => {
-        delete a.completionAmount; delete a.completionPaymentMethod;
-        if (a.urgentVisitRecord) { delete a.urgentVisitRecord.amount; delete a.urgentVisitRecord.paymentMethod; }
-      });
+      appts = stripCompletionAmountFromList(appts);
     } else if (req.user!.role === 'TECHNICIAN') {
       appts.forEach((a: any) => {
         if (a.technicianId !== req.user!.userId) {
           delete a.completionAmount; delete a.completionPaymentMethod;
         }
         delete a.completionImage;
+        if (a.customer) a.customer = stripInstallationFinancialsFromCustomer(a.customer);
       });
     }
 
@@ -270,10 +278,18 @@ router.get('/:id', async (req: AuthRequest, res, next) => {
       include: WORK_INCLUDE,
     });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
-    // Modification #6: completionAmount is private to ADMIN/TECHNICIAN. The list
-    // endpoint (GET /) already strips it for SCHEDULING; this single-record
-    // endpoint needs the same treatment.
-    const out = req.user!.role === 'SCHEDULING' ? stripCompletionAmount(appt) : appt;
+    // Modification #6 / Privacy Patch #2: completionAmount/completionImage/
+    // urgentVisitRecord financials are private to ADMIN/TECHNICIAN; the list
+    // endpoint (GET /) already strips them for SCHEDULING via the same helper,
+    // this single-record endpoint needs the same treatment. Technician's own
+    // nested customer include also has its installation-financial fields
+    // stripped (see stripInstallationFinancialsFromCustomer).
+    let out: any = appt;
+    if (req.user!.role === 'SCHEDULING') {
+      out = stripCompletionAmount(appt);
+    } else if (req.user!.role === 'TECHNICIAN' && appt.customer) {
+      out = { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) };
+    }
     res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });
@@ -651,10 +667,15 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
       before: apptFields(before), after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_STARTED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
+    // Privacy Patch #2: the technician-room emit's audience is always a
+    // Technician regardless of whether Admin or the Technician performed this
+    // action -- strip the nested customer's installation-financial fields for
+    // that emit unconditionally.
+    const techSafeAppt = appt.customer ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) } : appt;
     // Only the owning technician's job -- other technicians must not see it start.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STARTED, appt);
-    if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_STARTED, appt);
-    res.json({ success: true, data: appt });
+    if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_STARTED, techSafeAppt);
+    res.json({ success: true, data: isAdmin ? appt : techSafeAppt });
   } catch (e) { next(e); }
 });
 
@@ -772,12 +793,24 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_COMPLETED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
     const sanitized = { ...appt, completionAmount: undefined, completionPaymentMethod: undefined };
+    // Privacy Patch #2: this value is now technician-room-only (Scheduling's
+    // emit below uses the centralized helper instead), so also strip the
+    // nested customer's installation-financial fields for that audience.
+    if (sanitized.customer) sanitized.customer = stripInstallationFinancialsFromCustomer(sanitized.customer);
+    const schedSafeCompleted = stripCompletionAmount(appt);
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_COMPLETED, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_COMPLETED, schedSafeCompleted);
     // Only the owning technician -- was previously routed to the whole TECHNICIAN role,
     // meaning every other technician received it too.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
-    res.json({ success: true, data: appt });
+    // Privacy Patch #2: the acting Technician's own REST response keeps their
+    // full just-submitted completion data (amount/image) -- only the nested
+    // customer's installation-financial fields are stripped, same as every
+    // other Technician-facing appointment response in this file.
+    const responseData = (!isAdmin && appt.customer)
+      ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) }
+      : appt;
+    res.json({ success: true, data: responseData });
   } catch (e) { next(e); }
 });
 
@@ -871,11 +904,22 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_POSTPONED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
     const postponedSanitized = { ...appt, completionAmount: undefined, completionPaymentMethod: undefined };
+    // Privacy Patch #2: this value is now technician-room-only (Scheduling's
+    // emit below uses the centralized helper instead), so also strip the
+    // nested customer's installation-financial fields for that audience.
+    if (postponedSanitized.customer) postponedSanitized.customer = stripInstallationFinancialsFromCustomer(postponedSanitized.customer);
+    const schedSafePostponed = stripCompletionAmount(appt);
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_POSTPONED, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_POSTPONED, schedSafePostponed);
     // Only the owning technician -- other technicians have no reason to see this job.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
-    res.json({ success: true, data: appt });
+    // Privacy Patch #2: strip only the nested customer's installation-financial
+    // fields for the acting Technician's own REST response -- same narrow fix
+    // as every other Technician-facing appointment response in this file.
+    const responseData = (!isAdmin && appt.customer)
+      ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) }
+      : appt;
+    res.json({ success: true, data: responseData });
   } catch (e) { next(e); }
 });
 
