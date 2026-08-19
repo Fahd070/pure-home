@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime, formatGregorianMonthYear, localDateOnlyStr } from "../../utils/dateTimeInput";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -281,15 +282,17 @@ export default function Reports() {
   const customers: any[] = data?.data || [];
   const total = data?.meta?.total || 0;
 
+  // Perf fix: GET /appointments is now paginated (default 20/page, max 100).
+  // This export/report flow must reflect every matching appointment, not just
+  // page 1, so it fetches every page explicitly (fetchAllPages) instead of
+  // silently exporting a truncated result.
   const { data: apptData, isLoading: apptLoading } = useQuery({
     queryKey: ["reports-appointments", apptFilters],
-    queryFn: () => api.get("/appointments", {
-      params: {
-        from: apptFilters.dateFrom || undefined,
-        to: apptFilters.dateTo || undefined,
-        status: apptFilters.status || undefined,
-      }
-    }).then(r => r.data.data || []),
+    queryFn: () => fetchAllPages(api, "/appointments", {
+      from: apptFilters.dateFrom || undefined,
+      to: apptFilters.dateTo || undefined,
+      status: apptFilters.status || undefined,
+    }),
     enabled: hasSearchedAppts,
   });
   const allAppts: any[] = apptData || [];

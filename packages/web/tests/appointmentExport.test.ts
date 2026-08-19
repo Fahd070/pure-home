@@ -43,8 +43,16 @@ describe('Admin Appointments page: export approval action', () => {
     expect(adminSrc).toMatch(/api\.patch\(`\/appointments\/\$\{id\}\/approve-export`\)/);
   });
 
-  it('filters pending-export appointments as not yet technician-visible and not yet admin-approved', () => {
-    expect(adminSrc).toMatch(/const pendingExportAppts = appointments\.filter\(a => !a\.visibleToTechnician && !a\.adminApproved\);/);
+  it('reflects pending-export appointments (not yet technician-visible, not yet admin-approved) via the dedicated total, not the paginated table page', () => {
+    // Perf fix: GET /appointments is now paginated, so this banner can no
+    // longer be derived by filtering the currently-loaded page's `appointments`
+    // array (that would miss pending items sitting on other pages) -- it now
+    // reads pendingExportTotal, sourced from the existing, already-unbounded
+    // GET /appointments/pending-export-approval endpoint (the same one
+    // AppointmentAcceptance.tsx already relies on), preserving the exact same
+    // (!visibleToTechnician && !adminApproved) definition of "pending export".
+    expect(adminSrc).toMatch(/api\.get\("\/appointments\/pending-export-approval"\)\.then\(r => \(r\.data\.data \|\| \[\]\)\.length\)/);
+    expect(adminSrc).toMatch(/pendingExportTotal/);
   });
 
   it('renders the approve-export button only for appointments pending export approval', () => {

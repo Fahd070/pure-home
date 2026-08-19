@@ -8,6 +8,7 @@ import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import { dateOnlyToApiDate, formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 import { isValidPrimaryPhone } from "../../utils/phone";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 
 type Tab = "list" | "records";
 
@@ -40,10 +41,15 @@ export default function UrgentAppointments() {
     };
   }, [socket, qc]);
 
+  // Perf fix: GET /appointments is now paginated (default 20/page, max 100).
+  // This is an action-required list of every unresolved urgent appointment --
+  // silently showing only page 1 could hide a real urgent job, so this fetches
+  // every page explicitly (fetchAllPages) rather than adding paginated
+  // browsing UI to what must always be a complete list.
   const { data: apptData, isLoading: apptLoading } = useQuery({
     queryKey: ["urgent-appointments"],
-    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 200 } })
-      .then(r => (r.data.data || []).filter((a: any) => a.createdByRole === 'ADMIN' || !a.createdByRole)),
+    queryFn: () => fetchAllPages(api, "/appointments", { urgent: "true" })
+      .then(rows => rows.filter((a: any) => a.createdByRole === 'ADMIN' || !a.createdByRole)),
   });
 
   const { data: visitData, isLoading: visitLoading } = useQuery({

@@ -12,6 +12,7 @@ import { useAuthStore } from "../store/authStore";
 // batch) rather than duplicating a second validator -- same file family
 // (technician/pages), same production logic.
 import { FIRST_NAME_RE, firstNameOf } from "./TaskDetail";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER_COMMERCIAL" | "BANK_TRANSFER_PERSONAL";
 type PaymentGroup = "" | "CASH" | "BANK_TRANSFER";
@@ -53,9 +54,14 @@ export default function TechUrgentAppointments() {
     };
   }, [socket, qc]);
 
+  // Perf fix: GET /appointments is now paginated (default 20/page, max 100).
+  // This is an action-required list of every unresolved urgent appointment --
+  // silently showing only page 1 could hide a real urgent job, so this fetches
+  // every page explicitly (fetchAllPages) rather than adding paginated
+  // browsing UI to what must always be a complete list.
   const { data, isLoading } = useQuery({
     queryKey: ["tech-urgent-appointments"],
-    queryFn: () => api.get("/appointments", { params: { urgent: "true", limit: 100 } }).then(r => r.data.data || []),
+    queryFn: () => fetchAllPages(api, "/appointments", { urgent: "true" }),
   });
 
   const submitMutation = useMutation({

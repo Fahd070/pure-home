@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 
 const STATUS_COLORS: Record<string, string> = {
   WAITING: "bg-yellow-100 text-yellow-700",
@@ -18,9 +19,14 @@ export default function WorkQueue() {
   const qc = useQueryClient();
   const socket = useSocket();
 
+  // Perf fix: GET /appointments is now paginated (default 20/page, max 100).
+  // This is the technician's own active work queue -- a job silently missing
+  // because it landed on page 2 would be a real operational problem, so this
+  // fetches every page explicitly (fetchAllPages) rather than adding
+  // paginated browsing UI to what must always be a complete list.
   const { data, isLoading } = useQuery({
     queryKey: ["work-queue"],
-    queryFn: () => api.get("/appointments?workStatus=WAITING,IN_PROGRESS").then(r => r.data.data)
+    queryFn: () => fetchAllPages(api, "/appointments", { workStatus: "WAITING,IN_PROGRESS" })
   });
 
   // Read-on-open fix: the sidebar's "queue" badge (badge-queue-tech) increments

@@ -89,9 +89,41 @@ const WORK_INCLUDE = {
   urgentVisitRecord: true,
 };
 
+// Perf fix: this route was previously fully unbounded (no `limit`/`skip` of
+// any kind), so every caller -- regardless of whether it actually needed the
+// complete matching dataset -- paid the cost of transferring every matching
+// row's full relation graph. `page`/`limit` are additive and optional:
+// omitting both preserves page 1 of DEFAULT_LIMIT rows (matching this
+// codebase's existing GET /customers pagination convention), not the old
+// unbounded behavior -- every caller that genuinely needs the complete
+// matching set (urgent-work lists, the technician work queue, the
+// appointments report/export) now fetches every page explicitly via the
+// shared fetchAllPages() frontend helper instead of relying on an implicit
+// unbounded response.
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const { status, workStatus: workStatusFilter, from, to, urgent } = req.query as any;
+    const { status, workStatus: workStatusFilter, from, to, urgent, pendingSchedulingApproval, page: pageRaw, limit: limitRaw } = req.query as any;
+
+    let page = 1;
+    if (pageRaw !== undefined) {
+      const n = Number(pageRaw);
+      if (!Number.isInteger(n) || n < 1) {
+        return res.status(400).json({ success: false, message: 'page must be an integer >= 1' });
+      }
+      page = n;
+    }
+    let limit = DEFAULT_LIMIT;
+    if (limitRaw !== undefined) {
+      const n = Number(limitRaw);
+      if (!Number.isInteger(n) || n < 1) {
+        return res.status(400).json({ success: false, message: 'limit must be an integer >= 1' });
+      }
+      limit = Math.min(n, MAX_LIMIT);
+    }
+
     const where: any = {};
     if (status) where.status = status;
     if (from || to) where.scheduledDate = {
@@ -133,11 +165,25 @@ router.get('/', async (req: AuthRequest, res, next) => {
       if (urgent === 'true') where.isUrgent = true;
     }
 
-    const appts = await prisma.appointment.findMany({
-      where,
-      include: WORK_INCLUDE,
-      orderBy: { scheduledDate: 'desc' },
-    });
+    // Admin Appointments.tsx's "pending Scheduling approval" banner needs an
+    // accurate total across ALL matching rows, not just the current page --
+    // this narrows (never widens) whatever the role-based where above already
+    // scoped, so it can't leak visibility across roles.
+    if (pendingSchedulingApproval === 'true') {
+      where.visibleToScheduling = false;
+      where.createdByRole = 'SCHEDULING';
+    }
+
+    const [appts, total] = await Promise.all([
+      prisma.appointment.findMany({
+        where,
+        include: WORK_INCLUDE,
+        orderBy: { scheduledDate: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.appointment.count({ where }),
+    ]);
 
     if (req.user!.role === 'SCHEDULING') {
       appts.forEach((a: any) => {
@@ -153,7 +199,11 @@ router.get('/', async (req: AuthRequest, res, next) => {
       });
     }
 
-    res.json({ success: true, data: appts });
+    res.json({
+      success: true,
+      data: appts,
+      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    });
   } catch (e) { next(e); }
 });
 

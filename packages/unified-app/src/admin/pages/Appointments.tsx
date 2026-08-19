@@ -22,13 +22,38 @@ export default function Appointments() {
   const qc = useQueryClient();
   const socket = useSocket();
   const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editAppt, setEditAppt] = useState<any>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
+  // Perf fix: GET /appointments is now paginated (default 20/page, max 100)
+  // instead of returning every matching row. Uses the endpoint's own
+  // page/limit + meta directly (matching admin/pages/Customers.tsx's existing
+  // pagination convention). `page` resets to 1 whenever the status filter
+  // changes (see the filter buttons below).
   const { data, isLoading } = useQuery({
-    queryKey: ["appointments", filter],
-    queryFn: () => api.get("/appointments", { params: filter ? { status: filter } : {} }).then(r => r.data.data || []),
+    queryKey: ["appointments", filter, page],
+    queryFn: () => api.get("/appointments", { params: { ...(filter ? { status: filter } : {}), page, limit: 20 } }).then(r => r.data),
+  });
+  const appointments: any[] = data?.data || [];
+  const meta = data?.meta;
+
+  // Perf fix: these banners must reflect the TRUE total across every matching
+  // appointment, not just whatever happens to be on the currently-loaded page
+  // -- computing them from `appointments` (now paginated) would silently miss
+  // items awaiting approval that aren't on page 1. `pendingExportAppts` reuses
+  // the existing dedicated (and already unbounded-by-design) endpoint
+  // AppointmentAcceptance.tsx already relies on; `pendingSchedulingApproval`
+  // is a small additive filter on the same GET /appointments route, read via
+  // its `meta.total` (limit:1 -- only the count is needed here).
+  const { data: pendingSchedTotal } = useQuery({
+    queryKey: ["appointments-pending-scheduling-approval"],
+    queryFn: () => api.get("/appointments", { params: { pendingSchedulingApproval: "true", limit: 1 } }).then(r => r.data.meta?.total ?? 0),
+  });
+  const { data: pendingExportTotal } = useQuery({
+    queryKey: ["appointments-pending-export-approval"],
+    queryFn: () => api.get("/appointments/pending-export-approval").then(r => (r.data.data || []).length),
   });
 
   const { data: customersData } = useQuery({
@@ -45,10 +70,19 @@ export default function Appointments() {
     enabled: !!form.customerId,
   });
 
+  // The two banner query keys are invalidated alongside ["appointments"]
+  // everywhere below -- any create/edit/status/approval/delete action can
+  // change which appointments are pending Scheduling/export approval.
+  function invalidateAppointmentQueries() {
+    qc.invalidateQueries({ queryKey: ["appointments"] });
+    qc.invalidateQueries({ queryKey: ["appointments-pending-scheduling-approval"] });
+    qc.invalidateQueries({ queryKey: ["appointments-pending-export-approval"] });
+  }
+
   const createMutation = useMutation({
     mutationFn: (body: any) => api.post("/appointments", body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateAppointmentQueries();
       toast.success(t("common.success"));
       setShowForm(false);
       setForm({ ...EMPTY_FORM });
@@ -59,7 +93,7 @@ export default function Appointments() {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: any }) => api.put(`/appointments/${id}`, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateAppointmentQueries();
       toast.success(t("common.success"));
       setEditAppt(null);
     },
@@ -69,13 +103,13 @@ export default function Appointments() {
   const changeStatus = useMutation({
     mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) =>
       api.patch(`/appointments/${id}/status`, { status, notes }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["appointments"] }); toast.success(t("common.success")); },
+    onSuccess: () => { invalidateAppointmentQueries(); toast.success(t("common.success")); },
   });
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/appointments/${id}/approve-visibility`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateAppointmentQueries();
       toast.success(isAr ? "تم إظهار الموعد للجدولة" : "Appointment visible to Scheduling");
     },
     onError: () => toast.error(t("common.error")),
@@ -84,7 +118,7 @@ export default function Appointments() {
   const approveExportMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/appointments/${id}/approve-export`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateAppointmentQueries();
       toast.success(t("appointments.approveExportSuccess"));
     },
     onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.approveExportError")),
@@ -93,7 +127,7 @@ export default function Appointments() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/appointments/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateAppointmentQueries();
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
       toast.success(isAr ? "تم حذف الموعد" : "Appointment deleted");
     },
@@ -103,7 +137,7 @@ export default function Appointments() {
   useEffect(() => {
     if (!socket) return;
     const refresh = () => {
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      invalidateAppointmentQueries();
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     };
     socket.on("appointment:deleted", refresh);
@@ -168,12 +202,6 @@ export default function Appointments() {
     }
   }
 
-  const appointments: any[] = data || [];
-  // Only show pending-approval banner for Scheduling-created appointments
-  const pendingSchedulingAppts = appointments.filter(a => !a.visibleToScheduling && a.createdByRole === 'SCHEDULING');
-  // Appointments exported by Scheduling, awaiting Admin approval before becoming technician-visible
-  const pendingExportAppts = appointments.filter(a => !a.visibleToTechnician && !a.adminApproved);
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -184,25 +212,25 @@ export default function Appointments() {
         </button>
       </div>
 
-      {pendingSchedulingAppts.length > 0 && (
+      {!!pendingSchedTotal && pendingSchedTotal > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 text-sm text-orange-700">
           {isAr
-            ? `${pendingSchedulingAppts.length} موعد من الجدولة بانتظار الإظهار — استخدم "إظهار للجدولة"`
-            : `${pendingSchedulingAppts.length} scheduling appointment(s) pending — use "Show to Scheduling" to approve`}
+            ? `${pendingSchedTotal} موعد من الجدولة بانتظار الإظهار — استخدم "إظهار للجدولة"`
+            : `${pendingSchedTotal} scheduling appointment(s) pending — use "Show to Scheduling" to approve`}
         </div>
       )}
 
-      {pendingExportAppts.length > 0 && (
+      {!!pendingExportTotal && pendingExportTotal > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 text-sm text-orange-700">
           {isAr
-            ? `${pendingExportAppts.length} موعد مصدّر من الجدولة بانتظار اعتماد الإدارة — استخدم "اعتماد الموعد"`
-            : `${pendingExportAppts.length} exported appointment(s) pending Admin approval — use "Approve Appointment"`}
+            ? `${pendingExportTotal} موعد مصدّر من الجدولة بانتظار اعتماد الإدارة — استخدم "اعتماد الموعد"`
+            : `${pendingExportTotal} exported appointment(s) pending Admin approval — use "Approve Appointment"`}
         </div>
       )}
 
       <div className="flex gap-2 flex-wrap">
         {["", "SCHEDULED", "RESCHEDULED", "CANCELLED", "PENDING"].map(s => (
-          <button key={s} onClick={() => setFilter(s)}
+          <button key={s} onClick={() => { setFilter(s); setPage(1); }}
             className={`px-3 py-1.5 rounded-lg text-sm border ${filter === s ? "bg-blue-600 text-white border-blue-600" : "hover:bg-slate-50"}`}>
             {s ? (statusKey[s] || s) : t("common.all")}
           </button>
@@ -354,6 +382,13 @@ export default function Appointments() {
           </div>
         )}
       </div>
+      {meta && (
+        <div className="flex justify-center items-center gap-2">
+          <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">‹</button>
+          <span className="px-3 py-1 text-sm">{meta.page} / {meta.totalPages}</span>
+          <button disabled={meta.page >= meta.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">›</button>
+        </div>
+      )}
     </div>
   );
 }
