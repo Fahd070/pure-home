@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import prisma from '../prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import { emitToRole } from '../socket';
+import { emitToUser } from '../socket';
 import { SOCKET_EVENTS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
@@ -127,7 +127,13 @@ router.put('/', async (req: AuthRequest, res, next) => {
     const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "user_settings" WHERE "userId" = ${userId} LIMIT 1`;
     const settings = rowToSettings(rows[0]);
 
-    emitToRole(req.user!.role, SOCKET_EVENTS.SETTINGS_UPDATED, settings);
+    // Privacy Patch #2: this event is a per-user, multi-device sync signal (see
+    // SettingsPage.tsx's own comment: "reload if another device updated
+    // settings") -- it was previously broadcast to the whole role room, so
+    // every other user sharing the same role also received this user's
+    // settings payload. Route it to only the authenticated user's own socket
+    // room instead, via the existing per-user targeting mechanism.
+    emitToUser(req.user!.userId, SOCKET_EVENTS.SETTINGS_UPDATED, settings);
 
     await writeAudit({
       action: 'UPDATE', entityType: 'user_settings', entityId: userId,
