@@ -78,13 +78,22 @@ describe('Inactive user cannot start a new login session', () => {
 
   // E. inactive Scheduling account cannot code-login
   it('E. a deactivated Scheduling account cannot code-login', async () => {
-    await prisma.user.update({ where: { id: users.scheduling.id }, data: { isActive: false } });
+    // Deactivate every currently-active SCHEDULING user, not just the shared
+    // fixture -- other test files may have their own additional active
+    // SCHEDULING accounts in this same disposable DB (e.g. privacyPatch2's
+    // "scheduling-b" fixture, which is never deleted after that file runs),
+    // and code-login's findFirst({role, isActive:true}) would otherwise
+    // silently succeed by picking a different active account of the same
+    // role. Captures exactly which rows were active first, so only those
+    // exact rows are restored -- never assumes there is only one.
+    const activeSchedulingUsers = await prisma.user.findMany({ where: { role: 'SCHEDULING', isActive: true } });
+    await prisma.user.updateMany({ where: { role: 'SCHEDULING', isActive: true }, data: { isActive: false } });
     try {
       const res = await request(ts.baseUrl).post('/api/auth/code-login').send({ code: TEST_ACCESS_CODES.scheduling, dept: 'scheduling' });
       expect(res.status).toBe(403);
       expect(res.body.data).toBeUndefined();
     } finally {
-      await prisma.user.update({ where: { id: users.scheduling.id }, data: { isActive: true } });
+      await prisma.user.updateMany({ where: { id: { in: activeSchedulingUsers.map(u => u.id) } }, data: { isActive: true } });
     }
   });
 
