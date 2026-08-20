@@ -20,7 +20,20 @@ router.post('/login', async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
     const user = await prisma.user.findUnique({ where: { email: body.email } });
-    if (!user || !await bcrypt.compare(body.password, user.password)) {
+    // Security hygiene fix: a disabled user must not be able to start a new
+    // session. bcrypt.compare still runs whenever a user row exists (active or
+    // not) before this check is consulted, so a disabled account's login
+    // attempt takes the same time as a wrong-password attempt against an
+    // active account -- this deliberately avoids a timing side-channel that
+    // would otherwise let a caller distinguish "disabled" from "wrong
+    // password" by response latency. Same generic message/401 either way, so
+    // account existence/status is never revealed.
+    // Known accepted limitation: this only blocks NEW logins. A JWT already
+    // issued before a user is deactivated remains valid until its normal 8h
+    // expiry -- see middleware/auth.ts, which verifies the token signature
+    // only and does not re-query the user on every request.
+    const passwordValid = user ? await bcrypt.compare(body.password, user.password) : false;
+    if (!user || !passwordValid || !user.isActive) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
     const token = jwt.sign({ userId: user.id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '8h' });
@@ -47,7 +60,11 @@ router.post('/code-login', async (req, res, next) => {
     }
     const codeRole = DEPT_ROLE[dept];
 
-    const where: any = { role: codeRole as any };
+    // Security hygiene fix: a disabled user must never be selected by the
+    // department code-login flow. Same known accepted limitation as email
+    // login above -- a JWT already issued before deactivation stays valid
+    // until its normal 8h expiry.
+    const where: any = { role: codeRole as any, isActive: true };
     if (codeRole === 'TECHNICIAN') where.email = process.env.TECHNICIAN_EMAIL || 'tech1@wfm.local';
 
     const user = await prisma.user.findFirst({ where });

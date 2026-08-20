@@ -1,6 +1,26 @@
-import urllib.request, urllib.error, json, sys
+import urllib.request, urllib.error, json, os, sys
 
 BASE = "http://localhost:3001/api"
+
+# Safety guard: this is a manual local dev script only. It must never be able
+# to accidentally target a real deployment.
+if not (BASE.startswith("http://localhost") or BASE.startswith("http://127.0.0.1")):
+    print(f"ERROR: BASE must point to localhost/127.0.0.1 for this manual E2E script. Got: {BASE}")
+    sys.exit(1)
+
+def require_env(name):
+    value = os.environ.get(name)
+    if not value:
+        print(f"ERROR: required environment variable {name} is not set.")
+        print(f"Set it before running this script, e.g.: {name}=yourpassword python e2e_test.py")
+        sys.exit(1)
+    return value
+
+# No hardcoded fallback -- these must be supplied by whoever runs this script
+# against their own local dev database's seeded accounts.
+E2E_SCHEDULING_PASSWORD = require_env("E2E_SCHEDULING_PASSWORD")
+E2E_TECHNICIAN_PASSWORD = require_env("E2E_TECHNICIAN_PASSWORD")
+E2E_ADMIN_PASSWORD = require_env("E2E_ADMIN_PASSWORD")
 
 def req(method, path, body=None, token=None):
     data = json.dumps(body).encode() if body else None
@@ -20,14 +40,14 @@ def sep(title):
     print("=" * 60)
 
 sep("STEP 0 — Login as Scheduling")
-r = req("POST", "/auth/login", {"email": "scheduling@wfm.local", "password": "sched123"})
+r = req("POST", "/auth/login", {"email": "scheduling@wfm.local", "password": E2E_SCHEDULING_PASSWORD})
 sched_token = r["data"]["token"]
 sched_user = r["data"]["user"]
 print(f"  Login: {'OK' if sched_token else 'FAILED'}")
 print(f"  Role: {sched_user['role']}  Name: {sched_user['name']}")
 
 sep("STEP 0b — Login as Technician")
-r = req("POST", "/auth/login", {"email": "tech1@wfm.local", "password": "tech123"})
+r = req("POST", "/auth/login", {"email": "tech1@wfm.local", "password": E2E_TECHNICIAN_PASSWORD})
 tech_token = r["data"]["token"]
 tech_user = r["data"]["user"]
 tech_id = tech_user["id"]
@@ -147,7 +167,7 @@ if c2.get("workStatus") != "COMPLETED":
     sys.exit(1)
 
 sep("STEP 8 — Dashboard stats reflect completion")
-r_admin = req("POST", "/auth/login", {"email": "admin@wfm.local", "password": "admin123"})
+r_admin = req("POST", "/auth/login", {"email": "admin@wfm.local", "password": E2E_ADMIN_PASSWORD})
 admin_token = r_admin["data"]["token"]
 stats = req("GET", "/dashboard/stats", token=admin_token).get("data", {})
 print(f"  Total customers: {stats.get('total')}")

@@ -125,10 +125,10 @@ VALUES (
 curl https://pure-home-singapore.onrender.com/health
 # Expected: {"status":"ok","database":"connected","dbResponseMs":...}
 
-# Auth check
+# Auth check (replace <ADMIN_CODE> with the real configured admin access code)
 curl -X POST https://pure-home-singapore.onrender.com/api/auth/code-login \
   -H "Content-Type: application/json" \
-  -d '{"code":"9012","dept":"admin"}'
+  -d '{"code":"<ADMIN_CODE>","dept":"admin"}'
 # Expected: {"success":true,"data":{"token":"...","user":{...}}}
 ```
 
