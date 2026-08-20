@@ -79,10 +79,16 @@ function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToSche
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, stripCompletionAmount(appt));
   }
   if (appt.visibleToTechnician) {
+    // Privacy Patch #2 follow-up: this event's audience is always Technician
+    // here (assigned technician or the shared unassigned pool), regardless of
+    // who created the appointment -- strip the nested customer's
+    // installation-financial fields, same as every other Technician-facing
+    // appointment payload (see /start, /complete, /postpone in this file).
+    const techSafeAppt = appt.customer ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) } : appt;
     if (appt.technicianId) {
-      emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+      emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, techSafeAppt);
     } else {
-      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, techSafeAppt);
     }
   }
 }
@@ -569,10 +575,13 @@ router.patch('/:id/approve-export', requireRole('ADMIN'), async (req: AuthReques
     // as broadcastAppointmentCreated: the assigned technician if one exists,
     // otherwise the shared/unassigned pool (whole TECHNICIAN room). This is the
     // ONLY place a Scheduling-exported appointment ever reaches a technician room.
+    // Privacy Patch #2 follow-up: same customer installation-financial redaction
+    // as broadcastAppointmentCreated -- this audience is always Technician.
+    const techSafeApprovedAppt = appt.customer ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) } : appt;
     if (appt.technicianId) {
-      emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+      emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_CREATED, techSafeApprovedAppt);
     } else {
-      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
+      emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_CREATED, techSafeApprovedAppt);
     }
     res.json({ success: true, data: appt });
   } catch (e) { next(e); }
