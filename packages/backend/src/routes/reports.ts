@@ -21,9 +21,9 @@ function computeMaintenanceStatus(appts: any[], now: Date): string {
   return 'SCHEDULED';
 }
 
-function enrichWithSchedule(customers: any[], now: Date) {
+function enrichWithSchedule(customers: any[], now: Date, apptsByCustomer: Map<string, any[]>, totalAmountByCustomer: Map<string, number>) {
   return customers.map(c => {
-    const appts: any[] = c.appointments || [];
+    const appts: any[] = apptsByCustomer.get(c.id) || [];
     const completed = appts
       .filter(a => a.workStatus === 'COMPLETED')
       .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
@@ -47,11 +47,7 @@ function enrichWithSchedule(customers: any[], now: Date) {
 
     const maintenanceStatus = computeMaintenanceStatus(appts, now);
 
-    const totalAmount = appts.reduce((sum: number, a: any) => {
-      if (a.completionAmount) sum += Number(a.completionAmount);
-      if (a.urgentVisitRecord?.amount) sum += Number(a.urgentVisitRecord.amount);
-      return sum;
-    }, 0);
+    const totalAmount = totalAmountByCustomer.get(c.id) || 0;
 
     return {
       id: c.id, name: c.name, phone: c.phone, notes: c.notes,
@@ -123,16 +119,53 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
     const total = await prisma.customer.count({ where });
     const customers = await prisma.customer.findMany({
       where,
-      include: {
-        address: true,
-        appointments: { include: { urgentVisitRecord: true }, orderBy: { scheduledDate: 'desc' } }
-      },
+      include: { address: true },
       skip: (parseInt(page) - 1) * safeLimit,
       take: safeLimit,
       orderBy: { createdAt: 'desc' }
     });
 
-    const enriched = enrichWithSchedule(customers, now);
+    // Perf fix: this previously loaded every appointment (with a nested
+    // urgentVisitRecord include) for every returned customer via a Prisma
+    // relation `include`, an unbounded load that grew without limit as a
+    // customer's history grew. Replaced with two small, page-scoped queries
+    // (not one per customer) for exactly the scalar fields enrichWithSchedule
+    // needs: one for the date/status fields behind lastMaintenance/
+    // nextMaintenance/overdueCount/maintenanceStatus, and one -- skipped
+    // entirely for SCHEDULING, whose response never includes totalAmount
+    // anyway -- for the completionAmount/urgentVisitRecord.amount figures
+    // behind totalAmount. The derived-field math in enrichWithSchedule is
+    // byte-for-byte the same as before.
+    const customerIds = customers.map((c: any) => c.id);
+    const apptRows = customerIds.length
+      ? await prisma.appointment.findMany({
+          where: { customerId: { in: customerIds } },
+          select: { customerId: true, isUrgent: true, workStatus: true, status: true, scheduledDate: true, actualCompletionDate: true, completedAt: true },
+        })
+      : [];
+    const apptsByCustomer = new Map<string, any[]>();
+    for (const row of apptRows) {
+      const list = apptsByCustomer.get(row.customerId as string);
+      if (list) list.push(row); else apptsByCustomer.set(row.customerId as string, [row]);
+    }
+
+    const totalAmountByCustomer = new Map<string, number>();
+    if (req.user!.role !== 'SCHEDULING' && customerIds.length) {
+      const financialRows = await prisma.appointment.findMany({
+        where: {
+          customerId: { in: customerIds },
+          OR: [{ completionAmount: { not: null } }, { urgentVisitRecord: { amount: { not: null } } }],
+        },
+        select: { customerId: true, completionAmount: true, urgentVisitRecord: { select: { amount: true } } },
+      });
+      for (const row of financialRows) {
+        const key = row.customerId as string;
+        const add = (row.completionAmount ? Number(row.completionAmount) : 0) + (row.urgentVisitRecord?.amount ? Number(row.urgentVisitRecord.amount) : 0);
+        totalAmountByCustomer.set(key, (totalAmountByCustomer.get(key) || 0) + add);
+      }
+    }
+
+    const enriched = enrichWithSchedule(customers, now, apptsByCustomer, totalAmountByCustomer);
     const safe = req.user!.role === 'SCHEDULING'
       ? enriched.map((c: any) => { const { totalAmount, ...rest } = c; return rest; })
       : enriched;

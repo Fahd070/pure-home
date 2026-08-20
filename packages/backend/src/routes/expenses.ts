@@ -32,9 +32,20 @@ router.get('/', requireRole('ADMIN', 'TECHNICIAN'), async (req: AuthRequest, res
     if (to)   where.date = { ...where.date, lte: new Date(to + 'T23:59:59') };
 
     const total = await prisma.expense.count({ where });
+    // Perf fix: receiptImage is a base64 image up to 500,000 characters --
+    // confirmed unused anywhere in the current frontend (no list/table column,
+    // no create-form field, and neither the single nor bulk invoice PDF
+    // builders in admin/pages/Expenses.tsx read it), so it is excluded from
+    // this list response via `select` instead of `include` (which would pull
+    // every Expense scalar, receiptImage included). The full record -- image
+    // included -- remains available on request via GET /expenses/:id below.
     const expenses = await prisma.expense.findMany({
       where,
-      include: { technician: { select: { id: true, name: true } } },
+      select: {
+        id: true, amount: true, category: true, description: true, date: true,
+        status: true, invoiceGenerated: true, technicianId: true, createdAt: true,
+        technician: { select: { id: true, name: true } },
+      },
       orderBy: { date: 'desc' },
       skip: (parseInt(page) - 1) * safeLimit,
       take: safeLimit,
@@ -42,6 +53,27 @@ router.get('/', requireRole('ADMIN', 'TECHNICIAN'), async (req: AuthRequest, res
     // Summary for admin
     const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
     res.json({ success: true, data: expenses, meta: { total, page: parseInt(page), limit: safeLimit, totalAmount } });
+  } catch (e) { next(e); }
+});
+
+// Perf fix: the single-record counterpart to the list route above -- returns
+// the full expense, including receiptImage, for whichever future UI surface
+// needs to display the actual receipt. Same access policy as the list route
+// (ADMIN unrestricted, TECHNICIAN own-only), and a Technician requesting
+// another technician's expense gets the same plain 404 this codebase's other
+// object-level-authorization routes use (see routes/appointments.ts,
+// routes/customers.ts) -- never a distinguishable 403.
+router.get('/:id', requireRole('ADMIN', 'TECHNICIAN'), async (req: AuthRequest, res, next) => {
+  try {
+    const expense = await prisma.expense.findFirst({
+      where: {
+        id: req.params.id,
+        ...(req.user!.role === 'TECHNICIAN' ? { technicianId: req.user!.userId } : {}),
+      },
+      include: { technician: { select: { id: true, name: true } } },
+    });
+    if (!expense) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ success: true, data: expense });
   } catch (e) { next(e); }
 });
 

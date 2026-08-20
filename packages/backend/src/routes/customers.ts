@@ -164,16 +164,8 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
     if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
     const total = await prisma.customer.count({ where });
 
-    const includeOpts: any = { address: true };
-    if (includeSchedule === 'true') {
-      includeOpts.appointments = {
-        include: { urgentVisitRecord: { include: { submittedBy: { select: { id: true, name: true } } } } },
-        orderBy: { scheduledDate: 'desc' as const },
-      };
-    }
-
     let customers = await prisma.customer.findMany({
-      where, include: includeOpts,
+      where, include: { address: true },
       skip: (parseInt(page)-1)*safeLimit, take: safeLimit, orderBy: { createdAt: 'desc' }
     });
     // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
@@ -184,8 +176,34 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
     }
 
     const now = new Date();
+    // Perf fix: this previously loaded every appointment (with a nested
+    // urgentVisitRecord+submittedBy include) for every customer on the page via
+    // a Prisma relation `include`, an unbounded load whose response size grew
+    // without limit as a customer's history grew -- confirmed unused by every
+    // frontend caller of this endpoint (Admin/Scheduling customer lists,
+    // PDF/Excel export, the "view history" modal, which fetches its own
+    // separately-bounded detail via GET /customers/:id instead of reading this
+    // response's appointments field). Replaced with a single page-scoped query
+    // for only the handful of scalar fields the derived stats below actually
+    // need (see computeNextMaintenanceDate) -- one query for the whole page,
+    // not one per customer -- and the derived-field math itself is
+    // byte-for-byte the same as before, just reading from this map instead of
+    // a per-customer relation.
+    const customerIds = customers.map((c: any) => c.id);
+    const apptRows = customerIds.length
+      ? await prisma.appointment.findMany({
+          where: { customerId: { in: customerIds } },
+          select: { customerId: true, isUrgent: true, workStatus: true, status: true, scheduledDate: true, actualCompletionDate: true, completedAt: true },
+        })
+      : [];
+    const apptsByCustomer = new Map<string, any[]>();
+    for (const row of apptRows) {
+      const list = apptsByCustomer.get(row.customerId as string);
+      if (list) list.push(row); else apptsByCustomer.set(row.customerId as string, [row]);
+    }
+
     const enriched = customers.map((c: any) => {
-      const appts: any[] = c.appointments || [];
+      const appts: any[] = apptsByCustomer.get(c.id) || [];
       const completed = appts
         .filter(a => a.workStatus === 'COMPLETED')
         .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
