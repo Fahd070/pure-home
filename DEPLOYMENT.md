@@ -448,13 +448,13 @@ Then upload these files to a new GitHub Release (tag `v1.x.x`):
 
 ## Part H — Access Codes
 
-Default department access codes (set in `C:\WFM\packages\backend\.env`):
+Department access codes are configured in `C:\WFM\packages\backend\.env` (see `.env.example` for the exact keys). Example placeholders only — set your own real codes, never reuse these:
 
 | Department | Code |
 |---|---|
-| Administration (Admin) | 9012 |
-| Scheduling & Maintenance | 9013 |
-| Technicians | 9014 |
+| Administration (Admin) | `<ADMIN_CODE>` |
+| Scheduling & Maintenance | `<SCHEDULING_CODE>` |
+| Technicians | `<TECHNICIAN_CODE>` |
 
 **To change codes:** Edit `.env` on the server, then restart the backend:
 ```powershell

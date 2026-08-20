@@ -1,5 +1,5 @@
 <div align="center">
-<img src="packages/unified-app/assets/icon.png" width="110" alt="Golden Pizza Logo" />
+<img src="packages/unified-app/assets/icon.png" width="110" alt="Pure Home Logo" />
 
 # Pure Home
 
@@ -7,7 +7,7 @@
 
 **Simplifying workforce operations with real-time intelligence and automation.**
 
-![Version](https://img.shields.io/badge/version-1.4.0-0ea5e9?style=flat-square)
+![Version](https://img.shields.io/badge/version-3.6.5-0ea5e9?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows-0f172a?style=flat-square)
 ![Status](https://img.shields.io/badge/status-Production%20Ready-22c55e?style=flat-square)
 ![Language](https://img.shields.io/badge/language-AR%20%7C%20EN-8b5cf6?style=flat-square)
@@ -221,13 +221,13 @@ Pure Home is built with security as a structural property, not an afterthought.
 
 **Role-based access control** — Every endpoint, every page, and every data field is protected by role authorization. Team members can only access what their role permits.
 
-**Encrypted authentication** — All authentication is handled via signed, time-limited tokens transmitted over encrypted connections. Credentials are never stored in the application or on employee devices.
+**Encrypted authentication** — All authentication is handled via signed, time-limited tokens transmitted over encrypted connections. Passwords and access codes are never stored on employee devices — only the resulting session token, for as long as the user stays logged in.
 
 **Audit trail** — Every create, update, and delete action is logged with the user's identity, a timestamp, and before/after state. The audit log is append-only and cannot be edited.
 
 **Conflict protection** — Optimistic locking prevents two users from unknowingly overwriting the same record. Concurrent edits are detected and surfaced immediately.
 
-**No local secrets** — The desktop application holds no credentials, no database connections, and no sensitive configuration. All business logic and data access run on the cloud backend.
+**Minimal local footprint** — The desktop application holds no database connections and no business configuration; only a signed, time-limited session token is stored locally after login. All business logic and data access run on the cloud backend.
 
 **Automated backups** — The database is backed up daily with integrity verification. Restore procedures are documented and tested.
 
@@ -249,9 +249,9 @@ Pure Home is built with security as a structural property, not an afterthought.
 
 Every version of Pure Home is published on the [GitHub Releases page](../../releases).
 
-Each release includes a signed Windows installer and full release notes. The installer handles upgrades gracefully — running a newer installer over an existing installation preserves all settings and the server configuration.
+Each release includes a Windows installer and full release notes. The installer handles upgrades gracefully — running a newer installer over an existing installation preserves all settings and the server configuration.
 
-**Current version: 1.4.0**
+**Current version: 3.6.5**
 
 ---
 

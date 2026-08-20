@@ -16,6 +16,14 @@ coverage/
 .env.*
 !.env.example
 
+# Private keys / certificates — NEVER commit
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+
 # Database backups — NEVER commit production data
 backups/
 *.dump
