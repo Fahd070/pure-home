@@ -1,14 +1,46 @@
 /* ═══════════════════════════════════════════════════════
    Pure Home — Web Responsive Stylesheet
-   Three dedicated device experiences:
-     Desktop/Laptop  ≥ 1024px
-     Tablet/iPad     768 – 1023px
+
+   packages/unified-app/src/ui/ is the single source of truth for the design
+   system; nothing here duplicates a component. This file only does two
+   things: (1) suppress the handful of pieces of chrome that make sense in an
+   Electron window but not a browser tab, and (2) adapt the shared component
+   structure to browser/tablet/mobile viewports the desktop app never has to
+   handle. Every selector below targets classes that actually exist in the
+   current redesigned DOM.
+
+   Three device experiences:
+     Desktop/Laptop  ≥ 1024px  (Tailwind lg — matches AppFrame's own rail/drawer split)
+     Tablet          768–1023px
      Mobile Phone    < 768px
    ═══════════════════════════════════════════════════════ */
 
-/* ── Electron cleanup ───────────────────────────────── */
-.titlebar-drag    { -webkit-app-region: unset !important; display: none !important; }
-.titlebar-no-drag { -webkit-app-region: unset !important; }
+/* ── Typography: Cairo first ────────────────────────────
+   The shared --ph-font token (tokens.css) leads with Segoe UI, correct for
+   the Windows-only desktop app. Web instead loads Cairo as a real webfont
+   (index.html), so it's guaranteed present for every visitor regardless of
+   OS -- put it first rather than letting browsers opportunistically fall
+   through to whatever the desktop-oriented stack finds installed. The rest
+   of the shared stack stays as fallback for anything Cairo doesn't cover. */
+:root {
+  --ph-font: "Cairo", "Segoe UI Variable Text", "Segoe UI", Inter,
+             "Noto Sans Arabic", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+
+/* ── Electron chrome that must not appear in a browser tab ──
+   AppTitleBar renders an in-page title bar with minimize/maximize/close
+   buttons wired to no-ops on web (electronShim.ts) -- a browser tab already
+   has its own window chrome, so the whole bar (not just the buttons) is
+   hidden rather than left as dead decoration. UpdateBanner self-guards on
+   window.electron.updater being null and needs no CSS. */
+.titlebar-drag,
+.titlebar-no-drag {
+  -webkit-app-region: unset !important;
+}
+.titlebar-drag {
+  display: none !important;
+}
+
 @media (max-height: 600px) {
   body { overflow: auto !important; }
   #root > div { height: auto !important; min-height: 100vh; }
@@ -24,419 +56,99 @@ button, [role="button"], a {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-.overflow-x-auto {
-  -webkit-overflow-scrolling: touch;
-  overflow-x: auto;
-}
+
 
 /* ════════════════════════════════════════════════════════
-   ① DESKTOP / LAPTOP EXPERIENCE  (≥ 1024px)
-   Goal: identical to the desktop application
+   ① DESKTOP / LAPTOP  (≥ 1024px)
+   AppFrame already renders the nav rail as a static column and sizes the
+   command bar/tables/forms correctly at this width; nothing to adapt.
    ════════════════════════════════════════════════════════ */
 @media (min-width: 1024px) {
-  /* Layout shell */
   #root, #root > div { height: 100vh; }
-
-  /* Content area — same comfortable padding as the Electron app */
-  main { padding: 1.25rem 1.5rem !important; }
-
-  /* Cap content width on ultra-wide monitors so the layout
-     doesn't stretch beyond what the desktop app would show */
-  main > div { max-width: 1440px; margin-left: auto; margin-right: auto; }
-
-  /* ── Dashboard stat cards ── */
-  /* 4 columns on large desktop, 3 on laptop (handled by Tailwind xl:grid-cols-4) */
-  /* The Tailwind xl: breakpoint fires at 1280px, so 1024–1279px gets 3 cols = laptop */
-
-  /* ── Tables ─ */
-  /* Tables sit comfortably within the content area; no overflow needed */
-  table { width: 100%; font-size: 0.875rem; }
-  .overflow-x-auto { overflow-x: visible; }
-
-  /* ── Forms ── */
-  /* 2-column forms match the desktop app */
-
-  /* ── Cards / sections ── */
-  .rounded-xl.p-4 { padding: 1rem !important; }
-  .rounded-xl.p-5 { padding: 1.25rem !important; }
-  .rounded-xl.p-6 { padding: 1.5rem !important; }
-
-  /* ── Modals ── */
-  .fixed.inset-0 > div,
-  .fixed.inset-0 > form {
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-
-  /* ── Sidebar ── */
-  /* Sidebar is always visible — handled by lg: classes in Layout.tsx */
-
-  /* ── Typography ── */
-  /* Normal text sizes — no overrides needed, Tailwind defaults are fine */
-}
-
-/* Fine-tune for laptop (1024–1279px) */
-@media (min-width: 1024px) and (max-width: 1279px) {
-  main { padding: 1rem 1.25rem !important; }
-
-  /* On narrower laptops, 3-col stat grids work better */
-  /* Dashboard xl:grid-cols-4 only fires at 1280px so 1024–1279 shows 3 — correct */
-
-  /* Give tables a minimum width so columns don't collapse too aggressively */
-  table { min-width: 0; }
 }
 
 
 /* ════════════════════════════════════════════════════════
-   ② TABLET / IPAD EXPERIENCE  (768 – 1023px)
-   Goal: dedicated touch-optimised layout, NOT scaled desktop
+   ② TABLET  (768 – 1023px)
+   Below AppFrame's lg breakpoint the nav rail already becomes a slide-in
+   drawer triggered by the header's hamburger button, and Modal already
+   clamps itself to the viewport (max-h-[calc(100vh-6rem)], internally
+   scrolling body) -- neither needs help here. This section only fixes the
+   touch target and density concerns that are genuinely tablet-specific.
    ════════════════════════════════════════════════════════ */
 @media (min-width: 768px) and (max-width: 1023px) {
-  /* Layout */
-  #root, #root > div {
-    height: 100dvh;
-    height: 100vh;
-  }
-
-  /* Content padding — more generous for touch */
-  main { padding: 1rem 1.25rem !important; }
+  #root, #root > div { height: 100dvh; height: 100vh; }
 
   /* ── Touch targets: every tappable element ≥ 44px ── */
   button, [role="button"], a[href],
   select, input[type="checkbox"], input[type="radio"] {
     min-height: 44px;
-    min-width: 44px;
   }
-  /* Narrow inline buttons (badges, small actions) stay compact */
-  .text-xs.px-2.py-1, .text-xs.px-1\.5 {
-    min-height: 32px;
-    min-width: unset;
+  /* ...except controls whose height is deliberately tied to the Interface
+     Scale density setting -- both the full h-control token and Button's
+     size="sm" variant (h-[var(--ph-control-h-sm)], used by row actions and
+     inline table controls) -- forcing those to 44px breaks row heights that
+     were tuned per-density. Matched by substring since the sm variant is an
+     arbitrary-value class, not the bare h-control utility. */
+  [class*="control-h"] {
+    min-height: unset;
+  }
+
+  /* AppFrame's mobile/tablet hamburger is a fixed w-8 h-8 (32px), sized for
+     a mouse-driven desktop fallback -- too small for a touch target. */
+  header.h-commandbar button[aria-label="Menu"] {
+    width: 44px;
+    height: 44px;
   }
 
   /* ── Prevent iOS/iPadOS input zoom ── */
   input, select, textarea { font-size: 16px !important; }
 
-  /* ── Typography — slightly larger base for tablet readability ── */
-  body { font-size: 15px; }
-  .text-sm { font-size: 0.9rem !important; }
+  /* ── Tables: TableShell already scrolls its own box (overflow-auto on the
+     wrapper, sticky thead); keeping cells on one line is what makes that
+     scroll trigger cleanly instead of every column wrapping first. ── */
+  td { white-space: nowrap; }
 
-  /* ── Grid layouts ── */
-  /* 4-column grids → 2 columns on tablet */
-  .grid.grid-cols-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-  /* 3-column grids → 2 columns on tablet (e.g. technician cards stay 2-col) */
-  /* (leave .grid-cols-3 alone — md:grid-cols-2 on Technicians.tsx handles it) */
-
-  /* ── Spacing: more breathing room for fingers ── */
-  .space-y-4 > * + * { margin-top: 1rem !important; }
-  .gap-2 { gap: 0.625rem !important; }
-  .gap-3 { gap: 0.75rem !important; }
-  .gap-4 { gap: 1rem !important; }
-
-  /* ── Tables ── */
-  /* Tables scroll horizontally; header/rows stay at readable font size */
-  table:not(.no-wrap) {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    font-size: 0.85rem;
-  }
-  /* Add scroll hint on the right edge */
-  .overflow-x-auto::after {
-    content: '';
-    position: absolute;
-    top: 0; right: 0; bottom: 0;
-    width: 24px;
-    background: linear-gradient(to right, transparent, rgba(255,255,255,0.9));
-    pointer-events: none;
-  }
-  .overflow-x-auto { position: relative; }
-
-  /* Table cells: taller rows for touch */
-  td, th { padding: 0.75rem 1rem !important; }
-
-  /* ── Cards ── */
-  .rounded-xl.p-4 { padding: 1rem !important; }
-  .rounded-xl.p-5 { padding: 1.1rem !important; }
-  .rounded-xl.p-6 { padding: 1.25rem !important; }
-
-  /* ── Header buttons and toolbars ── */
-  /* Action buttons in page headers: bigger tap targets */
-  .flex.items-center.justify-between > button,
-  .flex.gap-2 > button,
-  .flex.flex-wrap.gap-2 > button {
-    padding: 0.6rem 1rem;
-    font-size: 0.9rem;
-  }
-
-  /* ── Filter button rows: wrap cleanly ── */
-  .flex.gap-2 { flex-wrap: wrap; }
-  .flex.flex-wrap { flex-wrap: wrap; }
-
-  /* ── Modals ── */
-  .fixed.inset-0 > div,
-  .fixed.inset-0 > form {
-    max-height: 92dvh;
-    max-height: 92vh;
-    overflow-y: auto;
-    border-radius: 1rem;
-    padding: 1.25rem;
-  }
-  .max-w-2xl { max-width: min(680px, calc(100vw - 2rem)) !important; }
-  .max-w-xl  { max-width: min(560px, calc(100vw - 2rem)) !important; }
-  .max-w-lg  { max-width: min(480px, calc(100vw - 2rem)) !important; }
-  .max-w-md  { max-width: min(400px, calc(100vw - 2rem)) !important; }
-
-  /* ── Forms: 2-col on tablet is fine, single-col handled per-page ── */
-
-  /* ── Dashboard activity feed ── */
-  .max-w-2xl, .max-w-xl { max-width: 100% !important; }
-
-  /* ── Stat numbers ── */
-  .text-2xl { font-size: 1.5rem !important; }
-  .text-3xl { font-size: 1.75rem !important; }
-}
-
-
-/* ════════════════════════════════════════════════════════
-   ③ MOBILE PHONE EXPERIENCE  (< 768px)
-   Goal: purpose-built for small screens, one-thumb navigation
-   ════════════════════════════════════════════════════════ */
-@media (max-width: 767px) {
-  /* Layout */
-  #root, #root > div {
-    height: 100dvh;
-    height: 100vh;
-  }
-
-  /* ── Content padding ── */
-  main { padding: 0.75rem !important; }
-
-  /* ── Prevent iOS input zoom ── */
-  input, select, textarea { font-size: 16px !important; }
-
-  /* ── Touch targets: minimum 44px ── */
-  button, [role="button"], a[href] { min-height: 44px; }
-  /* Keep small badge-style pills compact */
-  .text-xs.px-2.py-0\.5, .text-xs.px-1\.5.py-0\.5 { min-height: unset; }
-
-  /* ── Tables ── */
-  table:not(.no-wrap) {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    font-size: 0.75rem;
-  }
-  td, th { padding: 0.5rem 0.75rem !important; }
-
-  /* ── Grids ── */
-  /* 4-col and 3-col → 2 cols on most mobiles */
-  .grid.grid-cols-4,
+  /* ── Department Selector: 3 cards read better at 2-up than cramped-3-up
+     on a tablet-width canvas; still generous tap targets. Scoped to the
+     one page that uses a bare, unprefixed grid-cols-3. ── */
   .grid.grid-cols-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
-  /* 2-col forms → 1 col */
-  .grid.grid-cols-2:not(.keep-cols) {
-    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
-  }
-
-  /* ── Cards ── */
-  .rounded-xl.p-4 { padding: 0.75rem !important; }
-  .rounded-xl.p-5 { padding: 0.75rem !important; }
-  .rounded-xl.p-6 { padding: 0.75rem !important; }
-
-  /* ── Spacing ── */
-  .space-y-6 > * + * { margin-top: 0.875rem !important; }
-  .space-y-4 > * + * { margin-top: 0.75rem !important; }
-
-  /* ── Flex button rows: always wrap ── */
-  .flex.gap-2,
-  .flex.gap-3,
-  .flex.gap-4,
-  .flex.items-center.gap-2 {
-    flex-wrap: wrap;
-  }
-
-  /* ── Modals / dialogs ── */
-  .fixed.inset-0 > div,
-  .fixed.inset-0 > form {
-    max-height: 90dvh;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
-  .max-w-2xl { max-width: calc(100vw - 1rem) !important; }
-  .max-w-xl  { max-width: calc(100vw - 1rem) !important; }
-  .max-w-lg  { max-width: calc(100vw - 1rem) !important; }
-  .max-w-md  { max-width: calc(100vw - 1rem) !important; }
-  .max-w-sm  { max-width: calc(100vw - 1.5rem) !important; }
-
-  /* ── Typography ── */
-  .text-3xl { font-size: 1.5rem !important; }
-  .text-2xl { font-size: 1.25rem !important; }
-  .text-xl  { font-size: 1.1rem !important; }
-
-  /* ── Nav / sidebar ── */
-  .w-56 { width: 16rem; }
-
-  /* ── Full-width primary action buttons ── */
-  .space-y-4 > .flex.justify-end > button[type="submit"],
-  form > .flex.justify-end > button[type="submit"] {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
-/* ── Very small phones (< 480px) ─────────────────────── */
-@media (max-width: 479px) {
-  /* Single-column everything */
-  .grid.grid-cols-4,
-  .grid.grid-cols-3,
-  .grid.grid-cols-2:not(.keep-cols) {
-    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
-  }
-
-  /* Stat cards: still 2 cols (compact numbers need less space) */
-  .grid.grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-
-  .rounded-xl.p-4,
-  .rounded-xl.p-5,
-  .rounded-xl.p-6 {
-    padding: 0.625rem !important;
-  }
-
-  main { padding: 0.5rem !important; }
 }
 
 
 /* ════════════════════════════════════════════════════════
-   ④ WEB: DEPARTMENT-COLOURED HEADER BAR
-   ────────────────────────────────────────────────────────
-   Each department layout carries a data-dept attribute
-   on its root div. We target the shared h-12 header bar
-   through that attribute so each department gets its own
-   fixed colour without any flash on first paint.
-
-   Admin    → blue   (#000080 default, customisable via settings)
-   Scheduling → green (#008000)
-   Technician → orange (#ea580c)
+   ③ MOBILE PHONE  (< 768px)
+   Same AppFrame drawer and Modal viewport-safety as tablet; content
+   shrinks further for one-thumb use and denser data.
    ════════════════════════════════════════════════════════ */
-
-/* ── Admin: uses --color-primary (customisable by admin settings) ── */
-[data-dept="admin"] .h-12.border-b.shadow-sm {
-  background-color: var(--color-primary, #000080) !important;
-  border-bottom-color: rgba(255, 255, 255, 0.15) !important;
-  z-index: 30;
-  position: relative;
-}
-
-/* ── Scheduling: fixed green ── */
-[data-dept="scheduling"] .h-12.border-b.shadow-sm {
-  background-color: #008000 !important;
-  border-bottom-color: rgba(255, 255, 255, 0.15) !important;
-  z-index: 30;
-  position: relative;
-}
-
-/* ── Technician: fixed orange ── */
-[data-dept="technician"] .h-12.border-b.shadow-sm {
-  background-color: #ea580c !important;
-  border-bottom-color: rgba(255, 255, 255, 0.15) !important;
-  z-index: 30;
-  position: relative;
-}
-
-/* ── Fallback (no data-dept set yet) ── */
-.h-12.border-b.shadow-sm {
-  z-index: 30;
-  position: relative;
-}
-
-/* ── Page title: white text on all coloured headers ── */
-[data-dept] .h-12.border-b.shadow-sm h2 {
-  color: #ffffff !important;
-  flex: 1 1 0%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Help "?" button: white on frosted background ── */
-[data-dept] .h-12.border-b.shadow-sm button[aria-label="مساعدة"] {
-  background-color: rgba(255, 255, 255, 0.18) !important;
-  color: #ffffff !important;
-}
-[data-dept] .h-12.border-b.shadow-sm button[aria-label="مساعدة"]:hover {
-  background-color: rgba(255, 255, 255, 0.28) !important;
-}
-
-/* ── Hamburger button: white icon, frosted hover ring ── */
-[data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"] {
-  color: rgba(255, 255, 255, 0.92) !important;
-}
-[data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"]:hover {
-  background-color: rgba(255, 255, 255, 0.15) !important;
-}
-[data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"]:active {
-  background-color: rgba(255, 255, 255, 0.25) !important;
-}
-
-/* ────────────────────────────────────────────────────────
-   MOBILE / TABLET  (< 1024px)
-   Larger header + bigger hamburger touch target
-   ──────────────────────────────────────────────────────── */
-
-/* Tablet (768 – 1023px): 52px header, 44px button — WCAG AA minimum */
-@media (min-width: 768px) and (max-width: 1023px) {
-  [data-dept] .h-12.border-b.shadow-sm {
-    height: 3.25rem !important;
-    min-height: 3.25rem !important;
-  }
-  [data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"] {
-    width: 2.75rem !important;
-    height: 2.75rem !important;
-    min-width: 2.75rem !important;
-    min-height: 2.75rem !important;
-  }
-  [data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"] svg {
-    width: 1.375rem !important;
-    height: 1.375rem !important;
-  }
-}
-
-/* Mobile (< 768px): 56px header, 48px button — easy one-thumb tap */
 @media (max-width: 767px) {
-  [data-dept] .h-12.border-b.shadow-sm {
-    height: 3.5rem !important;
-    min-height: 3.5rem !important;
-    gap: 0.625rem !important;
-  }
-  [data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"] {
-    width: 3rem !important;
-    height: 3rem !important;
-    min-width: 3rem !important;
-    min-height: 3rem !important;
-    padding: 0.375rem !important;
-    border-radius: 0.5rem !important;
-  }
-  [data-dept] .h-12.border-b.shadow-sm button[aria-label="Menu"] svg {
-    width: 1.5rem !important;
-    height: 1.5rem !important;
-    flex-shrink: 0;
-  }
-  [data-dept] .h-12.border-b.shadow-sm h2 {
-    font-size: 0.9rem !important;
-  }
-}
+  #root, #root > div { height: 100dvh; height: 100vh; }
 
-/* Very small phones (≤ 375px): ensure no title/icon overlap */
-@media (max-width: 375px) {
-  [data-dept] .h-12.border-b.shadow-sm {
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
+  input, select, textarea { font-size: 16px !important; }
+
+  button, [role="button"], a[href] { min-height: 44px; }
+  [class*="control-h"] { min-height: unset; }
+
+  header.h-commandbar button[aria-label="Menu"] {
+    width: 44px;
+    height: 44px;
   }
-  [data-dept] .h-12.border-b.shadow-sm h2 {
-    font-size: 0.825rem !important;
+
+  /* Tables scroll inside TableShell; shrink text so more of a wide record
+     (customer/appointment rows) is visible before the user has to scroll. */
+  table { font-size: 0.75rem; }
+  td { white-space: nowrap; }
+
+  /* Department Selector: 3 full-width cards stack better than a forced
+     2-up grid with an orphaned third card on a phone-width canvas. */
+  .grid.grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr) !important;
+    max-width: 22rem !important;
   }
+
+  /* NavRail's drawer is a fixed w-56 (224px); only very narrow phones need
+     it capped so it doesn't crowd out the scrim entirely. */
+  aside.w-56 { width: min(14rem, 84vw); }
 }
