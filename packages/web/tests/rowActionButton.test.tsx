@@ -69,25 +69,34 @@ describe('RowActionButton', () => {
     const button = el.querySelector('button')!;
     expect(button.getAttribute('title')).toBe('Delete record');
     expect(button.getAttribute('aria-label')).toBe('Delete record');
-    // w-9 h-9 (36px) replaces the old w-6 h-6 (24px) target -- larger, easier to click.
-    expect(button.className).toContain('w-9');
-    expect(button.className).toContain('h-9');
+    // The target is now the shared control-height token rather than a fixed
+    // 36px, so it tracks the user's Interface Scale setting (28/32/36px)
+    // and matches every other control sitting in the same table row.
+    expect(button.className).toContain('w-control');
+    expect(button.className).toContain('h-control');
+    expect(button.className).not.toContain('w-6');
   });
 
-  it('supports a per-department edit color theme (admin=blue default, scheduling=green) without changing delete styling', () => {
-    const blueEdit = render(<RowActionButton variant="edit" onClick={() => {}} title="Edit" />).querySelector('button')!;
-    expect(blueEdit.className).toContain('text-blue-600');
+  it('renders edit neutrally and delete destructively; the deprecated per-department theme no longer changes styling', () => {
+    const edit = render(<RowActionButton variant="edit" onClick={() => {}} title="Edit" />).querySelector('button')!;
+    const editClass = edit.className;
+    // An edit is an ordinary action: neutral until hovered.
+    expect(editClass).toContain('text-fg-muted');
+    expect(editClass).not.toContain('danger');
     if (root) { act(() => { root!.unmount(); }); root = null; }
     if (container) { container.remove(); container = null; }
 
-    const greenEdit = render(<RowActionButton variant="edit" theme="green" onClick={() => {}} title="Edit" />).querySelector('button')!;
-    expect(greenEdit.className).toContain('text-green-600');
+    // Departments share one palette now, so `theme` is inert -- passing it
+    // must produce exactly the same classes as omitting it.
+    const themedEdit = render(<RowActionButton variant="edit" theme="green" onClick={() => {}} title="Edit" />).querySelector('button')!;
+    expect(themedEdit.className).toBe(editClass);
     if (root) { act(() => { root!.unmount(); }); root = null; }
     if (container) { container.remove(); container = null; }
 
+    // Delete still reads as destructive, and still ignores `theme`.
     const deleteBtn = render(<RowActionButton variant="delete" theme="green" onClick={() => {}} title="Delete" />).querySelector('button')!;
-    // Delete is always red regardless of the department's edit theme.
-    expect(deleteBtn.className).toContain('text-red-500');
+    expect(deleteBtn.className).toContain('hover:bg-danger-bg');
+    expect(deleteBtn.className).toContain('hover:text-danger-fg');
   });
 });
 
@@ -112,8 +121,10 @@ describe('Dashboard drill-down tables use RowActionButton', () => {
     expect(adminSrc).toMatch(/<RowActionButton variant="delete" onClick=\{\(\) => setConfirmDelete\(\{ id: c\.id, type: "customer" \}\)\}/);
   });
 
-  it('scheduling Dashboard renders an edit RowActionButton (green theme) for appointment rows', () => {
-    expect(schedSrc).toMatch(/<RowActionButton variant="edit" theme="green" onClick=\{\(\) => setEditingAppt\(a\)\}/);
+  it('scheduling Dashboard renders an edit RowActionButton for appointment rows', () => {
+    // The green department theme is gone -- one palette across departments.
+    expect(schedSrc).toMatch(/<RowActionButton variant="edit" onClick=\{\(\) => setEditingAppt\(a\)\}/);
+    expect(schedSrc).not.toMatch(/theme="green"/);
   });
 
   it('scheduling Dashboard still has no delete action on drill-down rows (permissions/visibility unchanged)', () => {

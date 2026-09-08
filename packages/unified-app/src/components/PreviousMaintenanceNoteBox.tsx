@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Callout } from "../ui/Feedback";
 
 // Modification #7: read-only display of the technician's "Next Maintenance Note"
 // (Modification #6) from a customer's most recent completed appointment, shown
@@ -10,9 +11,8 @@ export default function PreviousMaintenanceNoteBox({ note }: { note?: string | n
   const { t } = useTranslation();
   if (!note) return null;
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-      <p className="font-medium text-blue-700 mb-1">{t("appointments.previousMaintenanceNote")}</p>
-      <p className="text-slate-700 whitespace-pre-wrap">{note}</p>
-    </div>
+    <Callout tone="info" title={t("appointments.previousMaintenanceNote")}>
+      <p className="whitespace-pre-wrap">{note}</p>
+    </Callout>
   );
 }

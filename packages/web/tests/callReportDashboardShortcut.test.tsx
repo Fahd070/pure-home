@@ -182,7 +182,7 @@ describe('Dashboard "Call Report" shortcut: source-level wiring', () => {
   });
 
   it('the Save button is disabled while createMutation is pending (double-submit guard, source confirmation)', () => {
-    expect(callReportFormSrc).toMatch(/disabled=\{createMutation\.isPending/);
+    expect(callReportFormSrc).toMatch(/loading=\{createMutation\.isPending/);
   });
 
   it('does not introduce a reject/edit/delete flow beyond what already existed in the standalone page', () => {

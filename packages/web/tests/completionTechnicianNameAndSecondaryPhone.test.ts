@@ -103,7 +103,7 @@ describe('i18n: secondary phone labels/messages exist in both languages with the
 
 describe('15/17. Admin customer details (CustomerDetail.tsx) show the secondary phone only when present', () => {
   it('the on-screen header conditionally renders a second line for secondaryPhone', () => {
-    expect(adminCustomerDetailSrc).toMatch(/\{c\.secondaryPhone && <p className="text-slate-500">\{t\("customers\.secondaryPhone"\)\}: \{c\.secondaryPhone\}<\/p>\}/);
+    expect(adminCustomerDetailSrc).toMatch(/\{c\.secondaryPhone && \(\s*<p [^>]*>\{t\("customers\.secondaryPhone"\)\}: \{c\.secondaryPhone\}<\/p>\s*\)\}/);
   });
   it('the PDF export conditionally includes a secondary-phone row, never an empty one', () => {
     expect(adminCustomerDetailSrc).toMatch(/\$\{c\.secondaryPhone \? `<div><div class="lbl">/);
@@ -112,7 +112,7 @@ describe('15/17. Admin customer details (CustomerDetail.tsx) show the secondary 
 
 describe('16/17. Scheduling/Maintenance customer details (CustomerList.tsx HistoryModal) show the secondary phone only when present', () => {
   it('renders primary phone, and conditionally an additional-mobile line, never an empty row', () => {
-    expect(schedCustomerListSrc).toMatch(/\{customer\.secondaryPhone && <span className="ms-2">\{t\("customers\.secondaryPhone"\)\}: \{customer\.secondaryPhone\}<\/span>\}/);
+    expect(schedCustomerListSrc).toMatch(/\{customer\.secondaryPhone && <span className="ms-2"[^>]*>\{t\("customers\.secondaryPhone"\)\}: \{customer\.secondaryPhone\}<\/span>\}/);
   });
 });
 

@@ -20,14 +20,19 @@ describe('Part A: Admin Technicians page layout (design only)', () => {
     expect(adminTechniciansSrc).toMatch(/<div className="max-w-5xl mx-auto">\s*\n\s*<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3/);
   });
   it('2. the grid retains its responsive column breakpoints and has an expanded gap/card padding', () => {
-    expect(adminTechniciansSrc).toMatch(/grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5/);
-    expect(adminTechniciansSrc).toMatch(/bg-white rounded-xl shadow-sm p-6/);
+    expect(adminTechniciansSrc).toMatch(/grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3/);
+    // Cards are now a bordered token surface rather than a white drop-shadow box.
+    expect(adminTechniciansSrc).toMatch(/bg-surface border border-line rounded-md/);
   });
   it('3. technician data/actions retain completed and postponed summaries while removing pending', () => {
     expect(adminTechniciansSrc).toMatch(/queryKey: \["technicians-detail"\]/);
     expect(adminTechniciansSrc).toMatch(/api\.get\("\/technicians"\)/);
-    expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => \(tech\.completedTasksList\?\.length \|\| 0\) > 0 \? setModal\(\{ tech, type: "completed" \}\) : undefined\}/);
-    expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => \(tech\.postponedTasksList\?\.length \|\| 0\) > 0 \? setModal\(\{ tech, type: "postponed" \}\) : undefined\}/);
+    expect(adminTechniciansSrc).toMatch(/const completedCount = tech\.completedTasksList\?\.length \|\| 0;/);
+    expect(adminTechniciansSrc).toMatch(/const postponedCount = tech\.postponedTasksList\?\.length \|\| 0;/);
+    expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => completedCount > 0 \? setModal\(\{ tech, type: "completed" \}\) : undefined\}/);
+    expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => postponedCount > 0 \? setModal\(\{ tech, type: "postponed" \}\) : undefined\}/);
+    expect(adminTechniciansSrc).toMatch(/disabled=\{completedCount === 0\}/);
+    expect(adminTechniciansSrc).toMatch(/disabled=\{postponedCount === 0\}/);
     expect(adminTechniciansSrc).toMatch(/\{tech\.completedTasks \|\| 0\}/);
     expect(adminTechniciansSrc).toMatch(/\{tech\.postponedTasks \|\| 0\}/);
     expect(adminTechniciansSrc).not.toMatch(/tech\.pendingTasks/);
@@ -71,7 +76,7 @@ describe('Part B: Customer create forms (Admin + Scheduling) expose the optional
       expect(src).toMatch(/<option value="MAINTENANCE">\{t\("customers\.previousMaintenance"\)\}<\/option>/);
     });
     it(`${label}: 13/14. the service date field is a native date-only picker -- no time input, matching the project's date-picker-only convention`, () => {
-      expect(src).toMatch(/type="date" lang="en-GB" dir="ltr" value=\{form\.previousServiceDate\}/);
+      expect(src).toMatch(/type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{form\.previousServiceDate\}/);
       expect(src).not.toMatch(/previousServiceDate[\s\S]{0,80}type="time"/);
     });
     it(`${label}: date is normalized through the shared dateOnlyToApiDate() helper, not fabricated locally`, () => {
@@ -98,7 +103,7 @@ describe('i18n: Previous Service labels exist in both languages with the exact r
 
 describe('16/18: Admin customer details (CustomerDetail.tsx) show previous-service data only when present', () => {
   it('the on-screen view conditionally renders the whole previous-service block, never an empty section', () => {
-    expect(adminCustomerDetailSrc).toMatch(/\{c\.previousServiceType && \(/);
+    expect(adminCustomerDetailSrc).toMatch(/\{c\.previousServiceType && panel\(t\("customers\.previousService"\)/);
   });
   it('the PDF export conditionally includes a previous-service section', () => {
     expect(adminCustomerDetailSrc).toMatch(/\$\{c\.previousServiceType \? `<div class="sec">/);

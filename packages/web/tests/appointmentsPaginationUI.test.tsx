@@ -10,6 +10,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '../../unified-app/src/i18n';
 import { useAppStore } from '../../unified-app/src/store/appStore';
+import { waitFor } from './helpers/waitForCondition';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -57,14 +58,6 @@ function mount(children: React.ReactElement) {
   return container;
 }
 
-async function flush() {
-  for (let i = 0; i < 10; i++) {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-  }
-}
-
 describe('Admin Appointments: pagination UI', () => {
   const apiGet = vi.fn((url: string, config: any = {}) => {
     if (url === '/appointments') {
@@ -91,7 +84,8 @@ describe('Admin Appointments: pagination UI', () => {
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet } }));
     const { default: Appointments } = await import('../../unified-app/src/admin/pages/Appointments');
     const el = mount(<Appointments />);
-    await flush();
+    await waitFor(() => el.querySelectorAll('tbody tr').length === 20,
+      { message: 'page 1 never rendered its 20 rows' });
 
     expect(el.textContent).toContain('1 / 2');
     expect(el.querySelectorAll('tbody tr').length).toBe(20);
@@ -101,20 +95,23 @@ describe('Admin Appointments: pagination UI', () => {
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet } }));
     const { default: Appointments } = await import('../../unified-app/src/admin/pages/Appointments');
     const el = mount(<Appointments />);
-    await flush();
+    await waitFor(() => el.querySelectorAll('tbody tr').length === 20,
+      { message: 'page 1 never rendered its 20 rows' });
 
-    const nextBtn = Array.from(el.querySelectorAll('button')).find(b => b.textContent === '›')!;
+    const nextBtn = el.querySelector('button[aria-label="Next page"]') as HTMLButtonElement;
     act(() => { nextBtn.click(); });
-    await flush();
+    await waitFor(() => (el.textContent || '').includes('2 / 2'),
+      { message: 'page indicator never advanced to 2 / 2' });
 
     expect(el.textContent).toContain('2 / 2');
     expect(el.querySelectorAll('tbody tr').length).toBe(5);
     const page2Call = apiGet.mock.calls.find(c => c[0] === '/appointments' && c[1]?.params?.page === 2 && !c[1]?.params?.pendingSchedulingApproval);
     expect(page2Call).toBeTruthy();
 
-    const prevBtn = Array.from(el.querySelectorAll('button')).find(b => b.textContent === '‹')!;
+    const prevBtn = el.querySelector('button[aria-label="Previous page"]') as HTMLButtonElement;
     act(() => { prevBtn.click(); });
-    await flush();
+    await waitFor(() => (el.textContent || '').includes('1 / 2'),
+      { message: 'page indicator never returned to 1 / 2' });
     expect(el.textContent).toContain('1 / 2');
   });
 
@@ -122,17 +119,22 @@ describe('Admin Appointments: pagination UI', () => {
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet } }));
     const { default: Appointments } = await import('../../unified-app/src/admin/pages/Appointments');
     const el = mount(<Appointments />);
-    await flush();
+    await waitFor(() => el.querySelectorAll('tbody tr').length === 20,
+      { message: 'page 1 never rendered its 20 rows' });
 
-    const nextBtn = Array.from(el.querySelectorAll('button')).find(b => b.textContent === '›')!;
+    const nextBtn = el.querySelector('button[aria-label="Next page"]') as HTMLButtonElement;
     act(() => { nextBtn.click(); });
-    await flush();
+    await waitFor(() => (el.textContent || '').includes('2 / 2'),
+      { message: 'page indicator never advanced to 2 / 2' });
     expect(el.textContent).toContain('2 / 2');
 
     apiGet.mockClear();
     const cancelledFilterBtn = Array.from(el.querySelectorAll('button')).find(b => /cancelled|ملغ/i.test(b.textContent || ''))!;
     act(() => { cancelledFilterBtn.click(); });
-    await flush();
+    await waitFor(
+      () => apiGet.mock.calls.some(c => c[0] === '/appointments' && c[1]?.params?.status && !c[1]?.params?.pendingSchedulingApproval),
+      { message: 'the status-filtered request was never issued' },
+    );
 
     const call = apiGet.mock.calls.find(c => c[0] === '/appointments' && c[1]?.params?.status && !c[1]?.params?.pendingSchedulingApproval);
     expect(call?.[1]?.params?.page).toBe(1);
@@ -142,11 +144,13 @@ describe('Admin Appointments: pagination UI', () => {
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet } }));
     const { default: Appointments } = await import('../../unified-app/src/admin/pages/Appointments');
     const el = mount(<Appointments />);
-    await flush();
+    await waitFor(() => el.querySelectorAll('tbody tr').length === 20,
+      { message: 'page 1 never rendered its 20 rows' });
 
     const cancelledFilterBtn = Array.from(el.querySelectorAll('button')).find(b => /cancelled|ملغ/i.test(b.textContent || ''))!;
     act(() => { cancelledFilterBtn.click(); });
-    await flush();
+    await waitFor(() => (el.textContent || '').includes('1 / 1'),
+      { message: 'the empty filtered result never settled to 1 / 1' });
 
     // No row has status CANCELLED in ALL_ROWS, so the filtered result is empty
     // -- also exercises empty-page handling (no crash, zero rows, "1 / 1").
@@ -158,7 +162,11 @@ describe('Admin Appointments: pagination UI', () => {
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet } }));
     const { default: Appointments } = await import('../../unified-app/src/admin/pages/Appointments');
     const el = mount(<Appointments />);
-    await flush();
+    await waitFor(
+      () => /2 (scheduling appointment|موعد من الجدولة)/.test(el.textContent || '')
+         && /3 (exported appointment|موعد مصدّر)/.test(el.textContent || ''),
+      { message: 'the pending-approval banners never rendered their totals' },
+    );
 
     expect(el.textContent).toMatch(/2 (scheduling appointment|موعد من الجدولة)/);
     expect(el.textContent).toMatch(/3 (exported appointment|موعد مصدّر)/);
@@ -185,14 +193,16 @@ describe('Scheduling Appointments: pagination UI', () => {
     vi.doMock('../../unified-app/src/scheduling/api/client', () => ({ api: { get: apiGet } }));
     const { default: SchedAppointments } = await import('../../unified-app/src/scheduling/pages/Appointments');
     const el = mount(<SchedAppointments />);
-    await flush();
+    await waitFor(() => el.querySelectorAll('tbody tr').length === 20,
+      { message: 'page 1 never rendered its 20 rows' });
 
     expect(el.textContent).toContain('1 / 2');
     expect(el.querySelectorAll('tbody tr').length).toBe(20);
 
-    const nextBtn = Array.from(el.querySelectorAll('button')).find(b => b.textContent === '›')!;
+    const nextBtn = el.querySelector('button[aria-label="Next page"]') as HTMLButtonElement;
     act(() => { nextBtn.click(); });
-    await flush();
+    await waitFor(() => (el.textContent || '').includes('2 / 2'),
+      { message: 'page indicator never advanced to 2 / 2' });
 
     expect(el.textContent).toContain('2 / 2');
     expect(el.querySelectorAll('tbody tr').length).toBe(5);

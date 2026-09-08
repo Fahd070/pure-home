@@ -9,6 +9,14 @@ import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
 import CallReportForm from "../components/CallReportForm";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Input, Checkbox } from "../../ui/Field";
+import { Badge } from "../../ui/Badge";
+import { PageHeader, Toolbar } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { ConfirmDialog } from "../../ui/Modal";
+import { Icon } from "../../ui/icons";
 
 type ConfirmType = "single" | "selected" | "all";
 
@@ -118,132 +126,136 @@ export default function CallReports() {
 
   return (
     <div className="space-y-4">
-      {/* Confirmation Dialog */}
-      {confirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
-            <p className="text-sm font-medium text-slate-700 text-center mb-4">{confirmMsg}</p>
-            <div className="flex gap-2 justify-center">
-              <button
-                onClick={() => setConfirm(null)}
-                className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={doDelete}
-                disabled={deleteMutation.isPending}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteMutation.isPending ? "..." : t("common.delete")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-slate-800">{t("callReports.title")}</h1>
-        <div className="flex gap-2 flex-wrap">
-          {someSelected && (
-            <button
-              onClick={() => openConfirm("selected")}
-              className="bg-red-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-red-700"
-            >
-              {t("callReports.deleteSelected")} ({selectedCount})
-            </button>
-          )}
-          {reports.length > 0 && (
-            <button
-              onClick={() => openConfirm("all")}
-              className="border border-red-300 text-red-600 text-sm px-3 py-2 rounded-lg hover:bg-red-50"
-            >
-              {t("callReports.deleteAll")}
-            </button>
-          )}
-          <button onClick={() => setShowForm(v => !v)}
-            className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800">
-            📞 {t("callReports.newReport")}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={t("callReports.title")}
+        subtitle={<span className="tabular-nums">{reports.length} / {reportsTotal}</span>}
+        actions={
+          <>
+            {someSelected && (
+              <Button variant="danger" size="sm" onClick={() => openConfirm("selected")}>
+                <Icon name="trash" className="w-3.5 h-3.5" />
+                {t("callReports.deleteSelected")} ({selectedCount})
+              </Button>
+            )}
+            {reports.length > 0 && (
+              <Button variant="secondary" size="sm" onClick={() => openConfirm("all")} className="text-danger-fg">
+                {t("callReports.deleteAll")}
+              </Button>
+            )}
+            <Button variant={showForm ? "secondary" : "primary"} onClick={() => setShowForm(v => !v)}>
+              <Icon name={showForm ? "close" : "add"} className="w-3.5 h-3.5" />
+              {showForm ? t("common.cancel") : t("callReports.newReport")}
+            </Button>
+          </>
+        }
+      />
 
       {showForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="font-semibold text-slate-700">{t("callReports.newReport")}</h2>
+        <div className="bg-surface border border-line rounded-md">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line">
+            <h2 className="text-sm font-semibold text-fg">{t("callReports.newReport")}</h2>
             <HelpButton titleAr={HELP["form.callReport"].titleAr} contentAr={HELP["form.callReport"].contentAr} />
           </div>
-          <CallReportForm onSaved={() => setShowForm(false)} onCancel={() => setShowForm(false)} />
+          <div className="p-4">
+            <CallReportForm onSaved={() => setShowForm(false)} onCancel={() => setShowForm(false)} />
+          </div>
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="mb-1">
-          <label className="block text-xs font-medium text-slate-600 mb-1">
-            {isAr ? "بحث عن عميل (اسم أو جوال)" : "Search Customer (name or phone)"}
-          </label>
-          <input value={filterSearch} onChange={e => setFilterSearch(e.target.value)}
-            placeholder={isAr ? "ابحث..." : "Search..."}
-            className="w-64 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+      <Toolbar>
+        <div className="relative w-72 max-w-full">
+          <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none" />
+          <Input
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            placeholder={isAr ? "ابحث عن عميل (اسم أو جوال)" : "Search customer (name or phone)"}
+            aria-label={isAr ? "بحث عن عميل" : "Search customer"}
+            className="ps-8"
+          />
         </div>
-      </div>
+      </Toolbar>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? (
-          <p className="text-center py-10 text-slate-400">{t("common.loading")}</p>
-        ) : !reports.length ? (
-          <p className="text-center py-10 text-slate-400">{t("callReports.noReports")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 w-10">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                      className="w-4 h-4 rounded cursor-pointer accent-green-700" />
-                  </th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.customer")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.phone")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.employeeName")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.callDate")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("callReports.notes")}</th>
-                  <th className="px-4 py-3 w-16"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((r: any) => (
-                  <tr key={r.id} className={`border-b transition-colors ${selected.has(r.id) ? "bg-green-50" : "hover:bg-slate-50"}`}>
-                    <td className="px-4 py-3">
-                      <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleOne(r.id)}
-                        className="w-4 h-4 rounded cursor-pointer accent-green-700" />
-                    </td>
-                    <td className="px-4 py-3 font-medium">
+      {isLoading ? (
+        <Loading label={t("common.loading")} />
+      ) : !reports.length ? (
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState
+            icon={<Icon name="callReports" className="w-5 h-5" />}
+            title={t("callReports.noReports")}
+          />
+        </div>
+      ) : (
+        <TableShell>
+          <Table className="min-w-[820px]">
+            <THead>
+              <tr>
+                <TH width="2.5rem">
+                  <Checkbox
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    aria-label={t("common.all")}
+                  />
+                </TH>
+                <TH>{t("callReports.customer")}</TH>
+                <TH width="9rem">{t("common.phone")}</TH>
+                <TH width="10rem">{t("callReports.employeeName")}</TH>
+                <TH width="7rem">{t("callReports.callDate")}</TH>
+                <TH>{t("callReports.notes")}</TH>
+                <TH width="4rem" />
+              </tr>
+            </THead>
+            <TBody>
+              {reports.map((r: any) => (
+                <TR key={r.id} selected={selected.has(r.id)}>
+                  <TD>
+                    <Checkbox
+                      checked={selected.has(r.id)}
+                      onChange={() => toggleOne(r.id)}
+                      aria-label={r.customer?.name || r.unregisteredName || ""}
+                    />
+                  </TD>
+                  <TD className="font-medium">
+                    <span className="inline-flex items-center gap-1.5">
                       {r.customer?.name || r.unregisteredName || "—"}
-                      {!r.customer && r.unregisteredName && <span className="ms-1 text-xs bg-amber-100 text-amber-700 px-1 rounded">غير مسجل</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{r.customer?.phone || r.unregisteredPhone || "—"}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.employeeName}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs" dir="ltr">
-                      {formatGregorianDate(r.callDate)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs max-w-[300px] truncate">{r.notes || "—"}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => openConfirm("single", [r.id])}
-                        className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                        title={t("common.delete")}
-                      >
-                        🗑
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                      {!r.customer && r.unregisteredName && <Badge tone="warning">غير مسجل</Badge>}
+                    </span>
+                  </TD>
+                  <TD className="text-fg-secondary"><span dir="ltr">{r.customer?.phone || r.unregisteredPhone || "—"}</span></TD>
+                  <TD className="text-fg-secondary">{r.employeeName}</TD>
+                  <TD className="text-fg-secondary tabular-nums whitespace-nowrap">
+                    <span dir="ltr">{formatGregorianDate(r.callDate)}</span>
+                  </TD>
+                  <TD className="text-fg-secondary max-w-[320px] truncate" title={r.notes || undefined}>
+                    {r.notes || "—"}
+                  </TD>
+                  <TD>
+                    <Button
+                      size="sm" variant="ghost" iconOnly
+                      onClick={() => openConfirm("single", [r.id])}
+                      title={t("common.delete")}
+                      aria-label={t("common.delete")}
+                      className="hover:text-danger-fg hover:bg-danger-bg"
+                    >
+                      <Icon name="trash" className="w-4 h-4" />
+                    </Button>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </TableShell>
+      )}
+
+      <ConfirmDialog
+        open={!!confirm}
+        onCancel={() => setConfirm(null)}
+        onConfirm={doDelete}
+        title={confirmMsg}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

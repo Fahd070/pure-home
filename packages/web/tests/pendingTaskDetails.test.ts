@@ -25,8 +25,11 @@ describe('i18n: tasks.unassigned exact wording', () => {
 
 describe('WorkQueue card: pending task details', () => {
   it('displays customer name and phone', () => {
-    expect(workQueueSrc).toMatch(/\{customer\?\.name\}/);
-    expect(workQueueSrc).toMatch(/\{customer\?\.phone\}/);
+    // The queue is now a prominent "next job" panel plus grouped rows, so the
+    // customer is read off the appointment rather than a destructured local.
+    expect(workQueueSrc).toMatch(/\{nextJob\.customer\?\.name\}/);
+    expect(workQueueSrc).toMatch(/\{nextJob\.customer\?\.phone\}/);
+    expect(workQueueSrc).toMatch(/\{appt\.customer\?\.name\}/);
   });
 
   it('displays a localized status badge for the pending/in-progress state', () => {
@@ -34,9 +37,13 @@ describe('WorkQueue card: pending task details', () => {
   });
 
   it('displays the location/address block when present', () => {
-    expect(workQueueSrc).toMatch(/\{addr && \(/);
+    // The address is composed once by addressLine() and shown on the next-job
+    // panel and on every queue row, instead of a separate labelled block.
+    expect(workQueueSrc).toMatch(/\{nextJob\.customer\?\.address && \(/);
     expect(workQueueSrc).toMatch(/addr\.city/);
     expect(workQueueSrc).toMatch(/addr\.district/);
+    expect(workQueueSrc).toMatch(/addressLine\(nextJob\.customer\.address\)/);
+    expect(workQueueSrc).toMatch(/addressLine\(appt\.customer\?\.address\)/);
   });
 
   it('displays service type and the scheduled date (date-only, no fabricated time)', () => {
@@ -52,17 +59,21 @@ describe('WorkQueue card: pending task details', () => {
   });
 
   it('shows an appointment-notes preview when notes are present', () => {
-    expect(workQueueSrc).toMatch(/\{appt\.notes && \(/);
+    expect(workQueueSrc).toMatch(/\{nextJob\.notes && \(/);
     expect(workQueueSrc).toMatch(/t\("common\.notes"\)/);
   });
 
   it('shows an Unassigned badge only for a pool task with no technicianId', () => {
-    expect(workQueueSrc).toMatch(/\{!appt\.technicianId && \(/);
+    expect(workQueueSrc).toMatch(/\{!nextJob\.technicianId && <Badge tone="neutral">/);
+    expect(workQueueSrc).toMatch(/\{!appt\.technicianId && <Badge tone="neutral">/);
     expect(workQueueSrc).toMatch(/t\("tasks\.unassigned"\)/);
   });
 
   it('cards remain clickable/navigable to the detail page (unchanged)', () => {
-    expect(workQueueSrc).toMatch(/onClick=\{\(\) => navigate\(`\/technician\/queue\/\$\{appt\.id\}`\)\}/);
+    // Rows call a passed-down opener; the next-job panel navigates directly.
+    expect(workQueueSrc).toMatch(/onOpen=\{id => navigate\(`\/technician\/queue\/\$\{id\}`\)\}/);
+    expect(workQueueSrc).toMatch(/onClick=\{\(\) => navigate\(`\/technician\/queue\/\$\{nextJob\.id\}`\)\}/);
+    expect(workQueueSrc).toMatch(/onClick=\{\(\) => onOpen\(appt\.id\)\}/);
   });
 
   it('still excludes urgent appointments from this list (unchanged Modification-era rule -- urgent has its own dedicated page)', () => {
@@ -92,7 +103,7 @@ describe('TaskDetail: full pending-detail view', () => {
   });
 
   it('shows an Unassigned badge only for a pool task with no technicianId', () => {
-    expect(taskDetailSrc).toMatch(/\{!appt\?\.technicianId && \(/);
+    expect(taskDetailSrc).toMatch(/\{!appt\?\.technicianId && <Badge tone="neutral">/);
     expect(taskDetailSrc).toMatch(/t\("tasks\.unassigned"\)/);
   });
 

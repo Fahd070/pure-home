@@ -9,20 +9,17 @@ import RowActionButton from "../../components/RowActionButton";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import CallReportModal from "../components/CallReportModal";
 import { toDateInputValue, dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Input, Select, Textarea, Field } from "../../ui/Field";
+import { Badge, Tone } from "../../ui/Badge";
+import { StatTile } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { Modal } from "../../ui/Modal";
+import { Icon, IconName } from "../../ui/icons";
 
 const APPT_ENDPOINTS = ["completed-maintenance","this-month","next-month","postponed","overdue","today","urgent"];
 const CUSTOMER_ENDPOINTS = ["customers-list"];
-
-function StatCard({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <button type="button" onClick={onClick} className={`bg-white rounded-xl p-4 border-s-4 shadow-sm text-start hover:shadow-md hover:-translate-y-0.5 transition-all w-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-green-500 ${color}`}>
-      <p className="text-2xl font-bold text-slate-800">{value ?? "—"}</p>
-      <p className="text-slate-500 text-sm mt-1">{label}</p>
-      <p className="text-xs text-blue-500 mt-2">{t("dashboard.clickToView")}</p>
-    </button>
-  );
-}
 
 export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (id: string, data: any) => void; onClose: () => void }) {
   const { t } = useTranslation();
@@ -41,49 +38,41 @@ export function EditApptModal({ appt, onSave, onClose }: { appt: any; onSave: (i
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-bold text-slate-800">{t("dashboard.editApptTitle")}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">✕</button>
-        </div>
-        <div className="p-4 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
-            <input type="date" lang="en-GB" dir="ltr" value={form.date} onChange={e => set("date", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
-            <select value={form.type} onChange={e => set("type", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-              <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
-              <option value="INSTALLATION">{t("appointments.installation")}</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.status")}</label>
-            <select value={form.status} onChange={e => set("status", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-              <option value="SCHEDULED">{t("appointments.scheduled")}</option>
-              <option value="RESCHEDULED">{t("appointments.rescheduled")}</option>
-              <option value="CANCELLED">{t("appointments.cancelled")}</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.notes")}</label>
-            <textarea rows={3} value={form.notes} onChange={e => set("notes", e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
-          </div>
-        </div>
-        <div className="p-4 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
-          <button onClick={handleSave} className="px-4 py-2 text-sm bg-green-700 text-white rounded-lg hover:bg-green-800">
-            {t("common.save")}
-          </button>
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      closeOnBackdrop={false}
+      size="sm"
+      title={t("dashboard.editApptTitle")}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" onClick={handleSave}>{t("common.save")}</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <Field label={t("common.date")} htmlFor="edit-appt-date">
+          <Input id="edit-appt-date" type="date" lang="en-GB" dir="ltr" value={form.date} onChange={e => set("date", e.target.value)} />
+        </Field>
+        <Field label={t("appointments.type")} htmlFor="edit-appt-type">
+          <Select id="edit-appt-type" value={form.type} onChange={e => set("type", e.target.value)}>
+            <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
+            <option value="INSTALLATION">{t("appointments.installation")}</option>
+          </Select>
+        </Field>
+        <Field label={t("common.status")} htmlFor="edit-appt-status">
+          <Select id="edit-appt-status" value={form.status} onChange={e => set("status", e.target.value)}>
+            <option value="SCHEDULED">{t("appointments.scheduled")}</option>
+            <option value="RESCHEDULED">{t("appointments.rescheduled")}</option>
+            <option value="CANCELLED">{t("appointments.cancelled")}</option>
+          </Select>
+        </Field>
+        <Field label={t("common.notes")} htmlFor="edit-appt-notes">
+          <Textarea id="edit-appt-notes" rows={3} value={form.notes} onChange={e => set("notes", e.target.value)} />
+        </Field>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -116,37 +105,33 @@ function QuickScheduleModal({ customer, onClose, onSaved }: { customer: { id: st
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[75] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-bold text-slate-800">📅 {customer.name}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">✕</button>
-        </div>
-        <div className="p-4 space-y-3">
-          <PreviousMaintenanceNoteBox note={prevNote} />
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
-            <input type="date" lang="en-GB" dir="ltr" value={date} onChange={e => setDate(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("appointments.type")}</label>
-            <select value={type} onChange={e => setType(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-              <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
-              <option value="INSTALLATION">{t("appointments.installation")}</option>
-            </select>
-          </div>
-        </div>
-        <div className="p-4 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
-          <button onClick={handleSave} disabled={loading}
-            className="px-4 py-2 text-sm bg-green-700 text-white rounded-lg hover:bg-green-800 disabled:opacity-50">
-            {loading ? "..." : t("common.save")}
-          </button>
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      closeOnBackdrop={false}
+      size="sm"
+      title={customer.name}
+      description={t("appointments.new")}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" loading={loading} onClick={handleSave}>{t("common.save")}</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <PreviousMaintenanceNoteBox note={prevNote} />
+        <Field label={t("common.date")} htmlFor="quick-date">
+          <Input id="quick-date" type="date" lang="en-GB" dir="ltr" value={date} onChange={e => setDate(e.target.value)} />
+        </Field>
+        <Field label={t("appointments.type")} htmlFor="quick-type">
+          <Select id="quick-type" value={type} onChange={e => setType(e.target.value)}>
+            <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
+            <option value="INSTALLATION">{t("appointments.installation")}</option>
+          </Select>
+        </Field>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -189,15 +174,141 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
   const isCustomerList = CUSTOMER_ENDPOINTS.includes(endpoint);
 
   // Dashboard parity fix: matches the Admin Dashboard's DrillModal exactly.
-  const taskColors: Record<string, string> = {
-    WAITING: "bg-yellow-100 text-yellow-700",
-    IN_PROGRESS: "bg-indigo-100 text-indigo-700",
-    COMPLETED: "bg-green-100 text-green-700",
-    POSTPONED: "bg-orange-100 text-orange-700",
+  const taskTones: Record<string, Tone> = {
+    WAITING: "pending",
+    IN_PROGRESS: "progress",
+    COMPLETED: "success",
+    POSTPONED: "warning",
   };
 
   return (
     <>
+      <Modal
+        open
+        onClose={onClose}
+        size="lg"
+        title={title}
+        className="max-h-[85vh]"
+        footer={
+          total > 15 ? (
+            <div className="flex items-center justify-between w-full">
+              <span className="text-2xs text-fg-muted tabular-nums">{total} {t("common.total")}</span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="secondary" iconOnly disabled={page === 1} onClick={() => setPage(p => p - 1)} aria-label="Previous page">
+                  <Icon name="chevronStart" className="w-3.5 h-3.5 rtl:rotate-180" />
+                </Button>
+                <span className="text-2xs text-fg-secondary tabular-nums px-1">{page}/{pages}</span>
+                <Button size="sm" variant="secondary" iconOnly disabled={page >= pages} onClick={() => setPage(p => p + 1)} aria-label="Next page">
+                  <Icon name="chevronEnd" className="w-3.5 h-3.5 rtl:rotate-180" />
+                </Button>
+              </div>
+            </div>
+          ) : undefined
+        }
+      >
+        <div className="relative mb-3">
+          <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t("dashboard.search")}
+            aria-label={t("dashboard.search")}
+            className="ps-8"
+          />
+        </div>
+
+        <div className="border border-line rounded-md overflow-hidden">
+          {isLoading ? <Loading label={t("dashboard.loading")} />
+            : items.length === 0 ? <EmptyState icon={<Icon name="search" className="w-5 h-5" />} title={t("dashboard.noRecords")} />
+            : isApptList ? (
+              <Table>
+                <THead>
+                  <tr>
+                    <TH>{t("appointments.customer")}</TH>
+                    <TH>{t("common.phone")}</TH>
+                    <TH width="6.5rem">{t("common.date")}</TH>
+                    <TH width="7rem">{t("appointments.type")}</TH>
+                    <TH width="8rem">{t("common.status")}</TH>
+                    <TH width="6rem" />
+                  </tr>
+                </THead>
+                <TBody>
+                  {items.map((a: any) => {
+                    let loc: any = {};
+                    try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
+                    const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "زيارة عاجلة";
+                    const displayPhone = a.customer?.phone || "—";
+                    return (
+                      <tr
+                        key={a.id}
+                        onClick={a.customer ? () => navigate(`/scheduling/customers/${a.customer.id}`) : undefined}
+                        onKeyDown={a.customer ? event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/scheduling/customers/${a.customer.id}`); } } : undefined}
+                        tabIndex={a.customer ? 0 : undefined}
+                        className={`border-b border-line-subtle last:border-b-0 hover:bg-surface-hover transition-colors ${a.customer ? "cursor-pointer" : ""}`}
+                      >
+                        <TD className="font-medium">{displayName}</TD>
+                        <TD className="text-fg-secondary"><span dir="ltr">{displayPhone}</span></TD>
+                        <TD className="tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                        <TD className="text-fg-secondary text-2xs">{a.type}</TD>
+                        <TD>
+                          <Badge tone={taskTones[a.workStatus] ?? "neutral"} dot>{a.workStatus || a.status}</Badge>
+                        </TD>
+                        <TD>
+                          <div className="flex gap-1 items-center">
+                            <RowActionButton variant="edit" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
+                            {/* Modification #11: only for a real, registered customer -- an
+                                urgent row with no linked customer has no customerId to attach
+                                a call report to (the existing subsystem requires one or an
+                                unregistered name, which this shortcut deliberately doesn't invent). */}
+                            {a.customer && (
+                              <RowActionButton variant="call" onClick={() => setCallReportCustomer({ id: a.customer.id, name: a.customer.name, phone: a.customer.phone })} title={t("callReports.action")} />
+                            )}
+                          </div>
+                        </TD>
+                      </tr>
+                    );
+                  })}
+                </TBody>
+              </Table>
+            ) : (
+              <Table>
+                <THead>
+                  <tr>
+                    <TH>{t("common.name")}</TH>
+                    <TH>{t("common.phone")}</TH>
+                    <TH>{t("customers.city")}</TH>
+                    <TH width="4rem" />
+                  </tr>
+                </THead>
+                <TBody>
+                  {items.map((c: any) => (
+                    <TR key={c.id} onClick={() => navigate(`/scheduling/customers/${c.id}`)}>
+                      <TD className="font-medium">{c.name}</TD>
+                      <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
+                      <TD className="text-fg-secondary">{c.address?.city || "—"}</TD>
+                      <TD>
+                        {isCustomerList && (
+                          <Button
+                            size="sm" variant="ghost" iconOnly
+                            onClick={event => { event.stopPropagation(); setSchedulingCustomer({ id: c.id, name: c.name }); }}
+                            title={t("appointments.new")}
+                            aria-label={t("appointments.new")}
+                          >
+                            <Icon name="calendar" className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+        </div>
+      </Modal>
+
+      {/* Rendered AFTER the drill modal: every dialog shares the same z-layer,
+          so DOM order is what puts a nested dialog on top of the one that
+          opened it. */}
       {schedulingCustomer && (
         <QuickScheduleModal
           customer={schedulingCustomer}
@@ -220,109 +331,13 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
           onClose={() => setCallReportCustomer(null)}
         />
       )}
-
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-          <div className="flex items-center justify-between p-4 border-b">
-            <h3 className="font-bold text-lg text-slate-800">{title}</h3>
-            <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">✕</button>
-          </div>
-          <div className="p-4 border-b">
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("dashboard.search")}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {isLoading ? <p className="text-center py-8 text-slate-400 text-sm">{t("dashboard.loading")}</p>
-              : items.length === 0 ? <p className="text-center py-8 text-slate-400 text-sm">{t("dashboard.noRecords")}</p>
-              : isApptList ? (
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 sticky top-0"><tr>
-                    <th className="text-start px-4 py-2">{t("appointments.customer")}</th>
-                    <th className="text-start px-4 py-2">{t("common.phone")}</th>
-                    <th className="text-start px-4 py-2">{t("common.date")}</th>
-                    <th className="text-start px-4 py-2">{t("appointments.type")}</th>
-                    <th className="text-start px-4 py-2">{t("common.status")}</th>
-                    <th className="px-4 py-2 w-20"></th>
-                  </tr></thead>
-                  <tbody>{items.map((a: any) => {
-                    let loc: any = {};
-                    try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
-                    const displayName = a.customer?.name || [loc.city, loc.district].filter(Boolean).join("، ") || "زيارة عاجلة";
-                    const displayPhone = a.customer?.phone || "—";
-                    return (
-                      <tr
-                        key={a.id}
-                        onClick={a.customer ? () => navigate(`/scheduling/customers/${a.customer.id}`) : undefined}
-                        onKeyDown={a.customer ? event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/scheduling/customers/${a.customer.id}`); } } : undefined}
-                        tabIndex={a.customer ? 0 : undefined}
-                        className={`border-b hover:bg-slate-50 ${a.customer ? "cursor-pointer focus:outline-none focus:bg-green-50" : ""}`}>
-                        <td className="px-4 py-2">{displayName}</td>
-                        <td className="px-4 py-2 text-slate-500">{displayPhone}</td>
-                        <td className="px-4 py-2" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
-                        <td className="px-4 py-2 text-xs font-medium text-slate-600">{a.type}</td>
-                        <td className="px-4 py-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${taskColors[a.workStatus] || "bg-slate-100 text-slate-600"}`}>
-                            {a.workStatus || a.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex gap-1 items-center">
-                            <RowActionButton variant="edit" theme="green" onClick={() => setEditingAppt(a)} title={t("dashboard.editAppt")} />
-                            {/* Modification #11: only for a real, registered customer -- an
-                                urgent row with no linked customer has no customerId to attach
-                                a call report to (the existing subsystem requires one or an
-                                unregistered name, which this shortcut deliberately doesn't invent). */}
-                            {a.customer && (
-                              <RowActionButton variant="call" onClick={() => setCallReportCustomer({ id: a.customer.id, name: a.customer.name, phone: a.customer.phone })} title={t("callReports.action")} />
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}</tbody>
-                </table>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 sticky top-0"><tr>
-                    <th className="text-start px-4 py-2">{t("common.name")}</th>
-                    <th className="text-start px-4 py-2">{t("common.phone")}</th>
-                    <th className="text-start px-4 py-2">{t("customers.city")}</th>
-                    <th className="px-4 py-2 w-14"></th>
-                  </tr></thead>
-                  <tbody>{items.map((c: any) => (
-                    <tr key={c.id} onClick={() => navigate(`/scheduling/customers/${c.id}`)} className="border-b hover:bg-slate-50 cursor-pointer">
-                      <td className="px-4 py-2 font-medium">{c.name}</td>
-                      <td className="px-4 py-2 text-slate-500">{c.phone}</td>
-                      <td className="px-4 py-2 text-slate-500">{c.address?.city || "—"}</td>
-                      <td className="px-4 py-2">
-                        {isCustomerList && (
-                          <button onClick={event => { event.stopPropagation(); setSchedulingCustomer({ id: c.id, name: c.name }); }} title="Schedule"
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-green-100 text-green-700 text-xs">📅</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              )}
-          </div>
-          {total > 15 && (
-            <div className="flex items-center justify-between p-3 border-t text-sm">
-              <span className="text-slate-500">{total} {t("common.total")}</span>
-              <div className="flex gap-2">
-                <button disabled={page === 1} onClick={() => setPage(p => p-1)} className="px-3 py-1 border rounded disabled:opacity-40">‹</button>
-                <span className="px-2 py-1">{page}/{pages}</span>
-                <button disabled={page >= pages} onClick={() => setPage(p => p+1)} className="px-3 py-1 border rounded disabled:opacity-40">›</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
     </>
   );
 }
 
 export default function SchedDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isAr = i18n.language === "ar";
   const qc = useQueryClient();
   const socket = useSocket();
   const [modal, setModal] = useState<{ title: string; endpoint: string } | null>(null);
@@ -354,10 +369,10 @@ export default function SchedDashboard() {
     };
   }, [socket, qc]);
 
-  const statusColor: Record<string, string> = {
-    COMPLETED: "text-green-600 bg-green-50", IN_PROGRESS: "text-blue-600 bg-blue-50",
-    POSTPONED: "text-orange-600 bg-orange-50", WAITING: "text-yellow-600 bg-yellow-50",
-    NO_APPOINTMENT: "text-slate-400 bg-slate-50"
+  const statusTone: Record<string, Tone> = {
+    COMPLETED: "success", IN_PROGRESS: "progress",
+    POSTPONED: "warning", WAITING: "pending",
+    NO_APPOINTMENT: "neutral",
   };
   const statusLabel: Record<string, string> = {
     COMPLETED: t("tasks.completed"), IN_PROGRESS: t("tasks.inProgress"),
@@ -365,51 +380,80 @@ export default function SchedDashboard() {
     NO_APPOINTMENT: "—"
   };
 
-  // Dashboard parity fix: card set, order, and responsive grid now match the
-  // Admin Dashboard exactly (both consume the same GET /dashboard/stats).
-  const cards = [
-    { label: t("dashboard.customers"),           key: "total",          endpoint: "customers-list",        color: "border-blue-500" },
-    { label: t("dashboard.completedMaintenance"), key: "completed",      endpoint: "completed-maintenance", color: "border-green-500" },
-    { label: t("dashboard.thisMonth"),            key: "thisMonth",      endpoint: "this-month",            color: "border-indigo-500" },
-    { label: t("dashboard.nextMonth"),            key: "nextMonth",      endpoint: "next-month",            color: "border-purple-500" },
-    { label: t("dashboard.dueToday"),             key: "todayCount",     endpoint: "today",                 color: "border-orange-500" },
-    { label: t("dashboard.suspendedPostponed"),   key: "pending",        endpoint: "postponed",             color: "border-yellow-500" },
-    { label: t("dashboard.overdueMaintenance"),   key: "pendingApproval",endpoint: "overdue",               color: "border-red-500" },
-    { label: t("dashboard.urgentAppointments"),   key: "urgentCount",    endpoint: "urgent",                color: "border-rose-500" },
+  // Dashboard parity fix: same card set and same GET /dashboard/stats the Admin
+  // Dashboard consumes -- but Scheduling reads them in the order its own job
+  // runs in. Time-critical work that someone has to act on today comes first;
+  // the forward-looking pipeline sits below it.
+  type StatCardDef = { label: string; key: string; endpoint: string; tone: Tone; icon: IconName };
+
+  const attention: StatCardDef[] = [
+    { label: t("dashboard.overdueMaintenance"), key: "pendingApproval", endpoint: "overdue",   tone: "danger",  icon: "urgent" },
+    { label: t("dashboard.urgentAppointments"), key: "urgentCount",     endpoint: "urgent",    tone: "urgent",  icon: "urgent" },
+    { label: t("dashboard.dueToday"),           key: "todayCount",      endpoint: "today",     tone: "warning", icon: "clock" },
+    { label: t("dashboard.suspendedPostponed"), key: "pending",         endpoint: "postponed", tone: "pending", icon: "clock" },
+  ];
+  const pipeline: StatCardDef[] = [
+    { label: t("dashboard.thisMonth"),            key: "thisMonth", endpoint: "this-month",            tone: "info", icon: "calendar" },
+    { label: t("dashboard.nextMonth"),            key: "nextMonth", endpoint: "next-month",            tone: "progress", icon: "appointments" },
+    { label: t("dashboard.completedMaintenance"), key: "completed", endpoint: "completed-maintenance", tone: "success", icon: "check" },
+    { label: t("dashboard.customers"),            key: "total",     endpoint: "customers-list",        tone: "neutral", icon: "customers" },
   ];
 
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+  const renderGroup = (heading: string, cards: StatCardDef[]) => (
+    <section>
+      <h2 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted mb-2">{heading}</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(c => (
-          <StatCard key={c.key} label={c.label} value={stats?.[c.key]} color={c.color}
-            onClick={() => setModal({ title: c.label, endpoint: c.endpoint })} />
+          <StatTile
+            key={c.key}
+            label={c.label}
+            value={stats?.[c.key] ?? "—"}
+            tone={c.tone}
+            icon={<Icon name={c.icon} className="w-4 h-4" />}
+            hint={t("dashboard.clickToView")}
+            onClick={() => setModal({ title: c.label, endpoint: c.endpoint })}
+          />
         ))}
       </div>
+    </section>
+  );
 
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <h3 className="font-semibold text-slate-800 mb-3">{t("dashboard.recentActivity")}</h3>
-        <div className="space-y-1">
-          {!(activity?.length) ? (
-            <p className="text-center text-slate-400 text-sm py-6">{t("dashboard.noRecentActivity")}</p>
-          ) : (activity || []).map((a: any) => (
-            <div key={a.customerId} className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-slate-50">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold text-sm">
-                  {a.customerName?.[0]}
+  return (
+    <div className="space-y-5">
+      {/* Group headings must NOT reuse a card's own label -- "Due Today" as a
+          heading above a "Due Today" card read like a duplicate rather than a
+          grouping. These name what the group is for. */}
+      {renderGroup(isAr ? "يحتاج إلى إجراء" : "Needs attention", attention)}
+      {renderGroup(isAr ? "الأعمال القادمة" : "Pipeline", pipeline)}
+
+      <section className="bg-surface border border-line rounded-md">
+        <h3 className="text-sm font-semibold text-fg px-4 py-3 border-b border-line">{t("dashboard.recentActivity")}</h3>
+        {!(activity?.length) ? (
+          <EmptyState icon={<Icon name="clock" className="w-5 h-5" />} title={t("dashboard.noRecentActivity")} />
+        ) : (
+          <ul className="divide-y divide-line-subtle">
+            {(activity || []).map((a: any) => (
+              <li key={a.customerId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className="w-7 h-7 rounded-md bg-surface-active text-fg-secondary text-2xs font-semibold flex items-center justify-center flex-shrink-0"
+                    aria-hidden="true"
+                  >
+                    {a.customerName?.[0]}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[0.8125rem] font-medium text-fg truncate">{a.customerName}</p>
+                    <p className="text-2xs text-fg-muted" dir="ltr">{a.phone}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-sm text-slate-800">{a.customerName}</p>
-                  <p className="text-xs text-slate-400">{a.phone}</p>
-                </div>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[a.status] || ""}`}>
-                {statusLabel[a.status] || a.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+                <Badge tone={statusTone[a.status] ?? "neutral"} dot>
+                  {statusLabel[a.status] || a.status}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {modal && <DrillModal title={modal.title} endpoint={modal.endpoint} onClose={() => setModal(null)} />}
     </div>

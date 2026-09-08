@@ -1,106 +1,144 @@
+@import "../ui/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  * { font-family: "Cairo", sans-serif; box-sizing: border-box; }
-  body { margin: 0; padding: 0; overflow: hidden; }
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #f1f5f9; }
-  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; padding: 0; overflow: hidden; }
+
+  body {
+    font-family: var(--ph-font);
+    background-color: var(--ph-canvas);
+    color: var(--ph-fg);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numerals stay Latin and evenly spaced in every locale so operational data
+     (dates, phone numbers, amounts, counts) reads identically in AR and EN. */
+  table, input, [dir="ltr"] { font-variant-numeric: tabular-nums; }
+
+  h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 600; color: var(--ph-fg); }
+
+  /* One focus treatment across the whole product -- visible, never removed. */
+  :focus-visible {
+    outline: 2px solid var(--ph-focus);
+    outline-offset: 1px;
+    border-radius: var(--ph-radius-sm);
+  }
+
+  ::selection { background: var(--ph-accent-subtle); color: var(--ph-accent-subtle-fg); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--ph-border-strong);
+    border-radius: 6px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ph-fg-muted); background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  input, select, textarea, button { font-family: inherit; }
 }
 
 @layer utilities {
   .titlebar-drag    { -webkit-app-region: drag; }
   .titlebar-no-drag { -webkit-app-region: no-drag; }
-  .fade-in { animation: fadeIn 0.2s ease-in-out; }
+  .fade-in          { animation: ph-fade-in var(--ph-motion-fast) var(--ph-ease) both; }
+
+  /* ── Motion vocabulary ───────────────────────────────────────────────────
+     Four movements, all short and all built from opacity plus a few px of
+     travel. Desktop software should feel like it responded instantly and then
+     settled -- not like it played an animation at you. Nothing scales, bounces,
+     overshoots or blurs.
+
+     Travel uses translateY (vertical) or a logical-property-safe fade, never
+     translateX, so a transition can never contradict RTL reading direction. */
+
+  /* Route / major view change. */
+  .ph-view-enter    { animation: ph-view-enter var(--ph-motion) var(--ph-ease) both; }
+
+  /* Dialog surface + its scrim. */
+  .ph-dialog-enter  { animation: ph-dialog-enter var(--ph-motion) var(--ph-ease-out) both; }
+  .ph-scrim-enter   { animation: ph-scrim-enter var(--ph-motion-fast) var(--ph-ease) both; }
+
+  /* Contextual panel / drawer / detail pane. */
+  .ph-panel-enter   { animation: ph-panel-enter var(--ph-motion) var(--ph-ease-out) both; }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes ph-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   THEME — Dark mode via CSS filter invert
-   ═══════════════════════════════════════════════════════════ */
-html[data-theme="dark"] #root {
-  filter: invert(1) hue-rotate(180deg);
-}
-html[data-theme="dark"] #root img,
-html[data-theme="dark"] #root video,
-html[data-theme="dark"] #root [data-no-invert] {
-  filter: invert(1) hue-rotate(180deg);
+@keyframes ph-view-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
 }
 
-@media (prefers-color-scheme: dark) {
-  html[data-theme="system"] #root {
-    filter: invert(1) hue-rotate(180deg);
+@keyframes ph-dialog-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes ph-scrim-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes ph-panel-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Breathing ring + logo for the post-login transition surface. Slow and
+   shallow on purpose: it signals "working", it does not perform. */
+@keyframes ph-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.985); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+
+@keyframes ph-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ph-sweep {
+  0%   { opacity: 0;    transform: translateY(6px); }
+  40%  { opacity: 0.85; }
+  100% { opacity: 0;    transform: translateY(-6px); }
+}
+
+/*
+ * Reduced motion: honour the OS setting. Everything still ARRIVES -- opacity
+ * and transforms resolve to their final state -- there is simply no travel and
+ * no looping. `both` fill on every animation above means a near-zero duration
+ * lands on the end frame rather than leaving an element invisible.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-  html[data-theme="system"] #root img,
-  html[data-theme="system"] #root video {
-    filter: invert(1) hue-rotate(180deg);
-  }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   FONT SIZE — applied to html so rem units scale globally
-   ═══════════════════════════════════════════════════════════ */
-html[data-font="small"]  { font-size: 13px; }
-html[data-font="medium"] { font-size: 15px; }
-html[data-font="large"]  { font-size: 17px; }
-html[data-font="xlarge"] { font-size: 20px; }
-
-/* ═══════════════════════════════════════════════════════════
-   INTERFACE SCALE — compact / normal / comfortable
-   ═══════════════════════════════════════════════════════════ */
-html[data-scale="compact"] main,
-html[data-scale="compact"] aside {
-  zoom: 0.92;
-}
-html[data-scale="comfortable"] main,
-html[data-scale="comfortable"] aside {
-  zoom: 1.06;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   BACKGROUND — day (default) / night
-   ═══════════════════════════════════════════════════════════ */
-html[data-bg="night"] body {
-  background-color: #111827 !important;
-}
-html[data-bg="night"] .bg-slate-50,
-html[data-bg="night"] .bg-slate-100 {
-  background-color: #1a2535 !important;
-}
-html[data-bg="night"] .bg-white {
-  background-color: #1e2d40 !important;
-  color: #e2e8f0;
-}
-html[data-bg="night"] main {
-  background-color: #1a2535 !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   ACCESSIBILITY — High Contrast
-   ═══════════════════════════════════════════════════════════ */
-html[data-contrast="high"] #root {
-  filter: contrast(1.45) saturate(1.3);
-}
-html[data-theme="dark"][data-contrast="high"] #root {
-  filter: invert(1) hue-rotate(180deg) contrast(1.45) saturate(1.3);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   ACCESSIBILITY — Improved Readability
-   ═══════════════════════════════════════════════════════════ */
-html[data-readability="on"] p,
-html[data-readability="on"] td,
-html[data-readability="on"] li,
-html[data-readability="on"] span,
-html[data-readability="on"] label {
-  line-height: 1.85 !important;
-  letter-spacing: 0.03em !important;
-  word-spacing: 0.06em !important;
+/* react-hot-toast renders outside the React tree, so it is themed here. */
+.ph-toast {
+  background: var(--ph-surface-raised) !important;
+  color: var(--ph-fg) !important;
+  border: 1px solid var(--ph-border) !important;
+  border-radius: var(--ph-radius-md) !important;
+  box-shadow: var(--ph-shadow-lg) !important;
+  font-size: 0.8125rem !important;
+  padding: 8px 12px !important;
 }

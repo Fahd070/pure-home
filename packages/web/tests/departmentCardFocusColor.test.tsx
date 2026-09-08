@@ -73,9 +73,9 @@ describe('Department card focus/selection text readability', () => {
     const el = await renderDepartmentSelector();
     const btn = deptButtons(el)[0] as HTMLButtonElement;
     const [primary, secondary] = labelSpans(btn);
-    expect(primary.className).toContain('text-slate-800');
-    expect(secondary.className).toContain('text-slate-400');
-    expect(primary.className).not.toContain('text-white');
+    expect(primary.className).toContain('text-fg');
+    expect(secondary.className).toContain('text-fg-muted');
+    expect(primary.className).not.toContain('text-accent-fg');
   });
 
   // 2, 3. Keyboard-focused card text becomes white/readable (also stands in for
@@ -86,9 +86,9 @@ describe('Department card focus/selection text readability', () => {
     const btn = deptButtons(el)[0] as HTMLButtonElement;
     act(() => { btn.dispatchEvent(new FocusEvent('focus', { bubbles: true })); btn.focus(); });
     const [primary, secondary] = labelSpans(btn);
-    expect(primary.className).toContain('text-white');
-    expect(secondary.className).toContain('text-white/80');
-    expect(primary.className).not.toContain('text-slate-800');
+    expect(primary.className).toContain('text-accent-fg');
+    expect(secondary.className).toContain('text-accent-fg');
+    expect(primary.className).not.toContain('text-fg-muted');
   });
 
   // 4. focus-visible indicator remains present (accessible keyboard outline).
@@ -96,7 +96,7 @@ describe('Department card focus/selection text readability', () => {
     const el = await renderDepartmentSelector();
     const btn = deptButtons(el)[0] as HTMLButtonElement;
     expect(btn.className).toContain('focus-visible:ring-2');
-    expect(btn.className).toContain('focus-visible:ring-white');
+    expect(btn.className).toContain('focus-visible:ring-accent');
     expect(btn.className).not.toContain('outline-none');
   });
 
@@ -108,12 +108,12 @@ describe('Department card focus/selection text readability', () => {
     const [first, second] = deptButtons(el) as HTMLButtonElement[];
 
     act(() => { first.focus(); });
-    expect(labelSpans(first)[0].className).toContain('text-white');
+    expect(labelSpans(first)[0].className).toContain('text-accent-fg');
 
     act(() => { first.blur(); second.focus(); });
-    expect(labelSpans(first)[0].className).not.toContain('text-white');
-    expect(labelSpans(first)[0].className).toContain('text-slate-800');
-    expect(labelSpans(second)[0].className).toContain('text-white');
+    expect(labelSpans(first)[0].className).not.toContain('text-accent-fg');
+    expect(labelSpans(first)[0].className).toContain('text-fg');
+    expect(labelSpans(second)[0].className).toContain('text-accent-fg');
   });
 
   // 6, 7. Arabic and English labels both remain present and readable (white)
@@ -126,8 +126,8 @@ describe('Department card focus/selection text readability', () => {
     const [primary, secondary] = labelSpans(btn);
     expect(primary.textContent).toBeTruthy();
     expect(secondary.textContent).toBeTruthy();
-    expect(primary.className).toContain('text-white');
-    expect(secondary.className).toContain('text-white/80');
+    expect(primary.className).toContain('text-accent-fg');
+    expect(secondary.className).toContain('text-accent-fg');
   });
 
   // 8. Modification #2's no-icon behavior is unaffected by this change.
@@ -168,8 +168,14 @@ describe('Department card: source-level confirmation of hover/keyboard-activatio
     expect(src).not.toMatch(/preventDefault/);
   });
 
-  it('the active fill uses the department\'s own solid color (not a faint tint), matching the same color\'s use elsewhere in the app', () => {
-    expect(src).toMatch(/backgroundColor:\s*active \? color : "#ffffff"/);
+  it('the active fill is a SOLID accent surface (not a faint tint), paired with a readable foreground token', () => {
+    // The per-department hex colours were replaced by the one product
+    // accent, so the fill is a token class rather than an inline
+    // backgroundColor -- but it is still solid, and the label still gets a
+    // foreground token guaranteed to contrast against it.
+    expect(src).toMatch(/active \? "bg-accent border-accent" : "bg-surface border-line"/);
+    expect(src).toMatch(/active \? "text-accent-fg"/);
     expect(src).not.toMatch(/color \+ "18"/);
+    expect(src).not.toMatch(/backgroundColor:/);
   });
 });

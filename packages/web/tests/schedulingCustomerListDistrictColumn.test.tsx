@@ -121,8 +121,9 @@ describe('Source: district-column change is table-display only', () => {
   );
 
   it('the table header/cell use customers.district / address?.district', () => {
-    expect(src).toMatch(/\{t\("customers\.district"\)\}<\/th>/);
-    expect(src).toMatch(/\{c\.address\?\.district \|\| "—"\}<\/td>/);
+    // Header/cell now use the shared <TH>/<TD> table primitives.
+    expect(src).toMatch(/\{t\("customers\.district"\)\}<\/TH>/);
+    expect(src).toMatch(/\{c\.address\?\.district \|\| "—"\}<\/TD>/);
     // The old city-based cell must be gone from this table.
     expect(src).not.toMatch(/\{c\.address\?\.city \|\| "—"\}/);
   });

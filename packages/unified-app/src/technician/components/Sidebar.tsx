@@ -1,41 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
+import { NavRail, NavRailItem } from "../../ui/NavRail";
+import type { IconName } from "../../ui/icons";
 
-function colorAdjust(hex: string, offset: number): string {
-  const n = parseInt((hex || '#014245').replace('#', ''), 16);
-  const r = Math.min(255, Math.max(0, (n >> 16) + offset));
-  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + offset));
-  const b = Math.min(255, Math.max(0, (n & 0xff) + offset));
-  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
-}
-
-const BADGE = "bg-red-500";
-
-const links = [
-  { to: "/technician/queue",              label: "nav.workQueue",          icon: "📋", badgeKey: "queue" },
-  { to: "/technician/urgent-appointments",label: "nav.urgentAppointments", icon: "🚨", badgeKey: "urgentAppts" },
-  { to: "/technician/expenses",           label: "nav.expenses",           icon: "💰" },
-  { to: "/technician/notifications",      label: "nav.notifications",      icon: "🔔", badgeKey: "notifications" },
-  { to: "/technician/messaging",          label: "nav.messaging",          icon: "💬", badgeKey: "messaging" },
-  { to: "/technician/settings",           label: "nav.settings",           icon: "⚙️" },
+const links: { to: string; label: string; icon: IconName; badgeKey?: string }[] = [
+  { to: "/technician/queue",               label: "nav.workQueue",          icon: "queue",         badgeKey: "queue" },
+  { to: "/technician/urgent-appointments", label: "nav.urgentAppointments", icon: "urgent",        badgeKey: "urgentAppts" },
+  { to: "/technician/expenses",            label: "nav.expenses",           icon: "expenses" },
+  { to: "/technician/notifications",       label: "nav.notifications",      icon: "notifications", badgeKey: "notifications" },
+  { to: "/technician/messaging",           label: "nav.messaging",          icon: "messaging",     badgeKey: "messaging" },
+  { to: "/technician/settings",            label: "nav.settings",           icon: "settings" },
 ];
 
 export default function Sidebar() {
-  const { t, i18n } = useTranslation();
-  const { user, logout } = useAuthStore();
+  const { t } = useTranslation();
+  const { logout } = useAuthStore();
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
-  const BG = "#014245";
-  const BG_HOVER = colorAdjust(BG, -14);
-  const BG_ACTIVE = colorAdjust(BG, 50);
-  const BORDER = BG_HOVER;
   const [queueBadge, setQueueBadge] = useState(() => Number(localStorage.getItem("badge-queue-tech") || 0));
 
   // Urgent badge: derived from actual unresolved urgent work (isUrgent
@@ -90,38 +78,18 @@ export default function Sidebar() {
     urgentAppts: urgentBadge as number,
   };
 
+  const items: NavRailItem[] = links.map((l) => ({
+    to: l.to,
+    label: l.label,
+    icon: l.icon,
+    badge: l.badgeKey ? badges[l.badgeKey] || 0 : 0,
+  }));
+
   return (
-    <aside style={{ backgroundColor: BG }} className="w-56 text-white flex flex-col h-full flex-shrink-0">
-      <div style={{ borderColor: BORDER }} className="p-4 border-b">
-        <div className="flex items-center gap-2 mb-1">
-          <div style={{ backgroundColor: BG_ACTIVE }} className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold">PH</div>
-          <span className="text-white font-bold text-sm">Pure Home</span>
-        </div>
-        <p className="text-teal-100 text-xs truncate">{user?.name}</p>
-      </div>
-      <nav className="flex-1 py-2">
-        {links.map(l => {
-          const badge = l.badgeKey ? (badges[l.badgeKey] || 0) : 0;
-          return (
-            <NavLink key={l.to} to={l.to}
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isActive ? "font-medium border-e-2 border-teal-200" : "text-teal-100"}`}
-              style={({ isActive }) => ({ backgroundColor: isActive ? BG_ACTIVE : undefined })}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = BG_HOVER; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; }}>
-              <span className="flex-shrink-0">{l.icon}</span>
-              <span className="flex-1">{t(l.label)}</span>
-              {badge > 0 && <span className={`${BADGE} text-white text-xs rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none`}>{badge > 99 ? "99+" : badge}</span>}
-            </NavLink>
-          );
-        })}
-      </nav>
-      <div style={{ borderColor: BORDER }} className="p-3 border-t space-y-1">
-        <button onClick={() => i18n.changeLanguage(i18n.language === "ar" ? "en" : "ar")}
-          style={{ backgroundColor: BG_HOVER }} className="w-full text-xs py-1.5 px-3 rounded text-teal-100 hover:opacity-90">
-          {i18n.language === "ar" ? "English" : "عربي"}
-        </button>
-        <button onClick={() => { logout(); navigate("/"); }} className="w-full text-xs py-1.5 px-3 rounded bg-red-700 hover:bg-red-600">{t("auth.logout")}</button>
-      </div>
-    </aside>
+    <NavRail
+      items={items}
+      department={t("dept.technicianFull")}
+      onLogout={() => { logout(); navigate("/"); }}
+    />
   );
 }

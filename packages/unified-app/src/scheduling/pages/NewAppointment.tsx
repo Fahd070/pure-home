@@ -6,6 +6,9 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Input, Select, Textarea, Field } from "../../ui/Field";
+import { Icon } from "../../ui/icons";
 
 export default function NewAppointment() {
   const { t } = useTranslation();
@@ -46,60 +49,100 @@ export default function NewAppointment() {
   }
 
   return (
-    <div className="max-w-lg mx-auto">
-      <div className="flex items-center gap-3 mb-4">
-        <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700">← {t("common.back")}</button>
-        <h2 className="text-lg font-semibold">{t("appointments.new")}</h2>
+    <div className="max-w-xl mx-auto space-y-3">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="text-fg-muted hover:text-fg text-2xs inline-flex items-center gap-1.5 transition-colors"
+        >
+          <Icon name="chevronStart" className="w-3.5 h-3.5 rtl:rotate-180" />
+          {t("common.back")}
+        </button>
+        <h2 className="text-base font-semibold text-fg">{t("appointments.new")}</h2>
       </div>
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("appointments.customer")} *</label>
-          {selectedCustomer ? (
-            <div className="flex items-center justify-between border rounded-lg px-3 py-2 bg-green-50">
-              <span className="font-medium text-sm">{selectedCustomer.name} — {selectedCustomer.phone}</span>
-              <button type="button" onClick={() => setSelectedCustomer(null)} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>
-            </div>
-          ) : (
-            <div className="relative">
-              <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder={t("common.search")}
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-              {customers && customers.length > 0 && (
-                <div className="absolute top-full start-0 end-0 bg-white border rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-                  {customers.map((c: any) => (
-                    <div key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerSearch(""); }}
-                      className="px-3 py-2 hover:bg-green-50 cursor-pointer text-sm border-b last:border-0">
-                      <span className="font-medium">{c.name}</span> <span className="text-slate-400">{c.phone}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+
+      <form onSubmit={handleSubmit} className="bg-surface border border-line rounded-md">
+        <div className="p-4 space-y-3">
+          <div>
+            <span className="block text-xs font-medium text-fg-secondary mb-1.5">
+              {t("appointments.customer")}<span className="text-danger-fg ms-0.5">*</span>
+            </span>
+
+            {selectedCustomer ? (
+              <div className="flex items-center justify-between gap-2 border border-accent-border bg-accent-subtle rounded px-2.5 h-control">
+                <span className="text-[0.8125rem] font-medium text-fg truncate">
+                  {selectedCustomer.name} <span className="text-fg-muted" dir="ltr">{selectedCustomer.phone}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCustomer(null)}
+                  aria-label={t("common.cancel")}
+                  className="text-fg-muted hover:text-fg flex-shrink-0"
+                >
+                  <Icon name="close" className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none z-10" />
+                <Input
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
+                  placeholder={t("common.search")}
+                  aria-label={t("appointments.customer")}
+                  className="ps-8"
+                />
+                {customers && customers.length > 0 && (
+                  <div className="absolute top-full start-0 end-0 mt-1 bg-surface border border-line rounded shadow-lg z-20 max-h-52 overflow-y-auto">
+                    {customers.map((c: any) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => { setSelectedCustomer(c); setCustomerSearch(""); }}
+                        className="w-full text-start px-2.5 py-2 text-[0.8125rem] hover:bg-surface-hover border-b border-line-subtle last:border-b-0 flex items-center gap-2"
+                      >
+                        <span className="font-medium text-fg truncate">{c.name}</span>
+                        <span className="text-fg-muted text-2xs" dir="ltr">{c.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {selectedCustomer && <PreviousMaintenanceNoteBox note={prevNote} />}
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("appointments.type")} htmlFor="new-appt-type">
+              <Select id="new-appt-type" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+                <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
+                <option value="INSTALLATION">{t("appointments.installation")}</option>
+              </Select>
+            </Field>
+
+            <Field label={t("common.date")} htmlFor="new-appt-date" required>
+              <Input
+                id="new-appt-date" type="date" lang="en-GB" dir="ltr"
+                value={form.date}
+                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              />
+            </Field>
+          </div>
+
+          <Field label={t("common.notes")} htmlFor="new-appt-notes">
+            <Textarea
+              id="new-appt-notes" rows={3}
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+            />
+          </Field>
         </div>
-        {selectedCustomer && <PreviousMaintenanceNoteBox note={prevNote} />}
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("appointments.type")}</label>
-          <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
-            <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
-            <option value="INSTALLATION">{t("appointments.installation")}</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("common.date")} *</label>
-          <input type="date" lang="en-GB" dir="ltr" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("common.notes")}</label>
-          <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-        </div>
-        <div className="flex gap-3">
-          <button type="submit" disabled={loading} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
-            {loading ? t("common.loading") : t("common.save")}
-          </button>
-          <button type="button" onClick={() => navigate(-1)} className="flex-1 border py-2 rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
+
+        <div className="px-4 py-2.5 border-t border-line bg-surface-subtle flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={() => navigate(-1)}>{t("common.cancel")}</Button>
+          <Button type="submit" variant="primary" loading={loading}>{t("common.save")}</Button>
         </div>
       </form>
     </div>

@@ -6,8 +6,20 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Badge, Tone } from "../../ui/Badge";
+import { PageHeader } from "../../ui/Surface";
+import { Loading } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TD } from "../../ui/Table";
+import { Pagination } from "../../ui/Pagination";
+import { Icon } from "../../ui/icons";
 
-const STATUS_COLORS: Record<string, string> = { SCHEDULED: "bg-blue-100 text-blue-700", RESCHEDULED: "bg-yellow-100 text-yellow-700", CANCELLED: "bg-red-100 text-red-700", PENDING: "bg-slate-100 text-slate-600" };
+const STATUS_TONES: Record<string, Tone> = {
+  SCHEDULED: "info",
+  RESCHEDULED: "warning",
+  CANCELLED: "danger",
+  PENDING: "neutral",
+};
 
 export default function Appointments() {
   const { t } = useTranslation();
@@ -66,25 +78,32 @@ export default function Appointments() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <button onClick={() => navigate("/scheduling/appointments/new")} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium">
-          + {t("appointments.new")}
-        </button>
-      </div>
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? <p className="text-center py-8 text-slate-400">{t("common.loading")}</p> : (
-          <div className="overflow-x-auto"><table className="w-full text-sm min-w-[600px]">
-            <thead className="bg-slate-50 border-b">
+      <PageHeader
+        title={t("appointments.title")}
+        actions={
+          <Button variant="primary" onClick={() => navigate("/scheduling/appointments/new")}>
+            <Icon name="add" className="w-3.5 h-3.5" />
+            {t("appointments.new")}
+          </Button>
+        }
+      />
+
+      {isLoading ? (
+        <Loading label={t("common.loading")} />
+      ) : (
+        <TableShell>
+          <Table className="min-w-[720px]">
+            <THead>
               <tr>
-                <th className="text-start px-4 py-3">{t("appointments.customer")}</th>
-                <th className="text-start px-4 py-3">{t("common.date")}</th>
-                <th className="text-start px-4 py-3">{t("appointments.type")}</th>
-                <th className="text-start px-4 py-3">{t("common.status")}</th>
-                <th className="text-start px-4 py-3">{t("appointments.export")}</th>
-                <th className="text-start px-4 py-3">{t("appointments.confirmOperation")}</th>
+                <TH>{t("appointments.customer")}</TH>
+                <TH width="7rem">{t("common.date")}</TH>
+                <TH width="8rem">{t("appointments.type")}</TH>
+                <TH width="8rem">{t("common.status")}</TH>
+                <TH width="11rem">{t("appointments.export")}</TH>
+                <TH width="12rem">{t("appointments.confirmOperation")}</TH>
               </tr>
-            </thead>
-            <tbody>
+            </THead>
+            <TBody>
               {appointments.map((a: any) => {
                 // State machine (visibleToTechnician, adminApproved): (true,false) =
                 // never exported -- eligible to export. (false,false) = pending Admin
@@ -94,58 +113,62 @@ export default function Appointments() {
                 const isPending = !a.visibleToTechnician && !a.adminApproved;
                 const isApproved = a.visibleToTechnician && a.adminApproved;
                 return (
-                  <tr key={a.id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/scheduling/appointments/${a.id}`)}>
-                    <td className="px-4 py-3 font-medium">{a.customer?.name}</td>
-                    <td className="px-4 py-3" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
-                    <td className="px-4 py-3">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</td>
-                    <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[a.status] || ""}`}>{a.status}</span></td>
-                    <td className="px-4 py-3">
+                  <tr
+                    key={a.id}
+                    className="border-b border-line-subtle last:border-b-0 hover:bg-surface-hover transition-colors cursor-pointer"
+                    onClick={() => navigate(`/scheduling/appointments/${a.id}`)}
+                  >
+                    <TD className="font-medium">{a.customer?.name}</TD>
+                    <TD className="tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                    <TD>{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</TD>
+                    <TD><Badge tone={STATUS_TONES[a.status] ?? "neutral"} dot>{a.status}</Badge></TD>
+                    <TD>
                       {isPending ? (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-orange-100 text-orange-700 whitespace-nowrap">
-                          {t("appointments.exportPending")}
-                        </span>
+                        <Badge tone="pending" dot>{t("appointments.exportPending")}</Badge>
                       ) : isApproved ? (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700 whitespace-nowrap">
-                          {t("appointments.exportApproved")}
-                        </span>
+                        <Badge tone="success" dot>{t("appointments.exportApproved")}</Badge>
                       ) : (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="secondary"
                           onClick={e => { e.stopPropagation(); exportMutation.mutate(a.id); }}
-                          disabled={exportMutation.isPending}
-                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 transition-colors">
+                          loading={exportMutation.isPending}
+                        >
                           {t("appointments.export")}
-                        </button>
+                        </Button>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TD>
+                    <TD>
                       {a.workStatus !== "COMPLETED" ? (
-                        <span className="text-slate-300 text-xs">—</span>
+                        <span className="text-fg-muted text-2xs">—</span>
                       ) : a.maintenanceConfirmed ? (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700 whitespace-nowrap">
-                          {t("appointments.operationConfirmed")}
-                        </span>
+                        <Badge tone="success" dot>{t("appointments.operationConfirmed")}</Badge>
                       ) : (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="primary"
                           onClick={e => { e.stopPropagation(); confirmOperationMutation.mutate(a.id); }}
-                          disabled={confirmOperationMutation.isPending}
-                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 whitespace-nowrap disabled:opacity-50 transition-colors">
+                          loading={confirmOperationMutation.isPending}
+                        >
                           {t("appointments.confirmOperation")}
-                        </button>
+                        </Button>
                       )}
-                    </td>
+                    </TD>
                   </tr>
                 );
               })}
-            </tbody>
-          </table></div>
-        )}
-      </div>
+            </TBody>
+          </Table>
+        </TableShell>
+      )}
+
       {meta && (
-        <div className="flex justify-center items-center gap-2">
-          <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">‹</button>
-          <span className="px-3 py-1 text-sm">{meta.page} / {meta.totalPages}</span>
-          <button disabled={meta.page >= meta.totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">›</button>
-        </div>
+        <Pagination
+          page={meta.page}
+          totalPages={meta.totalPages}
+          total={meta.total}
+          onPage={setPage}
+        />
       )}
     </div>
   );

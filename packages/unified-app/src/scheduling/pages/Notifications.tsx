@@ -4,6 +4,11 @@ import { useTranslation } from "react-i18next";
 import { useSocket } from "../hooks/useSocket";
 import { api } from "../api/client";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { PageHeader } from "../../ui/Surface";
+import { Button } from "../../ui/Button";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { Icon } from "../../ui/icons";
+import { cx } from "../../ui/cx";
 
 function cleanBody(body: string): string {
   return body.replace(/\s*\[[\w:.\\-]+\]\s*$/, "").trim();
@@ -62,39 +67,78 @@ export default function Notifications() {
   }, [data]);
   const unread = (data || []).filter((n: any) => !n.isRead).length;
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-slate-700">{t("notifications.maintenanceReminders")}</h2>
-          <p className="text-xs text-slate-400 mt-0.5">{t("notifications.upcomingNotice")}</p>
-        </div>
-        {unread > 0 && (
-          <button onClick={() => markAll.mutate()} className="text-xs text-green-600 hover:underline border border-green-200 px-3 py-1 rounded-lg hover:bg-green-50">
-            {t("notifications.markAllRead")}
-          </button>
-        )}
-      </div>
+    <div className="max-w-3xl mx-auto">
+      <PageHeader
+        title={t("notifications.maintenanceReminders")}
+        subtitle={t("notifications.upcomingNotice")}
+        actions={
+          unread > 0 ? (
+            <Button variant="secondary" size="sm" onClick={() => markAll.mutate()}>
+              <Icon name="check" className="w-3.5 h-3.5" />
+              {t("notifications.markAllRead")}
+            </Button>
+          ) : null
+        }
+      />
+
       {isLoading ? (
-        <p className="text-center py-12 text-slate-400">{t("common.loading")}</p>
+        <Loading label={t("common.loading")} />
       ) : !data?.length ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center text-slate-400">
-          <p className="text-3xl mb-2">🔔</p>
-          <p>{t("notifications.noReminders")}</p>
-          <p className="text-xs mt-1">{t("notifications.remindersInfo")}</p>
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState
+            icon={<Icon name="notifications" className="w-5 h-5" />}
+            title={t("notifications.noReminders")}
+            description={t("notifications.remindersInfo")}
+          />
         </div>
-      ) : (data || []).map((n: any) => (
-        <div key={n.id}
-          className={"bg-white rounded-xl shadow-sm p-4 flex items-start gap-3 cursor-pointer hover:bg-slate-50 " + (!n.isRead ? "border-s-4 border-green-500" : "")}
-          onClick={() => !n.isRead && markOne.mutate(n.id)}>
-          <div className={"w-9 h-9 rounded-full flex items-center justify-center text-lg flex-shrink-0 " + (n.isRead ? "bg-slate-100" : "bg-green-100")}>🔔</div>
-          <div className="flex-1">
-            <p className={"text-sm font-medium " + (n.isRead ? "text-slate-600" : "text-slate-900")}>{n.title}</p>
-            <p className="text-sm text-slate-500 mt-0.5">{cleanBody(n.body)}</p>
-            <p className="text-xs text-slate-400 mt-1">{formatTime(n.createdAt, i18n.language)}</p>
-          </div>
-          {!n.isRead && <span className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />}
-        </div>
-      ))}
+      ) : (
+        <ul className="bg-surface border border-line rounded-md divide-y divide-line-subtle overflow-hidden">
+          {(data || []).map((n: any) => (
+            <li key={n.id}>
+              <button
+                type="button"
+                onClick={() => !n.isRead && markOne.mutate(n.id)}
+                disabled={n.isRead}
+                aria-label={n.title}
+                className={cx(
+                  "relative w-full text-start ps-4 pe-3 py-3 flex items-start gap-3 transition-colors",
+                  n.isRead ? "cursor-default" : "hover:bg-surface-hover active:bg-surface-active"
+                )}
+              >
+                {/* Unread is marked by an accent rail rather than a coloured
+                    card, so a long list stays scannable instead of striped. */}
+                {!n.isRead && (
+                  <span className="absolute inset-y-0 start-0 w-0.5 bg-accent" aria-hidden="true" />
+                )}
+
+                <span
+                  className={cx(
+                    "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5",
+                    n.isRead
+                      ? "bg-surface-subtle text-fg-muted"
+                      : "bg-accent-subtle text-accent-subtlefg"
+                  )}
+                  aria-hidden="true"
+                >
+                  <Icon name="notifications" className="w-4 h-4" />
+                </span>
+
+                <div className="flex-1 min-w-0">
+                  <p className={cx("text-[0.8125rem]", n.isRead ? "text-fg-secondary" : "font-semibold text-fg")}>
+                    {n.title}
+                  </p>
+                  <p className="text-xs text-fg-secondary mt-0.5">{cleanBody(n.body)}</p>
+                  <p className="text-2xs text-fg-muted mt-1 tabular-nums">{formatTime(n.createdAt, i18n.language)}</p>
+                </div>
+
+                {!n.isRead && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent mt-2 flex-shrink-0" aria-hidden="true" />
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
