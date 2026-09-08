@@ -5,10 +5,18 @@ import { useSocket } from "../hooks/useSocket";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Badge } from "../../ui/Badge";
+import { PageHeader } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { ConfirmDialog } from "../../ui/Modal";
+import { Icon, IconName } from "../../ui/icons";
 
-const ROLE_BG: Record<string, string> = { ADMIN: "bg-blue-700", SCHEDULING: "bg-green-700", TECHNICIAN: "bg-orange-700" };
-const ROLE_BADGE: Record<string, string> = { ADMIN: "bg-blue-100 text-blue-700", SCHEDULING: "bg-green-100 text-green-700", TECHNICIAN: "bg-orange-100 text-orange-700" };
-const ENTITY_ICONS: Record<string, string> = { customer: "👤", appointment: "📅", task: "🔧" };
+const ENTITY_ICONS: Record<string, IconName> = {
+  customer: "customers",
+  appointment: "appointments",
+  task: "technicians",
+};
 
 function formatTime(d: string, lang: string) {
   const date = new Date(d);
@@ -78,78 +86,88 @@ export default function Messages() {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-700">{t("messages.systemActivityLog")}</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400">{t("messages.liveUpdates")}</span>
-          {activity.length > 0 && (
-            <button onClick={() => setConfirmDeleteAll(true)}
-              className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">
-              {t("messages.deleteAll")}
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="max-w-3xl mx-auto">
+      <PageHeader
+        title={t("messages.systemActivityLog")}
+        actions={
+          <>
+            <span className="text-2xs text-fg-muted">{t("messages.liveUpdates")}</span>
+            {activity.length > 0 && (
+              <Button size="sm" variant="secondary" className="text-danger-fg" onClick={() => setConfirmDeleteAll(true)}>
+                <Icon name="trash" className="w-3.5 h-3.5" />
+                {t("messages.deleteAll")}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {isLoading ? (
-        <p className="text-center py-12 text-slate-400">{t("messages.loadingActivity")}</p>
+        <Loading label={t("messages.loadingActivity")} />
       ) : !activity.length ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center text-slate-400">
-          <p className="text-3xl mb-2">📋</p>
-          <p>{t("messages.noActivity")}</p>
-          <p className="text-xs mt-1">{t("messages.activityEvents")}</p>
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState
+            icon={<Icon name="messages" className="w-5 h-5" />}
+            title={t("messages.noActivity")}
+            description={t("messages.activityEvents")}
+          />
         </div>
       ) : (
-        <div className="space-y-2">
+        // A log is read top-to-bottom, so it is one continuous list of rows
+        // rather than a stack of separate cards with gaps between them.
+        <ul className="bg-surface border border-line rounded-md divide-y divide-line-subtle overflow-hidden">
           {activity.map((log: any) => (
-            <div key={log.id} className="group bg-white rounded-xl shadow-sm p-4 flex items-start gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${ROLE_BG[log.user?.role] || "bg-slate-400"}`}>
+            <li key={log.id} className="group px-3 py-2.5 flex items-start gap-3">
+              <span
+                className="w-7 h-7 rounded-md bg-surface-active text-fg-secondary text-2xs font-semibold flex items-center justify-center flex-shrink-0 mt-0.5"
+                aria-hidden="true"
+              >
                 {log.user?.name?.[0] || "?"}
-              </div>
+              </span>
+
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                  <span className="font-medium text-sm text-slate-800">{log.user?.name}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_BADGE[log.user?.role] || "bg-slate-100 text-slate-600"}`}>
-                    {t(`roles.${log.user?.role}`) || log.user?.role}
-                  </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[0.8125rem] font-medium text-fg">{log.user?.name}</span>
+                  <Badge tone="neutral">{t(`roles.${log.user?.role}`) || log.user?.role}</Badge>
                 </div>
-                <p className="text-sm text-slate-700">{(() => {
+                <p className="text-[0.8125rem] text-fg-secondary mt-0.5">{(() => {
                   const [en, ar] = (log.action || '').split('|||');
                   return i18n.language === 'ar' ? (ar || en) : en;
                 })()}</p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-lg">{ENTITY_ICONS[log.entityType] || "📌"}</span>
-                <span className="text-xs text-slate-400 whitespace-nowrap">{formatTime(log.createdAt, i18n.language)}</span>
-                <button onClick={() => deleteOne.mutate(log.id)} disabled={deleteOne.isPending}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-red-500 rounded text-base leading-none disabled:opacity-50"
-                  title={t("messages.deleteConfirm")}>
-                  🗑️
-                </button>
+
+              <div className="flex items-center gap-2 flex-shrink-0 text-fg-muted">
+                <Icon name={ENTITY_ICONS[log.entityType] || "info"} className="w-4 h-4" />
+                <span className="text-2xs whitespace-nowrap">{formatTime(log.createdAt, i18n.language)}</span>
+                {/* Revealed on hover/focus so a row-level destructive action is
+                    never the first thing the eye lands on, but stays reachable
+                    by keyboard. */}
+                <Button
+                  size="sm" variant="ghost" iconOnly
+                  onClick={() => deleteOne.mutate(log.id)}
+                  loading={deleteOne.isPending}
+                  title={t("messages.deleteConfirm")}
+                  aria-label={t("messages.deleteConfirm")}
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:text-danger-fg hover:bg-danger-bg"
+                >
+                  <Icon name="trash" className="w-3.5 h-3.5" />
+                </Button>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      {confirmDeleteAll && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl space-y-4">
-            <p className="font-semibold text-slate-800">{t("messages.deleteAllConfirmCount", { count: activityTotal })}</p>
-            <div className="flex gap-3">
-              <button onClick={() => deleteAllMut.mutate()} disabled={deleteAllMut.isPending}
-                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
-                {t("common.delete")}
-              </button>
-              <button onClick={() => setConfirmDeleteAll(false)}
-                className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirmDeleteAll}
+        onCancel={() => setConfirmDeleteAll(false)}
+        onConfirm={() => deleteAllMut.mutate()}
+        title={t("messages.deleteAllConfirmCount", { count: activityTotal })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteAllMut.isPending}
+      />
     </div>
   );
 }

@@ -8,8 +8,8 @@ describe("customer card interaction", () => {
   it("makes both customer lists open their department detail route while action buttons stop propagation", () => {
     const admin = source("admin/pages/Customers.tsx");
     const scheduling = source("scheduling/pages/CustomerList.tsx");
-    expect(admin).toMatch(/<tr key=\{c\.id\} onClick=\{\(\) => navigate\(`\/admin\/customers\/\$\{c\.id\}`\)\}/);
-    expect(scheduling).toMatch(/<tr key=\{c\.id\} onClick=\{\(\) => navigate\(`\/scheduling\/customers\/\$\{c\.id\}`\)\}/);
+    expect(admin).toMatch(/<TR key=\{c\.id\} onClick=\{\(\) => navigate\(`\/admin\/customers\/\$\{c\.id\}`\)\}/);
+    expect(scheduling).toMatch(/<TR key=\{c\.id\} onClick=\{\(\) => navigate\(`\/scheduling\/customers\/\$\{c\.id\}`\)\}/);
     expect(admin).toMatch(/event\.stopPropagation\(\); toggle\.mutate\(c\.id\)/);
     expect(scheduling).toMatch(/event\.stopPropagation\(\); setHistoryModal\(c\)/);
   });

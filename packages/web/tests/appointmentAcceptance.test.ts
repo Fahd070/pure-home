@@ -92,7 +92,7 @@ describe('AppointmentAcceptance page', () => {
 
   it('disables only the specific row being approved (per-row double-submit prevention)', () => {
     expect(pageSrc).toMatch(/const approving = approveMutation\.isPending && approveMutation\.variables === a\.id;/);
-    expect(pageSrc).toMatch(/disabled=\{approving\}/);
+    expect(pageSrc).toMatch(/loading=\{approving\}/);
   });
 
   it('does not implement a reject/decline flow', () => {

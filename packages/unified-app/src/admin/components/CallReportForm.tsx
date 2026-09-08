@@ -5,6 +5,10 @@ import { api } from "../api/client";
 import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
 import { dateOnlyToApiDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Input, Textarea, Field } from "../../ui/Field";
+import { Icon } from "../../ui/icons";
+import { cx } from "../../ui/cx";
 
 export interface CallReportPresetCustomer {
   id: string;
@@ -94,77 +98,133 @@ export default function CallReportForm({
   }, [allCustomers, formSearch]);
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-      <div className="col-span-2">
-        <div className="flex items-center justify-between mb-2">
-          <label className="block text-xs font-medium text-slate-600">{t("callReports.customer")}</label>
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="sm:col-span-2">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <span className="text-xs font-medium text-fg-secondary">{t("callReports.customer")}</span>
           {!presetCustomer && (
-            <button type="button" onClick={() => { setUnregisteredMode(v => !v); setForm(f => ({ ...f, customerId: "", unregisteredName: "", unregisteredPhone: "" })); setFormSearch(""); }}
-              className={`text-xs px-2 py-1 rounded-lg border transition-colors ${unregisteredMode ? "bg-amber-100 border-amber-300 text-amber-700" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"}`}>
-              {unregisteredMode ? "✕ " : "+"} {t("callReports.unregisteredCustomer")}
+            <button
+              type="button"
+              onClick={() => {
+                setUnregisteredMode(v => !v);
+                setForm(f => ({ ...f, customerId: "", unregisteredName: "", unregisteredPhone: "" }));
+                setFormSearch("");
+              }}
+              className={cx(
+                "text-2xs px-2 h-6 inline-flex items-center gap-1 rounded border transition-colors",
+                unregisteredMode
+                  ? "bg-warning-bg border-warning-border text-warning-fg"
+                  : "bg-surface border-line text-fg-secondary hover:bg-surface-hover"
+              )}
+            >
+              <Icon name={unregisteredMode ? "close" : "add"} className="w-3 h-3" />
+              {t("callReports.unregisteredCustomer")}
             </button>
           )}
         </div>
+
         {presetCustomer ? (
-          <div className="border rounded-lg px-3 py-2 bg-blue-50 text-sm">
-            <span className="font-medium">{presetCustomer.name}</span> <span className="text-slate-400">{presetCustomer.phone}</span>
+          <div className="border border-accent-border bg-accent-subtle rounded px-2.5 h-control flex items-center gap-2 text-[0.8125rem]">
+            <Icon name="check" className="w-3.5 h-3.5 text-accent-subtlefg flex-shrink-0" />
+            <span className="font-medium text-fg truncate">{presetCustomer.name}</span>
+            <span className="text-fg-muted" dir="ltr">{presetCustomer.phone}</span>
           </div>
         ) : unregisteredMode ? (
           <div className="space-y-2">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800">{t("callReports.unregisteredGuidance")}</div>
+            <div className="bg-warning-bg border border-warning-border text-warning-fg rounded px-2.5 py-2 text-2xs">
+              {t("callReports.unregisteredGuidance")}
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              <input value={form.unregisteredName} onChange={e => setForm(f => ({ ...f, unregisteredName: e.target.value }))}
+              <Input
+                value={form.unregisteredName}
+                onChange={e => setForm(f => ({ ...f, unregisteredName: e.target.value }))}
                 placeholder={t("callReports.unregisteredName")}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <input value={form.unregisteredPhone} onChange={e => setForm(f => ({ ...f, unregisteredPhone: e.target.value }))}
+                aria-label={t("callReports.unregisteredName")}
+              />
+              <Input
+                value={form.unregisteredPhone}
+                onChange={e => setForm(f => ({ ...f, unregisteredPhone: e.target.value }))}
                 placeholder={t("callReports.unregisteredPhone")}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                aria-label={t("callReports.unregisteredPhone")}
+                dir="ltr"
+              />
             </div>
           </div>
         ) : (
           <>
-            <input value={formSearch} onChange={e => { setFormSearch(e.target.value); setForm(f => ({ ...f, customerId: "" })); }}
-              placeholder={isAr ? "ابحث بالاسم أو الجوال..." : "Search by name or phone..."}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1" />
+            <div className="relative">
+              <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none" />
+              <Input
+                value={formSearch}
+                onChange={e => { setFormSearch(e.target.value); setForm(f => ({ ...f, customerId: "" })); }}
+                placeholder={isAr ? "ابحث بالاسم أو الجوال..." : "Search by name or phone..."}
+                aria-label={t("callReports.customer")}
+                className="ps-8"
+              />
+            </div>
+
             {formSearch && !form.customerId && (
-              <div className="border rounded-lg max-h-40 overflow-y-auto bg-white shadow-sm z-10">
+              <div className="mt-1 border border-line rounded max-h-44 overflow-y-auto bg-surface shadow-md">
                 {filteredFormCustomers.length === 0 ? (
-                  <p className="text-xs text-slate-400 px-3 py-2">{t("common.noRecords")}</p>
+                  <p className="text-2xs text-fg-muted px-2.5 py-2">{t("common.noRecords")}</p>
                 ) : filteredFormCustomers.slice(0, 8).map((c: any) => (
-                  <button key={c.id} type="button"
+                  <button
+                    key={c.id}
+                    type="button"
                     onClick={() => { setForm(f => ({ ...f, customerId: c.id })); setFormSearch(`${c.name} — ${c.phone}`); }}
-                    className="w-full text-start px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0">
-                    <span className="font-medium">{c.name}</span> <span className="text-slate-400">{c.phone}</span>
+                    className="w-full text-start px-2.5 py-2 text-[0.8125rem] hover:bg-surface-hover border-b border-line-subtle last:border-b-0 flex items-center gap-2"
+                  >
+                    <span className="font-medium text-fg truncate">{c.name}</span>
+                    <span className="text-fg-muted text-2xs" dir="ltr">{c.phone}</span>
                   </button>
                 ))}
               </div>
             )}
-            {form.customerId && <p className="text-xs text-blue-600">✓ {isAr ? "تم اختيار العميل" : "Customer selected"}</p>}
+
+            {form.customerId && (
+              <p className="text-2xs text-success-fg mt-1 flex items-center gap-1">
+                <Icon name="check" className="w-3 h-3" />
+                {isAr ? "تم اختيار العميل" : "Customer selected"}
+              </p>
+            )}
           </>
         )}
       </div>
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")}</label>
-        <input type="date" lang="en-GB" dir="ltr" required value={form.date}
+
+      <Field label={t("common.date")} htmlFor="call-date">
+        <Input
+          id="call-date" type="date" lang="en-GB" dir="ltr" required
+          value={form.date}
           onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.employeeName")}</label>
-        <input value={form.employeeName} onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-      <div className="col-span-2">
-        <label className="block text-xs font-medium text-slate-600 mb-1">{t("callReports.notes")}</label>
-        <textarea rows={4} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-      </div>
-      <div className="col-span-2 flex gap-2 justify-end">
-        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
-        <button type="submit" disabled={createMutation.isPending || (!unregisteredMode && !form.customerId) || (unregisteredMode && !form.unregisteredName.trim())}
-          className="bg-blue-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-800 disabled:opacity-50">
-          {createMutation.isPending ? "..." : t("common.save")}
-        </button>
+        />
+      </Field>
+
+      <Field label={t("callReports.employeeName")} htmlFor="call-employee">
+        <Input
+          id="call-employee"
+          value={form.employeeName}
+          onChange={e => setForm(f => ({ ...f, employeeName: e.target.value }))}
+        />
+      </Field>
+
+      <Field className="sm:col-span-2" label={t("callReports.notes")} htmlFor="call-notes">
+        <Textarea
+          id="call-notes" rows={4}
+          value={form.notes}
+          onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+        />
+      </Field>
+
+      <div className="sm:col-span-2 flex gap-2 justify-end pt-1">
+        <Button type="button" variant="secondary" onClick={onCancel}>{t("common.cancel")}</Button>
+        <Button
+          type="submit"
+          variant="primary"
+          loading={createMutation.isPending}
+          disabled={(!unregisteredMode && !form.customerId) || (unregisteredMode && !form.unregisteredName.trim())}
+        >
+          {t("common.save")}
+        </Button>
       </div>
     </form>
   );

@@ -8,6 +8,15 @@ import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
 import { HistoryModal } from "../../scheduling/pages/CustomerList";
+import { Button } from "../../ui/Button";
+import { Input, Field } from "../../ui/Field";
+import { Badge } from "../../ui/Badge";
+import { Toolbar } from "../../ui/Surface";
+import { EmptyState, Loading, Callout } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { Pagination } from "../../ui/Pagination";
+import { Modal, ConfirmDialog } from "../../ui/Modal";
+import { Icon } from "../../ui/icons";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -17,25 +26,21 @@ function formatCycle(cycle: string, freq: number, t: any) {
   return cycle;
 }
 
+/**
+ * Maintenance countdown -- see scheduling/pages/CustomerList.tsx for why the
+ * coloured emoji circle inside a coloured pill was replaced by one toned badge.
+ */
 function MaintenanceBadge({ c, t }: { c: any; t: any }) {
-  if (c.alertLevel === "overdue") return (
-    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-      🔴 {t("countdown.overdueBy", { days: c.overdueCount })}
-    </span>
-  );
+  if (c.alertLevel === "overdue") {
+    return <Badge tone="danger" dot>{t("countdown.overdueBy", { days: c.overdueCount })}</Badge>;
+  }
   if (c.alertLevel === "soon") {
     const label = c.daysUntil === 0 ? t("countdown.dueToday") : c.daysUntil === 1 ? t("countdown.dueTomorrow") : t("countdown.dueIn", { days: c.daysUntil });
-    return (
-      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-        🟡 {label}
-      </span>
-    );
+    return <Badge tone="warning" dot>{label}</Badge>;
   }
-  if (c.daysUntil !== null) return (
-    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-      🟢 {t("countdown.dueIn", { days: c.daysUntil })}
-    </span>
-  );
+  if (c.daysUntil !== null) {
+    return <Badge tone="success" dot>{t("countdown.dueIn", { days: c.daysUntil })}</Badge>;
+  }
   return null;
 }
 
@@ -197,149 +202,217 @@ export default function Customers() {
     }
   });
 
+  const customers: any[] = data?.data || [];
+  const total: number = data?.meta?.total ?? 0;
+  const totalPages = Math.ceil(total / 20) || 1;
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 items-center flex-wrap">
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder={t("common.search")}
-          className="border rounded-lg px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        <button onClick={() => navigate("/admin/customers/add")} style={{ backgroundColor: "#000080" }} className="text-white px-4 py-2 rounded-lg hover:opacity-90 text-sm font-medium">
-          + {t("customers.add")}
-        </button>
-        {(data?.meta?.total ?? 0) > 0 && (
+      <Toolbar>
+        <div className="relative flex-1 min-w-[16rem]">
+          <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none" />
+          <Input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder={t("common.search")}
+            aria-label={t("common.search")}
+            className="ps-8"
+          />
+        </div>
+
+        <Button variant="primary" onClick={() => navigate("/admin/customers/add")}>
+          <Icon name="add" className="w-3.5 h-3.5" />
+          {t("customers.add")}
+        </Button>
+
+        {total > 0 && (
           <>
-            <button onClick={exportAllToExcel} disabled={exportingXlsx}
-              className="text-sm bg-green-700 text-white px-3 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 font-medium">
-              📊 {exportingXlsx ? t("reports.generating") : t("reports.exportCustomers")}
-            </button>
-            <button onClick={() => { setShowDeleteAll(true); setDeleteAllConfirmText(""); }}
-              className="text-xs text-red-600 border border-red-300 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors font-medium">
-              🗑 {t("customers.deleteAll")}
-            </button>
+            <Button variant="secondary" loading={exportingXlsx} onClick={exportAllToExcel}>
+              <Icon name="download" className="w-3.5 h-3.5" />
+              {exportingXlsx ? t("reports.generating") : t("reports.exportCustomers")}
+            </Button>
+            <Button
+              variant="secondary"
+              className="text-danger-fg"
+              onClick={() => { setShowDeleteAll(true); setDeleteAllConfirmText(""); }}
+            >
+              <Icon name="trash" className="w-3.5 h-3.5" />
+              {t("customers.deleteAll")}
+            </Button>
           </>
         )}
-      </div>
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? <p className="text-center py-8 text-slate-400">{t("common.loading")}</p> : (
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead className="bg-slate-50 border-b">
+      </Toolbar>
+
+      {isLoading ? (
+        <Loading label={t("common.loading")} />
+      ) : !customers.length ? (
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState icon={<Icon name="customers" className="w-5 h-5" />} title={t("common.noRecords")} />
+        </div>
+      ) : (
+        <TableShell>
+          <Table className="min-w-[1040px]">
+            <THead>
               <tr>
-                <th className="text-start px-4 py-3">{t("common.name")}</th>
-                <th className="text-start px-4 py-3">{t("common.phone")}</th>
-                <th className="text-start px-4 py-3">{t("customers.maintenanceCycle")}</th>
-                <th className="text-start px-4 py-3">{t("reports.installationDate")}</th>
-                <th className="text-start px-4 py-3">{t("reports.lastMaintenance")}</th>
-                <th className="text-start px-4 py-3">{t("reports.nextMaintenance")}</th>
-                <th className="text-start px-4 py-3">{t("common.status")}</th>
-                <th className="text-start px-4 py-3">{t("common.actions")}</th>
+                <TH>{t("common.name")}</TH>
+                <TH width="9rem">{t("common.phone")}</TH>
+                <TH width="9rem">{t("customers.maintenanceCycle")}</TH>
+                <TH width="7rem">{t("reports.installationDate")}</TH>
+                <TH width="7rem">{t("reports.lastMaintenance")}</TH>
+                <TH width="12rem">{t("reports.nextMaintenance")}</TH>
+                <TH width="7rem">{t("common.status")}</TH>
+                <TH width="10rem">{t("common.actions")}</TH>
               </tr>
-            </thead>
-            <tbody>
-              {(data?.data || []).map((c: any) => (
-                <tr key={c.id} onClick={() => navigate(`/admin/customers/${c.id}`)} className="border-b hover:bg-slate-50 cursor-pointer">
-                  <td className="px-4 py-3 font-medium text-blue-700">{c.name}</td>
-                  <td className="px-4 py-3">{c.phone}</td>
-                  <td className="px-4 py-3 text-xs font-medium text-slate-600">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap" dir="ltr">
-                    {c.installationDate ? formatGregorianDate(c.installationDate) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap" dir="ltr">
-                    {c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
+            </THead>
+            <TBody>
+              {customers.map((c: any) => (
+                <TR key={c.id} onClick={() => navigate(`/admin/customers/${c.id}`)}>
+                  <TD className="font-medium">{c.name}</TD>
+                  <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
+                  <TD className="text-fg-secondary text-2xs">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</TD>
+                  <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                    <span dir="ltr">{c.installationDate ? formatGregorianDate(c.installationDate) : "—"}</span>
+                  </TD>
+                  <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                    <span dir="ltr">{c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}</span>
+                  </TD>
+                  <TD>
+                    <div className="flex flex-col items-start gap-1">
                       <MaintenanceBadge c={c} t={t} />
                       {c.nextMaintenance && (
-                        <p className="text-xs text-slate-400" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</p>
+                        <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.isActive ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                  </TD>
+                  <TD>
+                    <Badge tone={c.isActive ? "success" : "neutral"} dot>
                       {c.isActive ? t("common.active") : t("common.inactive")}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button onClick={event => { event.stopPropagation(); toggle.mutate(c.id); }} className="text-xs text-slate-500 hover:text-slate-700">{t("customers.toggleActive")}</button>
-                      <button onClick={event => { event.stopPropagation(); navigate(`/admin/customers/${c.id}/edit`); }} className="text-xs text-blue-600 hover:text-blue-800">{t("customers.edit")}</button>
-                      <button onClick={event => { event.stopPropagation(); setHistoryModal(c); }} className="text-xs text-slate-600 hover:text-slate-800">📋 {t("scheduling.viewHistory")}</button>
-                      <button onClick={event => { event.stopPropagation();
-                        exportCustomerPdf(c, isAr, t)
-                          .then(fp => toast.success(`${t("reports.savedTo")}: ${fp}`))
-                          .catch(() => toast.error(t("common.error")));
-                      }} className="text-xs text-blue-600 hover:text-blue-800">📄</button>
-                      <button onClick={event => { event.stopPropagation(); setDeleteTarget({ id: c.id, name: c.name }); }}
-                        className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-0.5 rounded hover:bg-red-50">
-                        {t("common.delete")}
-                      </button>
+                    </Badge>
+                  </TD>
+                  <TD>
+                    {/* Five row actions do not fit as five labelled buttons at
+                        1280 wide, so they are icons with titles/aria-labels;
+                        delete keeps its destructive hover tone. */}
+                    <div className="flex items-center gap-0.5">
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => { event.stopPropagation(); toggle.mutate(c.id); }}
+                        title={t("customers.toggleActive")}
+                        aria-label={t("customers.toggleActive")}
+                      >
+                        <Icon name={c.isActive ? "check" : "close"} className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => { event.stopPropagation(); navigate(`/admin/customers/${c.id}/edit`); }}
+                        title={t("customers.edit")}
+                        aria-label={t("customers.edit")}
+                      >
+                        <Icon name="edit" className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => { event.stopPropagation(); setHistoryModal(c); }}
+                        title={t("scheduling.viewHistory")}
+                        aria-label={t("scheduling.viewHistory")}
+                      >
+                        <Icon name="messages" className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => {
+                          event.stopPropagation();
+                          exportCustomerPdf(c, isAr, t)
+                            .then(fp => toast.success(`${t("reports.savedTo")}: ${fp}`))
+                            .catch(() => toast.error(t("common.error")));
+                        }}
+                        title={t("reports.exportCustomerPdf")}
+                        aria-label={t("reports.exportCustomerPdf")}
+                      >
+                        <Icon name="download" className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => { event.stopPropagation(); setDeleteTarget({ id: c.id, name: c.name }); }}
+                        title={t("common.delete")}
+                        aria-label={t("common.delete")}
+                        className="hover:text-danger-fg hover:bg-danger-bg"
+                      >
+                        <Icon name="trash" className="w-4 h-4" />
+                      </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
-          </div>
-        )}
-      </div>
+            </TBody>
+          </Table>
+        </TableShell>
+      )}
+
       {data?.meta && (
-        <div className="flex justify-center gap-2">
-          <button disabled={page === 1} onClick={() => setPage(p => p-1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">‹</button>
-          <span className="px-3 py-1 text-sm">{page} / {Math.ceil(data.meta.total / 20) || 1}</span>
-          <button disabled={page * 20 >= data.meta.total} onClick={() => setPage(p => p+1)} className="px-3 py-1 text-sm border rounded disabled:opacity-40">›</button>
-        </div>
+        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       )}
 
       {historyModal && <HistoryModal customer={historyModal} onClose={() => setHistoryModal(null)} apiClient={api} />}
 
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold mb-2 text-red-700">{t("customers.deleteCustomer")}</h3>
-            <p className="text-sm text-slate-600 mb-1">{t("customers.deleteConfirm")}</p>
-            <p className="font-bold text-slate-800 mb-4">"{deleteTarget.name}"</p>
-            <p className="text-xs text-slate-400 mb-4">{t("customers.deleteWarning")}</p>
-            <div className="flex gap-2">
-              <button onClick={() => deleteCustomer.mutate(deleteTarget.id)} disabled={deleteCustomer.isPending}
-                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
-                {deleteCustomer.isPending ? t("customers.deleting") : t("customers.yesDelete")}
-              </button>
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteCustomer.mutate(deleteTarget.id)}
+        title={t("customers.deleteCustomer")}
+        message={
+          <>
+            <span className="block">{t("customers.deleteConfirm")}</span>
+            <span className="block font-semibold text-fg mt-1">{deleteTarget?.name}</span>
+            <span className="block text-2xs text-fg-muted mt-2">{t("customers.deleteWarning")}</span>
+          </>
+        }
+        confirmLabel={t("customers.yesDelete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteCustomer.isPending}
+      />
 
-      {showDeleteAll && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-lg">⚠️</div>
-              <div>
-                <h3 className="font-bold text-red-700">{t("customers.deleteAllTitle")}</h3>
-                <p className="text-xs text-slate-500">{data?.meta?.total ?? 0} {t("customers.willBeDeleted")}</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600 mb-3">{t("customers.deleteAllWarning")}</p>
-            <p className="text-sm font-medium text-slate-700 mb-2">{t("customers.typeDeleteToConfirm")}</p>
-            <input
+      {/* Delete-everything keeps its own dialog rather than ConfirmDialog: it
+          carries a typed-phrase guard, which is the whole point of it. */}
+      <Modal
+        open={showDeleteAll}
+        onClose={() => { setShowDeleteAll(false); setDeleteAllConfirmText(""); }}
+        closeOnBackdrop={false}
+        size="sm"
+        title={t("customers.deleteAllTitle")}
+        description={`${total} ${t("customers.willBeDeleted")}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowDeleteAll(false); setDeleteAllConfirmText(""); }}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={deleteAllConfirmText !== "DELETE"}
+              loading={deleteAllCustomers.isPending}
+              onClick={() => deleteAllCustomers.mutate()}
+            >
+              {t("customers.deleteAllConfirmBtn")}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Callout tone="danger">{t("customers.deleteAllWarning")}</Callout>
+          <Field label={t("customers.typeDeleteToConfirm")} htmlFor="delete-all-confirm">
+            <Input
+              id="delete-all-confirm"
               value={deleteAllConfirmText}
               onChange={e => setDeleteAllConfirmText(e.target.value)}
               placeholder="DELETE"
-              className="w-full border-2 border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500 mb-4 font-mono"
+              dir="ltr"
+              className="font-mono"
+              invalid={!!deleteAllConfirmText && deleteAllConfirmText !== "DELETE"}
             />
-            <div className="flex gap-2">
-              <button
-                onClick={() => deleteAllCustomers.mutate()}
-                disabled={deleteAllConfirmText !== "DELETE" || deleteAllCustomers.isPending}
-                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium">
-                {deleteAllCustomers.isPending ? t("customers.deleting") : t("customers.deleteAllConfirmBtn")}
-              </button>
-              <button onClick={() => { setShowDeleteAll(false); setDeleteAllConfirmText(""); }} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">{t("common.cancel")}</button>
-            </div>
-          </div>
+          </Field>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

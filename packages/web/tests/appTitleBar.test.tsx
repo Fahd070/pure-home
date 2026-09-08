@@ -99,8 +99,9 @@ describe('AppTitleBar window controls', () => {
     const { minimize, maximizeRestore, close } = getButtons(el);
     for (const btn of [minimize, maximizeRestore, close]) {
       expect(btn.className).not.toContain('w-5');
-      expect(btn.className).toContain('w-9');
-      expect(btn.className).toContain('h-8');
+      // Windows-convention control strip: 46px wide, full title-bar height.
+      expect(btn.className).toContain('w-[46px]');
+      expect(btn.className).toContain('h-titlebar');
     }
   });
 
@@ -115,9 +116,10 @@ describe('AppTitleBar window controls', () => {
   it('close control has a destructive (red) hover class distinct from the neutral minimize/maximize hover', () => {
     const el = render();
     const { minimize, maximizeRestore, close } = getButtons(el);
-    expect(close.className).toContain('hover:bg-red-500');
-    expect(minimize.className).toContain('hover:bg-white/20');
-    expect(maximizeRestore.className).toContain('hover:bg-white/20');
+    expect(close.className).toContain('hover:bg-danger-solid');
+    expect(minimize.className).toContain('hover:bg-titlebar-border');
+    expect(maximizeRestore.className).toContain('hover:bg-titlebar-border');
+    expect(minimize.className).not.toContain('hover:bg-danger-solid');
   });
 
   it('all three controls remain inside the no-drag region (draggable title bar does not cover the buttons)', () => {

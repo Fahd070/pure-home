@@ -5,6 +5,21 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { formatGregorianDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Badge } from "../../ui/Badge";
+import { Callout, Loading } from "../../ui/Feedback";
+import { Segmented } from "../../ui/Segmented";
+import { Icon } from "../../ui/icons";
+
+/** One label/value pair in the appointment summary grid. */
+function Detail({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-2xs uppercase tracking-wide text-fg-muted">{label}</dt>
+      <dd className="text-[0.8125rem] text-fg mt-0.5 truncate">{children}</dd>
+    </div>
+  );
+}
 
 export default function AppointmentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -31,75 +46,111 @@ export default function AppointmentDetail() {
     onError: (err: any) => toast.error(err?.response?.data?.message || t("appointments.confirmOperationError")),
   });
 
-  if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;
-  if (!data) return <p className="text-center py-12">{t("common.error")}</p>;
+  if (isLoading) return <Loading label={t("common.loading")} />;
+  if (!data) return <Callout tone="danger">{t("common.error")}</Callout>;
 
   const a = data;
+  const STATUSES = ["SCHEDULED", "RESCHEDULED", "CANCELLED", "PENDING"];
+
   return (
-    <div className="max-w-lg mx-auto space-y-4">
-      <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700">← {t("common.back")}</button>
-      <div className="bg-white rounded-xl shadow-sm p-6 space-y-3">
-        <h2 className="text-lg font-bold">{a.customer?.name}</h2>
-        <p className="text-slate-500 text-sm">
-          {a.customer?.secondaryPhone ? `${t("customers.primaryPhone")}: ${a.customer.phone}` : a.customer?.phone}
-        </p>
-        {a.customer?.secondaryPhone && (
-          <p className="text-slate-500 text-sm">{t("customers.secondaryPhone")}: {a.customer.secondaryPhone}</p>
-        )}
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-slate-400">{t("common.date")}: </span><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></div>
-          <div><span className="text-slate-400">{t("appointments.type")}: </span>{a.type}</div>
-          <div><span className="text-slate-400">{t("common.status")}: </span>{a.status}</div>
-          <div><span className="text-slate-400">{t("appointments.technician")}: </span>{a.task?.technician?.name || "—"}</div>
+    <div className="max-w-3xl mx-auto space-y-4">
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="text-fg-muted hover:text-fg text-2xs inline-flex items-center gap-1.5 transition-colors"
+      >
+        <Icon name="chevronStart" className="w-3.5 h-3.5 rtl:rotate-180" />
+        {t("common.back")}
+      </button>
+
+      <div className="bg-surface border border-line rounded-md">
+        <div className="p-4 border-b border-line">
+          <h2 className="text-base font-semibold text-fg">{a.customer?.name}</h2>
+          <p className="text-xs text-fg-secondary mt-1">
+            {a.customer?.secondaryPhone ? `${t("customers.primaryPhone")}: ${a.customer.phone}` : a.customer?.phone}
+          </p>
+          {a.customer?.secondaryPhone && (
+            <p className="text-xs text-fg-secondary">{t("customers.secondaryPhone")}: {a.customer.secondaryPhone}</p>
+          )}
         </div>
-        {a.notes && <p className="text-sm text-slate-500 border-t pt-2">{a.notes}</p>}
-        {a.nextMaintenanceNote && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-            <p className="font-medium text-blue-700 mb-1">{t("tasks.nextMaintenanceNote")}</p>
-            <p className="text-slate-700">{a.nextMaintenanceNote}</p>
-          </div>
-        )}
-        {a.workStatus === "COMPLETED" && (
-          <div className="border-t pt-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">{t("appointments.completionReport")}</p>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${a.maintenanceConfirmed ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-                {a.maintenanceConfirmed ? t("appointments.operationConfirmed") : t("appointments.awaitingMaintenanceConfirmation")}
-              </span>
+
+        <div className="p-4 space-y-4">
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Detail label={t("common.date")}>
+              <span dir="ltr" className="tabular-nums">{formatGregorianDate(a.scheduledDate)}</span>
+            </Detail>
+            <Detail label={t("appointments.type")}>{a.type}</Detail>
+            <Detail label={t("common.status")}>{a.status}</Detail>
+            <Detail label={t("appointments.technician")}>{a.task?.technician?.name || "—"}</Detail>
+          </dl>
+
+          {a.notes && (
+            <div className="bg-surface-subtle border border-line-subtle rounded-md p-3">
+              <p className="text-2xs uppercase tracking-wide text-fg-muted mb-1.5">{t("common.notes")}</p>
+              <p className="text-[0.8125rem] text-fg whitespace-pre-wrap">{a.notes}</p>
             </div>
-            <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1.5">
-              {a.actualCompletionDate && (
-                <div><span className="text-slate-400">{t("tasks.completionDate")}: </span><span dir="ltr">{formatGregorianDate(a.actualCompletionDate)}</span></div>
-              )}
-              {a.serviceDetails && (
-                <div><span className="text-slate-400">{t("tasks.serviceDetails")}: </span>{a.serviceDetails}</div>
-              )}
-              {a.completionImage && (
-                <div>
-                  <p className="text-slate-400 mb-1">{t("tasks.completionPhoto")}:</p>
-                  <img src={a.completionImage} alt="" className="w-20 h-20 object-cover rounded-lg border" />
+          )}
+
+          {a.nextMaintenanceNote && (
+            <Callout tone="info" title={t("tasks.nextMaintenanceNote")}>
+              <p className="whitespace-pre-wrap">{a.nextMaintenanceNote}</p>
+            </Callout>
+          )}
+
+          {a.workStatus === "COMPLETED" && (
+            <section className="border border-line rounded-md overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-line bg-surface-subtle">
+                <p className="text-[0.8125rem] font-semibold text-fg">{t("appointments.completionReport")}</p>
+                <Badge tone={a.maintenanceConfirmed ? "success" : "pending"} dot>
+                  {a.maintenanceConfirmed ? t("appointments.operationConfirmed") : t("appointments.awaitingMaintenanceConfirmation")}
+                </Badge>
+              </div>
+
+              <dl className="p-3 space-y-2.5">
+                {a.actualCompletionDate && (
+                  <Detail label={t("tasks.completionDate")}>
+                    <span dir="ltr" className="tabular-nums">{formatGregorianDate(a.actualCompletionDate)}</span>
+                  </Detail>
+                )}
+                {a.serviceDetails && (
+                  <div className="min-w-0">
+                    <dt className="text-2xs uppercase tracking-wide text-fg-muted">{t("tasks.serviceDetails")}</dt>
+                    <dd className="text-[0.8125rem] text-fg mt-0.5 whitespace-pre-wrap">{a.serviceDetails}</dd>
+                  </div>
+                )}
+                {a.completionImage && (
+                  <div>
+                    <dt className="text-2xs uppercase tracking-wide text-fg-muted mb-1.5">{t("tasks.completionPhoto")}</dt>
+                    <dd>
+                      <img src={a.completionImage} alt="" className="w-24 h-24 object-cover rounded-md border border-line" />
+                    </dd>
+                  </div>
+                )}
+              </dl>
+
+              {!a.maintenanceConfirmed && (
+                <div className="px-3 py-2.5 border-t border-line bg-surface-subtle flex justify-end">
+                  <Button variant="primary" loading={confirmOperation.isPending} onClick={() => confirmOperation.mutate()}>
+                    <Icon name="check" className="w-3.5 h-3.5" />
+                    {t("appointments.confirmOperation")}
+                  </Button>
                 </div>
               )}
-            </div>
-            {!a.maintenanceConfirmed && (
-              <button onClick={() => confirmOperation.mutate()} disabled={confirmOperation.isPending}
-                style={{ backgroundColor: "#008000" }}
-                className="w-full text-white py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                {confirmOperation.isPending ? t("common.loading") : t("appointments.confirmOperation")}
-              </button>
-            )}
-          </div>
-        )}
-        <div className="border-t pt-3">
-          <p className="text-sm font-medium mb-2">{t("common.status")}</p>
-          <div className="flex gap-2 flex-wrap">
-            {["SCHEDULED","RESCHEDULED","CANCELLED","PENDING"].map(s => (
-              <button key={s} disabled={a.status === s || changeStatus.isPending}
-                onClick={() => changeStatus.mutate(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${a.status === s ? "bg-green-600 text-white border-green-600" : "hover:bg-slate-50"}`}>
-                {s}
-              </button>
-            ))}
+            </section>
+          )}
+
+          <div className="border-t border-line-subtle pt-4">
+            <p className="text-2xs uppercase tracking-wide text-fg-muted mb-2">{t("common.status")}</p>
+            <Segmented
+              value={a.status}
+              options={STATUSES}
+              labels={Object.fromEntries(STATUSES.map(s => [s, s]))}
+              // Re-selecting the current status used to be impossible (that
+              // button was disabled); keep it a no-op rather than a redundant PATCH.
+              onChange={(s) => { if (s !== a.status) changeStatus.mutate(s); }}
+              disabled={changeStatus.isPending}
+              ariaLabel={t("common.status")}
+            />
           </div>
         </div>
       </div>

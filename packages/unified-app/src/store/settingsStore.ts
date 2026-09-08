@@ -18,6 +18,11 @@ export interface UserSettings {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
+  // Light is the first-launch experience, so it is the FALLBACK used when no
+  // preference exists yet. This never overrides a saved choice: zustand's
+  // persist middleware merges whatever is in localStorage on top of these
+  // defaults, and loadFromServer() replaces them outright -- so a user who
+  // previously chose Dark keeps Dark, and one who chose Light keeps Light.
   theme:                "light",
   fontSize:             "medium",
   interfaceScale:       "normal",

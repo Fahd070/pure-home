@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '../../unified-app/src/i18n';
 import { useAppStore } from '../../unified-app/src/store/appStore';
+import { waitFor } from './helpers/waitForCondition';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -72,12 +73,6 @@ function mount(children: React.ReactElement) {
   return container;
 }
 
-async function flush() {
-  for (let i = 0; i < 10; i++) {
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
-  }
-}
-
 beforeEach(() => {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
@@ -89,7 +84,10 @@ describe('Admin Urgent Appointments: fetches every page, not just page 1', () =>
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet, post: vi.fn() } }));
     const { default: UrgentAppointments } = await import('../../unified-app/src/admin/pages/UrgentAppointments');
     const el = mount(<UrgentAppointments />);
-    await flush();
+    // Both pages must have landed: fetchAllPages chains a second request after
+    // the first resolves, so this waits for the merged result, not a tick count.
+    await waitFor(() => el.querySelectorAll('tbody tr').length >= 3,
+      { message: 'rows from both pages never rendered' });
 
     // 3 rows total (2 from page 1 + 1 from page 2) -- would be 2 on a
     // truncation regression back to a single unpaginated/page-1-only call.
@@ -106,7 +104,8 @@ describe('Technician Urgent Appointments: fetches every page, not just page 1', 
     vi.doMock('../../unified-app/src/technician/api/client', () => ({ api: { get: apiGet, post: vi.fn() } }));
     const { default: TechUrgentAppointments } = await import('../../unified-app/src/technician/pages/UrgentAppointments');
     const el = mount(<TechUrgentAppointments />);
-    await flush();
+    await waitFor(() => el.querySelectorAll('tbody tr').length >= 3,
+      { message: 'rows from both pages never rendered' });
 
     // 3 rows total (1 from page 1 + 2 from page 2) -- would be 1 on a
     // truncation regression back to a single unpaginated/page-1-only call.
@@ -123,7 +122,10 @@ describe('Technician Work Queue: fetches every page, not just page 1', () => {
     vi.doMock('../../unified-app/src/technician/api/client', () => ({ api: { get: apiGet } }));
     const { default: WorkQueue } = await import('../../unified-app/src/technician/pages/WorkQueue');
     const el = mount(<WorkQueue />);
-    await flush();
+    await waitFor(
+      () => (el.textContent || '').includes('Job w1') && (el.textContent || '').includes('Job w2'),
+      { message: 'jobs from both pages never rendered' },
+    );
 
     expect(el.textContent).toContain('Job w1');
     expect(el.textContent).toContain('Job w2'); // page 2
@@ -144,20 +146,30 @@ describe('Admin Reports: appointments export fetches every page (no silent trunc
     vi.doMock('../../unified-app/src/admin/api/client', () => ({ api: { get: apiGet } }));
     const { default: Reports } = await import('../../unified-app/src/admin/pages/Reports');
     const el = mount(<Reports />);
-    await flush();
 
     // Reports.tsx gates each report type behind a top-level tab (customers /
     // appointments / sales); the appointments filter section only renders
     // after selecting the "Appointment Reports" tab.
+    await waitFor(
+      () => Array.from(el.querySelectorAll('button')).some(b => /appointment reports|تقارير المواعيد/i.test(b.textContent || '')),
+      { message: 'the report-type chooser never rendered' },
+    );
     const apptsTabBtn = Array.from(el.querySelectorAll('button')).find(b => /appointment reports|تقارير المواعيد/i.test(b.textContent || ''));
     expect(apptsTabBtn).toBeTruthy();
     act(() => { apptsTabBtn!.click(); });
-    await flush();
 
+    await waitFor(
+      () => Array.from(el.querySelectorAll('button')).some(b => /load results|تحميل النتائج/i.test(b.textContent || '')),
+      { message: 'the appointments filter section never rendered' },
+    );
     const loadBtn = Array.from(el.querySelectorAll('button')).find(b => /load results|تحميل النتائج/i.test(b.textContent || ''));
     expect(loadBtn).toBeTruthy();
     act(() => { loadBtn!.click(); });
-    await flush();
+
+    await waitFor(
+      () => /\(3\)/.test(el.textContent || '') && /\(1\)/.test(el.textContent || ''),
+      { message: 'merged counts across both pages never rendered' },
+    );
 
     // 3 regular (non-urgent) across both pages, 1 urgent -- both counts only
     // add up correctly if page 2's rows were actually fetched and included.

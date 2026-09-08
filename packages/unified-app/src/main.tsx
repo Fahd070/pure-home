@@ -12,7 +12,17 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
-      <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          // react-hot-toast renders outside the React tree, so it is themed by
+          // the .ph-toast rule in globals.css rather than by Tailwind classes.
+          className: "ph-toast",
+          success: { iconTheme: { primary: "var(--ph-success-solid)", secondary: "var(--ph-surface-raised)" } },
+          error:   { iconTheme: { primary: "var(--ph-danger-solid)",  secondary: "var(--ph-surface-raised)" } },
+        }}
+      />
     </QueryClientProvider>
   </React.StrictMode>
 );

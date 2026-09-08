@@ -1,43 +1,6 @@
 import React, { useState } from "react";
-
-interface HelpDialogProps {
-  titleAr: string;
-  contentAr: string;
-  onClose: () => void;
-}
-
-function HelpDialog({ titleAr, contentAr, onClose }: HelpDialogProps) {
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
-        dir="rtl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm flex-shrink-0">
-              ؟
-            </div>
-            <h3 className="font-semibold text-base text-slate-800">{titleAr}</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 flex-shrink-0 transition-colors"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="text-slate-600 leading-relaxed text-sm whitespace-pre-line">
-          {contentAr}
-        </div>
-      </div>
-    </div>
-  );
-}
+import { Modal } from "../ui/Modal";
+import { Icon } from "../ui/icons";
 
 interface HelpButtonProps {
   titleAr: string;
@@ -45,22 +8,32 @@ interface HelpButtonProps {
   className?: string;
 }
 
+/**
+ * Contextual help for the current screen. The panel is the shared Modal, so it
+ * gets the same escape/backdrop/focus behaviour as every other dialog -- the
+ * previous hand-rolled overlay trapped no focus and could not be closed from
+ * the keyboard.
+ */
 export default function HelpButton({ titleAr, contentAr, className = "" }: HelpButtonProps) {
   const [open, setOpen] = useState(false);
+
   return (
     <>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        className={`w-5 h-5 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-600 font-bold text-xs flex-shrink-0 transition-colors ${className}`}
+        className={`w-8 h-8 rounded-md flex items-center justify-center text-fg-muted hover:bg-surface-hover hover:text-fg transition-colors flex-shrink-0 ${className}`}
         title="مساعدة"
         aria-label="مساعدة"
       >
-        ؟
+        <Icon name="help" className="w-4 h-4" />
       </button>
-      {open && (
-        <HelpDialog titleAr={titleAr} contentAr={contentAr} onClose={() => setOpen(false)} />
-      )}
+
+      <Modal open={open} onClose={() => setOpen(false)} title={titleAr} size="md">
+        <div dir="rtl" className="text-[0.8125rem] text-fg-secondary leading-relaxed whitespace-pre-line">
+          {contentAr}
+        </div>
+      </Modal>
     </>
   );
 }

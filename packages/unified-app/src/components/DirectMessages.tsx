@@ -6,14 +6,16 @@ import { useAppStore } from "../store/appStore";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { formatGregorianDate } from "../utils/dateTimeInput";
+import { Button } from "../ui/Button";
+import { Textarea, Label } from "../ui/Field";
+import { CountBadge } from "../ui/Badge";
+import { EmptyState, Loading } from "../ui/Feedback";
+import { ConfirmDialog } from "../ui/Modal";
+import { Segmented } from "../ui/Segmented";
+import { Icon } from "../ui/icons";
+import { cx } from "../ui/cx";
 
 type View = "list" | "thread" | "compose";
-
-const ROLE_COLORS: Record<string, string> = {
-  ADMIN: "bg-blue-100 text-blue-700",
-  SCHEDULING: "bg-green-100 text-green-700",
-  TECHNICIAN: "bg-orange-100 text-orange-700",
-};
 
 function formatTime(d: string, lang: string) {
   const date = new Date(d);
@@ -45,6 +47,7 @@ function useApi() {
 
 export default function DirectMessages() {
   const { t, i18n } = useTranslation();
+  const isAr = i18n.language === "ar";
   const [view, setView] = useState<View>("list");
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -124,205 +127,278 @@ export default function DirectMessages() {
   }
 
   const activeConv = (conversations || []).find((c: any) => c.otherRole === selectedRole);
+  const convList: any[] = conversations || [];
 
-  const confirmModal = (onConfirm: () => void, onCancel: () => void, title: string, desc?: string) => (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl space-y-4">
-        <p className="font-semibold text-slate-800">{title}</p>
-        {desc && <p className="text-sm text-slate-500">{desc}</p>}
-        <div className="flex gap-3">
-          <button onClick={onConfirm} disabled={deleteConv.isPending || deleteAll.isPending}
-            className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">
-            {t("common.delete")}
-          </button>
-          <button onClick={onCancel} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">
-            {t("common.cancel")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  /**
+   * Split pane, desktop-first: conversations stay listed on the start side
+   * while a thread is open on the end side, so switching between them costs no
+   * navigation. Below lg the two panes take turns, driven by the same `view`
+   * state the single-column version always used.
+   */
+  const showListPane = view === "list";
+  const showDetailPane = view !== "list";
 
-  // ── CONVERSATION LIST ──
-  if (view === "list") {
-    return (
-      <div className="max-w-2xl mx-auto space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-700">{t("messaging.conversations")}</h2>
-          <div className="flex gap-2">
-            {newRoles.length > 0 && (
-              <button onClick={() => setView("compose")}
-                className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">
-                {t("messaging.newConversation")}
-              </button>
-            )}
-            {(conversations || []).length > 0 && (
-              <button onClick={() => setDeleteAllConfirm(true)}
-                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">
-                {t("messages.deleteAll")}
-              </button>
-            )}
-          </div>
-        </div>
+  const roleLabel = (r: string) => t(`roles.${r}`) || r;
 
-        {isLoading ? (
-          <p className="text-center py-12 text-slate-400">{t("common.loading")}</p>
-        ) : !(conversations || []).length ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center text-slate-400">
-            <p className="text-3xl mb-2">💬</p>
-            <p>{t("messaging.noConversations")}</p>
-            {newRoles.length > 0 && (
-              <button onClick={() => setView("compose")}
-                className="mt-3 text-sm text-blue-600 hover:underline">
-                {t("messaging.newConversation")}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {(conversations || []).map((conv: any) => (
-              <div key={conv.otherRole} onClick={() => openThread(conv.otherRole)}
-                className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3 hover:bg-slate-50 cursor-pointer">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${ROLE_COLORS[conv.otherRole] || "bg-slate-100 text-slate-600"}`}>
-                  {(t(`roles.${conv.otherRole}`) || conv.otherRole)?.[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{t(`roles.${conv.otherRole}`)}</span>
-                    {conv.unreadCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
-                        {conv.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5 truncate">{conv.lastMessage?.content}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-slate-400">
-                    {conv.lastMessage ? formatTime(conv.lastMessage.createdAt, i18n.language) : ""}
-                  </span>
-                  <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(conv.otherRole); }}
-                    className="p-1 text-slate-300 hover:text-red-500 transition-colors rounded text-base leading-none">
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {deleteConfirm && confirmModal(
-          () => deleteConv.mutate(deleteConfirm),
-          () => setDeleteConfirm(null),
-          t("messaging.deleteConvConfirm"),
-          t("messaging.conversationWith") + ": " + t(`roles.${deleteConfirm}`)
-        )}
-        {deleteAllConfirm && confirmModal(
-          () => deleteAll.mutate(),
-          () => setDeleteAllConfirm(false),
-          t("messaging.deleteAllConvConfirm")
-        )}
-      </div>
-    );
-  }
-
-  // ── THREAD VIEW ──
-  if (view === "thread" && selectedRole) {
-    return (
-      <div className="max-w-2xl mx-auto space-y-3">
-        <div className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-3">
-          <button onClick={() => { setView("list"); setSelectedRole(null); }}
-            className="text-slate-500 hover:text-slate-700 text-sm px-2 py-1 rounded hover:bg-slate-100">
-            ← {t("common.back")}
-          </button>
-          <span className="font-semibold text-sm flex-1">{t(`roles.${selectedRole}`)}</span>
-          <button onClick={() => setDeleteConfirm(selectedRole)}
-            className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 border border-red-200">
-            🗑️ {t("messaging.deleteConversation")}
-          </button>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-4 space-y-3 min-h-48 max-h-96 overflow-y-auto">
-          {!activeConv?.messages?.length ? (
-            <p className="text-center text-slate-400 text-sm py-8">{t("messaging.noConversations")}</p>
-          ) : activeConv.messages.map((m: any) => {
-            const isSent = m.direction === "sent";
-            return (
-              <div key={m.id} className={"flex " + (isSent ? "justify-end" : "justify-start")}>
-                <div className="max-w-xs lg:max-w-md">
-                  {!isSent && <p className="text-xs text-slate-400 mb-1 px-1">{m.sender?.name}</p>}
-                  <div className={"px-4 py-2 rounded-xl text-sm " + (isSent ? "bg-blue-600 text-white rounded-tr-none" : "bg-slate-100 text-slate-800 rounded-tl-none")}>
-                    {m.content}
-                  </div>
-                  <p className={"text-xs text-slate-400 mt-1 px-1 " + (isSent ? "text-end" : "")}>
-                    {formatTime(m.createdAt, i18n.language)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-3 space-y-2">
-          <textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={3}
-            placeholder={t("messaging.typeMessage")}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-          <div className="flex justify-end">
-            <button onClick={() => sendMsg.mutate({ content: replyText, recipientRole: selectedRole })}
-              disabled={!replyText.trim() || sendMsg.isPending}
-              className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 font-medium">
-              {sendMsg.isPending ? t("messaging.sending") : t("messaging.reply")}
-            </button>
-          </div>
-        </div>
-
-        {deleteConfirm && confirmModal(
-          () => deleteConv.mutate(deleteConfirm),
-          () => setDeleteConfirm(null),
-          t("messaging.deleteConvConfirm")
-        )}
-      </div>
-    );
-  }
-
-  // ── COMPOSE NEW ──
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b flex items-center gap-3">
-          <button onClick={() => setView("list")}
-            className="text-slate-500 hover:text-slate-700 text-sm">
-            ← {t("common.back")}
-          </button>
-          <span className="font-semibold text-sm">{t("messaging.newMessage")}</span>
+    <div className="h-[calc(100vh-11rem)] min-h-[26rem] flex bg-surface border border-line rounded-md overflow-hidden">
+      {/* ── Conversations ─────────────────────────────────────────────────── */}
+      <div
+        className={cx(
+          "w-full lg:w-72 flex-shrink-0 flex flex-col border-e border-line bg-surface-subtle",
+          showListPane ? "flex" : "hidden lg:flex"
+        )}
+      >
+        <div className="h-11 flex-shrink-0 px-3 flex items-center justify-between gap-2 border-b border-line">
+          <h2 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted truncate">
+            {t("messaging.conversations")}
+          </h2>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {newRoles.length > 0 && (
+              <Button
+                size="sm" variant="ghost" iconOnly
+                onClick={() => setView("compose")}
+                title={t("messaging.newConversation")}
+                aria-label={t("messaging.newConversation")}
+              >
+                <Icon name="add" className="w-4 h-4" />
+              </Button>
+            )}
+            {convList.length > 0 && (
+              <Button
+                size="sm" variant="ghost" iconOnly
+                onClick={() => setDeleteAllConfirm(true)}
+                title={t("messages.deleteAll")}
+                aria-label={t("messages.deleteAll")}
+                className="hover:text-danger-fg hover:bg-danger-bg"
+              >
+                <Icon name="trash" className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">{t("messaging.sendTo")}</label>
-            <div className="flex gap-2 flex-wrap">
-              {(newRoles.length > 0 ? newRoles : targetRoles).map((r) => (
-                <button key={r} onClick={() => setComposeRole(r)}
-                  className={"px-4 py-2 rounded-lg text-sm border transition-colors " + (composeRole === r ? "bg-blue-700 text-white border-blue-700" : "hover:bg-slate-50 border-slate-200")}>
-                  {t(`roles.${r}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">{t("messaging.message")}</label>
-            <textarea value={composeText} onChange={(e) => setComposeText(e.target.value)} rows={5}
-              placeholder={t("messaging.typeMessage")}
-              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-y" />
-          </div>
-          <div className="flex justify-end">
-            <button onClick={() => sendMsg.mutate({ content: composeText, recipientRole: composeRole })}
-              disabled={!composeText.trim() || !composeRole || sendMsg.isPending}
-              className="bg-blue-700 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-800 disabled:opacity-50 font-medium">
-              {sendMsg.isPending ? t("messaging.sending") : t("messaging.sendMessage")}
-            </button>
-          </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <Loading label={t("common.loading")} />
+          ) : !convList.length ? (
+            <EmptyState
+              icon={<Icon name="messaging" className="w-5 h-5" />}
+              title={t("messaging.noConversations")}
+              action={
+                newRoles.length > 0 ? (
+                  <Button size="sm" variant="secondary" onClick={() => setView("compose")}>
+                    {t("messaging.newConversation")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <ul>
+              {convList.map((conv: any) => {
+                const active = view === "thread" && selectedRole === conv.otherRole;
+                return (
+                  <li key={conv.otherRole} className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => openThread(conv.otherRole)}
+                      className={cx(
+                        "w-full text-start px-3 py-2.5 flex items-start gap-2.5 border-b border-line-subtle transition-colors",
+                        active ? "bg-surface" : "hover:bg-surface-hover"
+                      )}
+                    >
+                      {active && <span className="absolute inset-y-0 start-0 w-0.5 bg-accent" aria-hidden="true" />}
+                      <span
+                        className="w-7 h-7 rounded-md bg-surface-active text-fg-secondary text-2xs font-semibold flex items-center justify-center flex-shrink-0"
+                        aria-hidden="true"
+                      >
+                        {roleLabel(conv.otherRole)?.[0]}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-center gap-2">
+                          <span className="text-[0.8125rem] font-medium text-fg truncate">{roleLabel(conv.otherRole)}</span>
+                          <CountBadge value={conv.unreadCount || 0} />
+                        </span>
+                        <span className="block text-2xs text-fg-muted truncate mt-0.5">
+                          {conv.lastMessage?.content}
+                        </span>
+                      </span>
+                      <span className="text-2xs text-fg-muted flex-shrink-0 whitespace-nowrap">
+                        {conv.lastMessage ? formatTime(conv.lastMessage.createdAt, i18n.language) : ""}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
+
+      {/* ── Thread / compose ──────────────────────────────────────────────── */}
+      <div className={cx("flex-1 min-w-0 flex flex-col", showDetailPane ? "flex" : "hidden lg:flex")}>
+        {view === "thread" && selectedRole ? (
+          <>
+            <div className="h-11 flex-shrink-0 px-3 flex items-center gap-2 border-b border-line">
+              <Button
+                size="sm" variant="ghost" iconOnly className="lg:hidden"
+                onClick={() => { setView("list"); setSelectedRole(null); }}
+                aria-label={t("common.back")}
+              >
+                <Icon name="chevronStart" className="w-4 h-4 rtl:rotate-180" />
+              </Button>
+              <span className="text-[0.8125rem] font-semibold text-fg flex-1 min-w-0 truncate">
+                {roleLabel(selectedRole)}
+              </span>
+              <Button
+                size="sm" variant="ghost" iconOnly
+                onClick={() => setDeleteConfirm(selectedRole)}
+                title={t("messaging.deleteConversation")}
+                aria-label={t("messaging.deleteConversation")}
+                className="hover:text-danger-fg hover:bg-danger-bg"
+              >
+                <Icon name="trash" className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div key={selectedRole} className="ph-panel-enter flex-1 overflow-y-auto p-4 space-y-2.5 bg-canvas">
+              {!activeConv?.messages?.length ? (
+                <p className="text-center text-fg-muted text-xs py-8">{t("messaging.noConversations")}</p>
+              ) : activeConv.messages.map((m: any) => {
+                const isSent = m.direction === "sent";
+                return (
+                  <div key={m.id} className={cx("flex", isSent ? "justify-end" : "justify-start")}>
+                    <div className="max-w-[min(32rem,80%)]">
+                      {!isSent && <p className="text-2xs text-fg-muted mb-1 px-1">{m.sender?.name}</p>}
+                      {/* Sent uses the accent, received a plain surface -- one
+                          colour carries "mine", the rest of the thread stays
+                          quiet enough to read a long backlog. */}
+                      <div
+                        className={cx(
+                          "px-3 py-2 text-[0.8125rem] leading-relaxed whitespace-pre-wrap break-words rounded-md",
+                          isSent
+                            ? "bg-accent text-accent-fg rounded-se-sm"
+                            : "bg-surface border border-line text-fg rounded-ss-sm"
+                        )}
+                      >
+                        {m.content}
+                      </div>
+                      <p className={cx("text-2xs text-fg-muted mt-1 px-1", isSent && "text-end")}>
+                        {formatTime(m.createdAt, i18n.language)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex-shrink-0 border-t border-line p-3 flex items-end gap-2">
+              <Textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                rows={2}
+                placeholder={t("messaging.typeMessage")}
+                aria-label={t("messaging.typeMessage")}
+                className="flex-1 resize-none"
+              />
+              <Button
+                variant="primary"
+                onClick={() => sendMsg.mutate({ content: replyText, recipientRole: selectedRole })}
+                disabled={!replyText.trim()}
+                loading={sendMsg.isPending}
+              >
+                {t("messaging.reply")}
+              </Button>
+            </div>
+          </>
+        ) : view === "compose" ? (
+          <>
+            <div className="h-11 flex-shrink-0 px-3 flex items-center gap-2 border-b border-line">
+              <Button
+                size="sm" variant="ghost" iconOnly
+                onClick={() => setView("list")}
+                aria-label={t("common.back")}
+              >
+                <Icon name="chevronStart" className="w-4 h-4 rtl:rotate-180" />
+              </Button>
+              <span className="text-[0.8125rem] font-semibold text-fg">{t("messaging.newMessage")}</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div>
+                <Label>{t("messaging.sendTo")}</Label>
+                <Segmented
+                  value={composeRole}
+                  options={newRoles.length > 0 ? newRoles : targetRoles}
+                  labels={Object.fromEntries(ALL_ROLES.map(r => [r, roleLabel(r)]))}
+                  onChange={setComposeRole}
+                  ariaLabel={t("messaging.sendTo")}
+                />
+              </div>
+              <div>
+                <Label htmlFor="compose-text">{t("messaging.message")}</Label>
+                <Textarea
+                  id="compose-text"
+                  value={composeText}
+                  onChange={(e) => setComposeText(e.target.value)}
+                  rows={8}
+                  placeholder={t("messaging.typeMessage")}
+                />
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 border-t border-line px-3 py-2.5 flex justify-end">
+              <Button
+                variant="primary"
+                onClick={() => sendMsg.mutate({ content: composeText, recipientRole: composeRole })}
+                disabled={!composeText.trim() || !composeRole}
+                loading={sendMsg.isPending}
+              >
+                {t("messaging.sendMessage")}
+              </Button>
+            </div>
+          </>
+        ) : (
+          // Desktop resting state: the list is on the left, nothing selected yet.
+          // "Conversations" alone read like a heading rather than an
+          // instruction, so this says what to do next.
+          <EmptyState
+            className="m-auto"
+            icon={<Icon name="messaging" className="w-5 h-5" />}
+            title={isAr ? "اختر محادثة" : "Select a conversation"}
+            action={
+              newRoles.length > 0 ? (
+                <Button size="sm" variant="secondary" onClick={() => setView("compose")}>
+                  {t("messaging.newConversation")}
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={() => deleteConfirm && deleteConv.mutate(deleteConfirm)}
+        title={t("messaging.deleteConvConfirm")}
+        message={deleteConfirm ? `${t("messaging.conversationWith")}: ${roleLabel(deleteConfirm)}` : undefined}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteConv.isPending}
+      />
+
+      <ConfirmDialog
+        open={deleteAllConfirm}
+        onCancel={() => setDeleteAllConfirm(false)}
+        onConfirm={() => deleteAll.mutate()}
+        title={t("messaging.deleteAllConvConfirm")}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteAll.isPending}
+      />
     </div>
   );
 }

@@ -6,6 +6,14 @@ import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime, formatGregorianMonthYear, localDateOnlyStr } from "../../utils/dateTimeInput";
 import { fetchAllPages } from "../../utils/fetchAllPages";
+import { Button } from "../../ui/Button";
+import { Input, Select, Field } from "../../ui/Field";
+import { Badge, Tone } from "../../ui/Badge";
+import { PageHeader } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { Icon, IconName } from "../../ui/icons";
+import { cx } from "../../ui/cx";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -16,22 +24,21 @@ function formatCycle(cycle: string, freq: number, t: any) {
 }
 
 function AlertBadge({ c, isAr }: { c: any; isAr: boolean }) {
-  if (c.alertLevel === "overdue") return (
-    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-      🔴 {isAr ? `متأخر ${c.overdueCount} يوم` : `Overdue ${c.overdueCount}d`}
-    </span>
-  );
-  if (c.alertLevel === "soon") return (
-    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-      🟡 {c.daysUntil === 0 ? (isAr ? "اليوم" : "Today") : c.daysUntil === 1 ? (isAr ? "غداً" : "Tomorrow") : (isAr ? `${c.daysUntil} يوم` : `${c.daysUntil}d`)}
-    </span>
-  );
-  if (c.daysUntil !== null) return (
-    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-      🟢 {isAr ? `${c.daysUntil} يوم` : `${c.daysUntil}d`}
-    </span>
-  );
-  return <span className="text-xs text-slate-400">—</span>;
+  if (c.alertLevel === "overdue") {
+    return <Badge tone="danger" dot>{isAr ? `متأخر ${c.overdueCount} يوم` : `Overdue ${c.overdueCount}d`}</Badge>;
+  }
+  if (c.alertLevel === "soon") {
+    const label = c.daysUntil === 0
+      ? (isAr ? "اليوم" : "Today")
+      : c.daysUntil === 1
+        ? (isAr ? "غداً" : "Tomorrow")
+        : (isAr ? `${c.daysUntil} يوم` : `${c.daysUntil}d`);
+    return <Badge tone="warning" dot>{label}</Badge>;
+  }
+  if (c.daysUntil !== null) {
+    return <Badge tone="success" dot>{isAr ? `${c.daysUntil} يوم` : `${c.daysUntil}d`}</Badge>;
+  }
+  return <span className="text-2xs text-fg-muted">—</span>;
 }
 
 function buildPdfHtml(customers: any[], filters: any, isAr: boolean, t: any, total: number) {
@@ -577,383 +584,392 @@ tr:nth-child(even){background:#f9f9f9}
     return map[status] || status;
   }
 
-  function maintenanceStatusBadge(status: string) {
-    const colorMap: Record<string, string> = {
-      COMPLETED:       "bg-green-100 text-green-700",
-      OVERDUE:         "bg-red-100 text-red-700",
-      SCHEDULED:       "bg-blue-100 text-blue-700",
-      IN_PROGRESS:     "bg-indigo-100 text-indigo-700",
-      POSTPONED:       "bg-orange-100 text-orange-700",
-      CANCELLED:       "bg-slate-100 text-slate-500",
-      NO_APPOINTMENTS: "bg-slate-50 text-slate-400",
+  function maintenanceStatusTone(status: string): Tone {
+    const toneMap: Record<string, Tone> = {
+      COMPLETED:       "success",
+      OVERDUE:         "danger",
+      SCHEDULED:       "info",
+      IN_PROGRESS:     "progress",
+      POSTPONED:       "warning",
+      CANCELLED:       "neutral",
+      NO_APPOINTMENTS: "neutral",
     };
-    return colorMap[status] || "bg-slate-100 text-slate-500";
+    return toneMap[status] || "neutral";
   }
+
+  const REPORT_TYPES: { key: "customers" | "appointments" | "sales"; icon: IconName; title: string; desc: string }[] = [
+    {
+      key: "customers", icon: "customers",
+      title: isAr ? "تقارير العملاء" : "Customer Reports",
+      desc: isAr ? "بيانات العملاء ودورات الصيانة" : "Customer data and maintenance cycles",
+    },
+    {
+      key: "appointments", icon: "appointments",
+      title: isAr ? "تقارير المواعيد" : "Appointment Reports",
+      desc: isAr ? "المواعيد العادية والعاجلة" : "Regular and urgent appointments",
+    },
+    {
+      key: "sales", icon: "reports",
+      title: isAr ? "تقارير المبيعات" : "Sales Reports",
+      desc: isAr ? "المبيعات الأسبوعية والشهرية" : "Weekly and monthly sales",
+    },
+  ];
 
   return (
     <div className="space-y-4">
-      {/* Report type selector */}
-      <div className="bg-white rounded-xl shadow-sm p-5">
-        <p className="text-sm font-semibold text-slate-700 mb-3">
+      {/* Report type selector. One accent marks the chosen type -- it used to be
+          three different brand colours, which read as three unrelated products
+          rather than three views of one report tool. */}
+      <div className="bg-surface border border-line rounded-md p-3">
+        <p className="text-2xs font-semibold uppercase tracking-wide text-fg-muted mb-2">
           {isAr ? "اختر نوع التقرير" : "Select Report Type"}
         </p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={() => setTab("customers")}
-            className={`flex-1 flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-start ${tab === "customers" ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}
-          >
-            <span className="text-2xl">👥</span>
-            <div>
-              <p className={`font-semibold text-sm ${tab === "customers" ? "text-blue-700" : "text-slate-700"}`}>
-                {isAr ? "تقارير العملاء" : "Customer Reports"}
-              </p>
-              <p className="text-xs text-slate-400">{isAr ? "بيانات العملاء ودورات الصيانة" : "Customer data and maintenance cycles"}</p>
-            </div>
-            {tab === "customers" && <span className="ms-auto text-blue-600 text-lg">✓</span>}
-          </button>
-          <button
-            onClick={() => setTab("appointments")}
-            className={`flex-1 flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-start ${tab === "appointments" ? "border-purple-600 bg-purple-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}
-          >
-            <span className="text-2xl">📅</span>
-            <div>
-              <p className={`font-semibold text-sm ${tab === "appointments" ? "text-purple-700" : "text-slate-700"}`}>
-                {isAr ? "تقارير المواعيد" : "Appointment Reports"}
-              </p>
-              <p className="text-xs text-slate-400">{isAr ? "المواعيد العادية والعاجلة" : "Regular and urgent appointments"}</p>
-            </div>
-            {tab === "appointments" && <span className="ms-auto text-purple-600 text-lg">✓</span>}
-          </button>
-          <button
-            onClick={() => setTab("sales")}
-            className={`flex-1 flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-start ${tab === "sales" ? "border-green-600 bg-green-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}
-          >
-            <span className="text-2xl">💰</span>
-            <div>
-              <p className={`font-semibold text-sm ${tab === "sales" ? "text-green-700" : "text-slate-700"}`}>
-                {isAr ? "تقارير المبيعات" : "Sales Reports"}
-              </p>
-              <p className="text-xs text-slate-400">{isAr ? "المبيعات الأسبوعية والشهرية" : "Weekly and monthly sales"}</p>
-            </div>
-            {tab === "sales" && <span className="ms-auto text-green-600 text-lg">✓</span>}
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {REPORT_TYPES.map(rt => {
+            const active = tab === rt.key;
+            return (
+              <button
+                key={rt.key}
+                type="button"
+                onClick={() => setTab(rt.key)}
+                aria-pressed={active}
+                className={cx(
+                  "flex items-center gap-3 p-3 rounded-md border text-start transition-colors",
+                  active
+                    ? "border-accent bg-accent-subtle"
+                    : "border-line bg-surface hover:bg-surface-hover"
+                )}
+              >
+                <span
+                  className={cx(
+                    "w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0",
+                    active ? "bg-accent text-accent-fg" : "bg-surface-subtle border border-line-subtle text-fg-muted"
+                  )}
+                  aria-hidden="true"
+                >
+                  <Icon name={rt.icon} className="w-4 h-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className={cx("block text-[0.8125rem] font-semibold truncate", active ? "text-accent-subtlefg" : "text-fg")}>
+                    {rt.title}
+                  </span>
+                  <span className="block text-2xs text-fg-muted truncate">{rt.desc}</span>
+                </span>
+                {active && <Icon name="check" className="w-4 h-4 text-accent ms-auto flex-shrink-0" />}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* No selection state */}
       {!tab && (
-        <div className="bg-white rounded-xl shadow-sm p-16 text-center text-slate-400">
-          <p className="text-4xl mb-3">📊</p>
-          <p className="text-base font-medium text-slate-600">{isAr ? "اختر نوع التقرير أعلاه للبدء" : "Select a report type above to get started"}</p>
-          <p className="text-xs mt-1">{isAr ? "تقارير العملاء أو تقارير المواعيد أو تقارير المبيعات" : "Customer Reports, Appointment Reports, or Sales Reports"}</p>
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState
+            icon={<Icon name="reports" className="w-5 h-5" />}
+            title={isAr ? "اختر نوع التقرير أعلاه للبدء" : "Select a report type above to get started"}
+            description={isAr ? "تقارير العملاء أو تقارير المواعيد أو تقارير المبيعات" : "Customer Reports, Appointment Reports, or Sales Reports"}
+          />
         </div>
       )}
 
       {/* ── Customer Reports ── */}
       {tab === "customers" && <>
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">{t("reports.customerReports")}</h1>
-          <p className="text-sm text-slate-500">{t("reports.showingCount", { count: total })}</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={exportPdf} disabled={!customers.length || generating === "pdf"}
-            style={{ backgroundColor: "#000080" }}
-            className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-            {generating === "pdf" ? t("reports.generating") : `📄 ${t("reports.exportPdf")}`}
-          </button>
-          <button onClick={exportExcel} disabled={!customers.length || generating === "excel"}
-            className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50 flex items-center gap-2">
-            {generating === "excel" ? t("reports.generating") : `📊 ${t("reports.exportExcel")}`}
-          </button>
-        </div>
-      </div>
+        <PageHeader
+          title={t("reports.customerReports")}
+          subtitle={t("reports.showingCount", { count: total })}
+          actions={
+            <>
+              <Button variant="secondary" disabled={!customers.length} loading={generating === "pdf"} onClick={exportPdf}>
+                <Icon name="download" className="w-3.5 h-3.5" />
+                {t("reports.exportPdf")}
+              </Button>
+              <Button variant="secondary" disabled={!customers.length} loading={generating === "excel"} onClick={exportExcel}>
+                <Icon name="download" className="w-3.5 h-3.5" />
+                {t("reports.exportExcel")}
+              </Button>
+            </>
+          }
+        />
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.search")}</label>
-            <input value={filters.search} onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-              placeholder={isAr ? "اسم، جوال..." : "Name, phone..."}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <div className="bg-surface border border-line rounded-md">
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Field label={t("common.search")} htmlFor="rep-search">
+              <Input
+                id="rep-search"
+                value={filters.search}
+                onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                placeholder={isAr ? "اسم، جوال..." : "Name, phone..."}
+              />
+            </Field>
+            <Field label={t("reports.dateFrom")} htmlFor="rep-from">
+              <Input id="rep-from" type="date" lang="en-GB" dir="ltr" value={filters.dateFrom}
+                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
+            </Field>
+            <Field label={t("reports.dateTo")} htmlFor="rep-to">
+              <Input id="rep-to" type="date" lang="en-GB" dir="ltr" value={filters.dateTo}
+                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
+            </Field>
+            <Field label={t("reports.statusFilter")} htmlFor="rep-status">
+              <Select id="rep-status" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+                {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </Select>
+            </Field>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
-            <input type="date" lang="en-GB" dir="ltr" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateTo")}</label>
-            <input type="date" lang="en-GB" dir="ltr" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.statusFilter")}</label>
-            <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+          <div className="px-3 py-2.5 border-t border-line bg-surface-subtle flex justify-end">
+            <Button variant="primary" onClick={() => setHasSearched(true)}>
+              <Icon name="search" className="w-3.5 h-3.5" />
+              {isAr ? "تحميل النتائج" : "Load Results"}
+            </Button>
           </div>
         </div>
-        <div className="mt-3 flex justify-end">
-          <button onClick={() => setHasSearched(true)}
-            style={{ backgroundColor: "#000080" }}
-            className="text-white text-sm px-5 py-2 rounded-lg hover:opacity-90 flex items-center gap-2">
-            🔍 {isAr ? "تحميل النتائج" : "Load Results"}
-          </button>
-        </div>
-      </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {!hasSearched ? (
-          <p className="text-center py-16 text-slate-400">
-            🔍 {isAr ? "طبّق فلاتر البحث لتحميل البيانات" : "Apply search filters to load data"}
-          </p>
-        ) : isLoading ? (
-          <p className="text-center py-10 text-slate-400">{t("common.loading")}</p>
-        ) : !customers.length ? (
-          <p className="text-center py-10 text-slate-400">{t("reports.noResults")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b">
-                <tr>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">#</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.name")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.phone")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("customers.city")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("reports.registrationDate")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("reports.installationDate")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("customers.maintenanceCycle")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("reports.lastMaintenance")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("reports.nextMaintenance")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("reports.upcomingMaintenance")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("reports.maintenanceStatus")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((c: any, i: number) => (
-                  <tr key={c.id} className="border-b hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-400 text-xs">{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
-                    <td className="px-4 py-3 text-slate-600">{c.phone}</td>
-                    <td className="px-4 py-3 text-slate-500">{c.address?.city || "—"}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
-                      {formatGregorianDate(c.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
-                      {c.installationDate ? formatGregorianDate(c.installationDate) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-slate-600">
-                      {formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
-                      {c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap" dir="ltr">
-                      {(c.nextMaintenanceDate || c.nextMaintenance) ? formatGregorianDate(c.nextMaintenanceDate || c.nextMaintenance) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <AlertBadge c={c} isAr={isAr} />
-                    </td>
-                    <td className="px-4 py-3">
-                      {c.maintenanceStatus ? (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${maintenanceStatusBadge(c.maintenanceStatus)}`}>
-                          {maintenanceStatusLabel(c.maintenanceStatus)}
-                        </span>
-                      ) : <span className="text-xs text-slate-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button onClick={() => exportCustomerPdf(c)}
-                        className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-2 py-0.5 rounded hover:bg-blue-50 whitespace-nowrap">
-                        📄 {t("reports.exportCustPdf")}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bg-surface border border-line rounded-md">
+            <EmptyState
+              icon={<Icon name="search" className="w-5 h-5" />}
+              title={isAr ? "طبّق فلاتر البحث لتحميل البيانات" : "Apply search filters to load data"}
+            />
           </div>
+        ) : isLoading ? (
+          <Loading label={t("common.loading")} />
+        ) : !customers.length ? (
+          <div className="bg-surface border border-line rounded-md">
+            <EmptyState icon={<Icon name="customers" className="w-5 h-5" />} title={t("reports.noResults")} />
+          </div>
+        ) : (
+          <TableShell>
+            <Table className="min-w-[1240px]">
+              <THead>
+                <tr>
+                  <TH width="3rem" align="end">#</TH>
+                  <TH>{t("common.name")}</TH>
+                  <TH width="9rem">{t("common.phone")}</TH>
+                  <TH width="8rem">{t("customers.city")}</TH>
+                  <TH width="7rem">{t("reports.registrationDate")}</TH>
+                  <TH width="7rem">{t("reports.installationDate")}</TH>
+                  <TH width="9rem">{t("customers.maintenanceCycle")}</TH>
+                  <TH width="7rem">{t("reports.lastMaintenance")}</TH>
+                  <TH width="7rem">{t("reports.nextMaintenance")}</TH>
+                  <TH width="9rem">{t("reports.upcomingMaintenance")}</TH>
+                  <TH width="10rem">{t("reports.maintenanceStatus")}</TH>
+                  <TH width="4rem" />
+                </tr>
+              </THead>
+              <TBody>
+                {customers.map((c: any, i: number) => (
+                  <TR key={c.id}>
+                    <TD align="end" className="text-fg-muted text-2xs tabular-nums">{i + 1}</TD>
+                    <TD className="font-medium">{c.name}</TD>
+                    <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
+                    <TD className="text-fg-secondary">{c.address?.city || "—"}</TD>
+                    <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                      <span dir="ltr">{formatGregorianDate(c.createdAt)}</span>
+                    </TD>
+                    <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                      <span dir="ltr">{c.installationDate ? formatGregorianDate(c.installationDate) : "—"}</span>
+                    </TD>
+                    <TD className="text-fg-secondary text-2xs">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</TD>
+                    <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                      <span dir="ltr">{c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "—"}</span>
+                    </TD>
+                    <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                      <span dir="ltr">
+                        {(c.nextMaintenanceDate || c.nextMaintenance) ? formatGregorianDate(c.nextMaintenanceDate || c.nextMaintenance) : "—"}
+                      </span>
+                    </TD>
+                    <TD><AlertBadge c={c} isAr={isAr} /></TD>
+                    <TD>
+                      {c.maintenanceStatus ? (
+                        <Badge tone={maintenanceStatusTone(c.maintenanceStatus)} dot>
+                          {maintenanceStatusLabel(c.maintenanceStatus)}
+                        </Badge>
+                      ) : <span className="text-2xs text-fg-muted">—</span>}
+                    </TD>
+                    <TD>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={() => exportCustomerPdf(c)}
+                        title={t("reports.exportCustPdf")}
+                        aria-label={t("reports.exportCustPdf")}
+                      >
+                        <Icon name="download" className="w-4 h-4" />
+                      </Button>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </TableShell>
         )}
-      </div>
       </>}
 
       {/* ── Appointment Reports ── */}
       {tab === "appointments" && <>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">{isAr ? "تقارير المواعيد" : "Appointment Reports"}</h1>
-            <p className="text-sm text-slate-500">
+        <PageHeader
+          title={isAr ? "تقارير المواعيد" : "Appointment Reports"}
+          subtitle={
+            <span className="tabular-nums">
               {isAr
                 ? `${regularAppts.length} عادي | ${urgentAppts.length} عاجل`
                 : `${regularAppts.length} regular | ${urgentAppts.length} urgent`}
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={exportApptPdf} disabled={!allAppts.length || generatingAppts === "pdf"}
-              style={{ backgroundColor: "#000080" }}
-              className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50">
-              {generatingAppts === "pdf" ? t("reports.generating") : `📄 ${t("reports.exportPdf")}`}
-            </button>
-            <button onClick={exportApptExcel} disabled={!allAppts.length || generatingAppts === "excel"}
-              className="bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800 disabled:opacity-50">
-              {generatingAppts === "excel" ? t("reports.generating") : `📊 ${t("reports.exportExcel")}`}
-            </button>
-          </div>
-        </div>
+            </span>
+          }
+          actions={
+            <>
+              <Button variant="secondary" disabled={!allAppts.length} loading={generatingAppts === "pdf"} onClick={exportApptPdf}>
+                <Icon name="download" className="w-3.5 h-3.5" />
+                {t("reports.exportPdf")}
+              </Button>
+              <Button variant="secondary" disabled={!allAppts.length} loading={generatingAppts === "excel"} onClick={exportApptExcel}>
+                <Icon name="download" className="w-3.5 h-3.5" />
+                {t("reports.exportExcel")}
+              </Button>
+            </>
+          }
+        />
 
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
-              <input type="date" lang="en-GB" dir="ltr" value={apptFilters.dateFrom}
-                onChange={e => setApptFilters(f => ({ ...f, dateFrom: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateTo")}</label>
-              <input type="date" lang="en-GB" dir="ltr" value={apptFilters.dateTo}
-                onChange={e => setApptFilters(f => ({ ...f, dateTo: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.status")}</label>
-              <select value={apptFilters.status}
-                onChange={e => setApptFilters(f => ({ ...f, status: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+        <div className="bg-surface border border-line rounded-md">
+          <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label={t("reports.dateFrom")} htmlFor="appt-rep-from">
+              <Input id="appt-rep-from" type="date" lang="en-GB" dir="ltr" value={apptFilters.dateFrom}
+                onChange={e => setApptFilters(f => ({ ...f, dateFrom: e.target.value }))} />
+            </Field>
+            <Field label={t("reports.dateTo")} htmlFor="appt-rep-to">
+              <Input id="appt-rep-to" type="date" lang="en-GB" dir="ltr" value={apptFilters.dateTo}
+                onChange={e => setApptFilters(f => ({ ...f, dateTo: e.target.value }))} />
+            </Field>
+            <Field label={t("common.status")} htmlFor="appt-rep-status">
+              <Select id="appt-rep-status" value={apptFilters.status}
+                onChange={e => setApptFilters(f => ({ ...f, status: e.target.value }))}>
                 <option value="">{t("common.all")}</option>
-                {["SCHEDULED","RESCHEDULED","CANCELLED","PENDING"].map(s => (
-                  <option key={s} value={s}>{s}</option>
+                {["SCHEDULED","RESCHEDULED","CANCELLED","PENDING"].map(sv => (
+                  <option key={sv} value={sv}>{sv}</option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
-          <div className="mt-3 flex justify-end">
-            <button onClick={() => setHasSearchedAppts(true)}
-              style={{ backgroundColor: "#000080" }}
-              className="text-white text-sm px-5 py-2 rounded-lg hover:opacity-90">
-              🔍 {isAr ? "تحميل النتائج" : "Load Results"}
-            </button>
+          <div className="px-3 py-2.5 border-t border-line bg-surface-subtle flex justify-end">
+            <Button variant="primary" onClick={() => setHasSearchedAppts(true)}>
+              <Icon name="search" className="w-3.5 h-3.5" />
+              {isAr ? "تحميل النتائج" : "Load Results"}
+            </Button>
           </div>
         </div>
 
         {!hasSearchedAppts ? (
-          <div className="bg-white rounded-xl shadow-sm">
-            <p className="text-center py-16 text-slate-400">
-              🔍 {isAr ? "طبّق فلاتر البحث لتحميل البيانات" : "Apply search filters to load data"}
-            </p>
+          <div className="bg-surface border border-line rounded-md">
+            <EmptyState
+              icon={<Icon name="search" className="w-5 h-5" />}
+              title={isAr ? "طبّق فلاتر البحث لتحميل البيانات" : "Apply search filters to load data"}
+            />
           </div>
         ) : apptLoading ? (
-          <p className="text-center py-10 text-slate-400">{t("common.loading")}</p>
+          <Loading label={t("common.loading")} />
         ) : (
           <>
-            {/* Regular Appointments */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-blue-50 flex items-center gap-2">
-                <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">
-                  {isAr ? "المواعيد العادية" : "Regular Appointments"} ({regularAppts.length})
+            <TableShell>
+              <div className="px-3 py-2.5 border-b border-line bg-surface-subtle flex items-baseline gap-2 flex-wrap">
+                <span className="text-2xs font-semibold uppercase tracking-wide text-fg">
+                  {isAr ? "المواعيد العادية" : "Regular Appointments"}
+                  <span className="tabular-nums ms-1">({regularAppts.length})</span>
                 </span>
-                <span className="text-xs text-blue-500">{isAr ? "المصدر: الإدارة أو الجدولة" : "Source: Administration or Scheduling"}</span>
+                <span className="text-2xs text-fg-muted">
+                  {isAr ? "المصدر: الإدارة أو الجدولة" : "Source: Administration or Scheduling"}
+                </span>
               </div>
               {regularAppts.length === 0 ? (
-                <p className="text-center py-8 text-slate-400 text-sm">{t("common.noRecords")}</p>
+                <EmptyState icon={<Icon name="appointments" className="w-5 h-5" />} title={t("common.noRecords")} />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b">
-                      <tr>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">#</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("appointments.customer")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.phone")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.date")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("appointments.type")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.status")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "المصدر" : "Source"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {regularAppts.map((a: any, i: number) => (
-                        <tr key={a.id} className="border-b hover:bg-slate-50">
-                          <td className="px-4 py-3 text-slate-400 text-xs">{i + 1}</td>
-                          <td className="px-4 py-3 font-medium">{a.customer?.name || "—"}</td>
-                          <td className="px-4 py-3 text-slate-500">{a.customer?.phone || "—"}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-xs" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</td>
-                          <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{a.status}</span></td>
-                          <td className="px-4 py-3 text-xs text-slate-600">{apptSourceLabel(a.createdByRole)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Table className="min-w-[900px]">
+                  <THead>
+                    <tr>
+                      <TH width="3rem" align="end">#</TH>
+                      <TH>{t("appointments.customer")}</TH>
+                      <TH width="9rem">{t("common.phone")}</TH>
+                      <TH width="7rem">{t("common.date")}</TH>
+                      <TH width="8rem">{t("appointments.type")}</TH>
+                      <TH width="8rem">{t("common.status")}</TH>
+                      <TH width="12rem">{isAr ? "المصدر" : "Source"}</TH>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {regularAppts.map((a: any, i: number) => (
+                      <TR key={a.id}>
+                        <TD align="end" className="text-fg-muted text-2xs tabular-nums">{i + 1}</TD>
+                        <TD className="font-medium">{a.customer?.name || "—"}</TD>
+                        <TD className="text-fg-secondary"><span dir="ltr">{a.customer?.phone || "—"}</span></TD>
+                        <TD className="text-2xs tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                        <TD className="text-fg-secondary text-2xs">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</TD>
+                        <TD><Badge tone="info">{a.status}</Badge></TD>
+                        <TD className="text-fg-secondary text-2xs">{apptSourceLabel(a.createdByRole)}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
               )}
-            </div>
+            </TableShell>
 
-            {/* Urgent Appointments */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b bg-red-50 flex items-center gap-2">
-                <span className="text-xs font-bold text-red-700 uppercase tracking-wide">
-                  🚨 {isAr ? "المواعيد العاجلة" : "Urgent Appointments"} ({urgentAppts.length})
+            <TableShell>
+              <div className="px-3 py-2.5 border-b border-line bg-urgent-bg flex items-baseline gap-2 flex-wrap">
+                <span className="text-2xs font-semibold uppercase tracking-wide text-urgent-fg">
+                  {isAr ? "المواعيد العاجلة" : "Urgent Appointments"}
+                  <span className="tabular-nums ms-1">({urgentAppts.length})</span>
                 </span>
-                <span className="text-xs text-red-400">{isAr ? "المصدر: الإدارة" : "Source: Administration"}</span>
+                <span className="text-2xs text-urgent-fg opacity-75">
+                  {isAr ? "المصدر: الإدارة" : "Source: Administration"}
+                </span>
               </div>
               {urgentAppts.length === 0 ? (
-                <p className="text-center py-8 text-slate-400 text-sm">{t("common.noRecords")}</p>
+                <EmptyState icon={<Icon name="urgent" className="w-5 h-5" />} title={t("common.noRecords")} />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b">
-                      <tr>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">#</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "موقع الزيارة" : "Visit Location"}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.date")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("appointments.type")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.status")}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "المصدر" : "Source"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {urgentAppts.map((a: any, i: number) => {
-                        let loc: any = {};
-                        try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
-                        const locationText = [loc.city, loc.district, loc.street].filter(Boolean).join("، ") || "—";
-                        return (
-                          <tr key={a.id} className="border-b hover:bg-slate-50">
-                            <td className="px-4 py-3 text-slate-400 text-xs">{i + 1}</td>
-                            <td className="px-4 py-3 text-slate-700">{locationText}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-xs" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
-                            <td className="px-4 py-3 text-xs text-slate-500">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</td>
-                            <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700">{a.status}</span></td>
-                            <td className="px-4 py-3 text-xs text-slate-600">{apptSourceLabel(a.createdByRole)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <Table className="min-w-[900px]">
+                  <THead>
+                    <tr>
+                      <TH width="3rem" align="end">#</TH>
+                      <TH>{isAr ? "موقع الزيارة" : "Visit Location"}</TH>
+                      <TH width="7rem">{t("common.date")}</TH>
+                      <TH width="8rem">{t("appointments.type")}</TH>
+                      <TH width="8rem">{t("common.status")}</TH>
+                      <TH width="12rem">{isAr ? "المصدر" : "Source"}</TH>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {urgentAppts.map((a: any, i: number) => {
+                      let loc: any = {};
+                      try { loc = a.urgentLocation ? JSON.parse(a.urgentLocation) : {}; } catch {}
+                      const locationText = [loc.city, loc.district, loc.street].filter(Boolean).join("، ") || "—";
+                      return (
+                        <TR key={a.id}>
+                          <TD align="end" className="text-fg-muted text-2xs tabular-nums">{i + 1}</TD>
+                          <TD>{locationText}</TD>
+                          <TD className="text-2xs tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                          <TD className="text-fg-secondary text-2xs">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</TD>
+                          <TD><Badge tone="urgent">{a.status}</Badge></TD>
+                          <TD className="text-fg-secondary text-2xs">{apptSourceLabel(a.createdByRole)}</TD>
+                        </TR>
+                      );
+                    })}
+                  </TBody>
+                </Table>
               )}
-            </div>
+            </TableShell>
           </>
         )}
       </>}
 
       {/* ── Sales Reports ── */}
       {tab === "sales" && (
-        <div className="bg-white rounded-xl shadow-sm p-5" dir={isAr ? "rtl" : "ltr"}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">📊</span>
-            <h3 className="font-bold text-slate-800 text-base">{isAr ? "تقارير المبيعات" : "Sales Reports"}</h3>
+        <div className="bg-surface border border-line rounded-md" dir={isAr ? "rtl" : "ltr"}>
+          <div className="px-4 py-3 border-b border-line">
+            <h3 className="text-sm font-semibold text-fg">{isAr ? "تقارير المبيعات" : "Sales Reports"}</h3>
+            <p className="text-2xs text-fg-muted mt-0.5">
+              {isAr
+                ? "تُنشأ تلقائياً بعد انتهاء كل أسبوع أو شهر — يبدأ العد التنازلي بعد كل تنزيل"
+                : "Generated automatically after each week or month — countdown starts after each download"}
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mb-4">
-            {isAr
-              ? "تُنشأ تلقائياً بعد انتهاء كل أسبوع أو شهر — يبدأ العد التنازلي بعد كل تنزيل"
-              : "Generated automatically after each week or month — countdown starts after each download"}
-          </p>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {([
               { period: "weekly"  as const, format: "pdf"   as const, label: isAr ? "تقرير المبيعات الأسبوعي (PDF)" : "Weekly Sales Report (PDF)" },
               { period: "monthly" as const, format: "pdf"   as const, label: isAr ? "تقرير المبيعات الشهري (PDF)" : "Monthly Sales Report (PDF)" },
@@ -964,29 +980,31 @@ tr:nth-child(even){background:#f9f9f9}
               const rem = salesRemaining(period, period, ticker);
               const locked = rem > 0;
               const isGen = generatingSales === key;
-              const icon = format === "pdf" ? "📄" : "📊";
               const d = Math.floor(rem / 86400000);
               const h = Math.floor((rem % 86400000) / 3600000);
               const m = Math.floor((rem % 3600000) / 60000);
-              const s = Math.floor((rem % 60000) / 1000);
+              const sec = Math.floor((rem % 60000) / 1000);
 
+              // Locked and ready are the same tile shape -- only the state line
+              // changes, so the grid does not reflow as a countdown expires.
               if (locked) {
                 return (
-                  <div key={key} className="rounded-xl border-2 border-slate-200 bg-slate-50 p-3 min-h-[96px] flex flex-col justify-between select-none" style={{ opacity: 0.58 }}>
+                  <div
+                    key={key}
+                    className="rounded-md border border-line bg-surface-subtle p-3 min-h-[88px] flex flex-col justify-between select-none"
+                  >
                     <div className="flex items-start gap-2">
-                      <span className="text-base flex-shrink-0">{icon}</span>
-                      <span className="text-xs font-semibold text-slate-600 leading-snug">{label}</span>
+                      <Icon name="download" className="w-4 h-4 text-fg-muted flex-shrink-0 mt-0.5" />
+                      <span className="text-xs font-medium text-fg-secondary leading-snug">{label}</span>
                     </div>
-                    <div className="mt-2 space-y-0.5">
-                      <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
-                        <span>🔒</span><span>{isAr ? "متاح خلال" : "Available in"}</span>
-                      </div>
-                      <div className="text-xs font-mono font-bold text-slate-600 tabular-nums leading-none">
+                    <div className="mt-2">
+                      <p className="text-2xs text-fg-muted">{isAr ? "متاح خلال" : "Available in"}</p>
+                      <p className="text-xs font-mono font-semibold text-fg-secondary tabular-nums leading-none mt-0.5">
                         {d > 0 && <span>{d}{isAr ? " يوم " : "d "}</span>}
                         <span>{h}{isAr ? " س " : "h "}</span>
                         <span>{m}{isAr ? " د " : "m "}</span>
-                        <span>{s}{isAr ? " ث" : "s"}</span>
-                      </div>
+                        <span>{sec}{isAr ? " ث" : "s"}</span>
+                      </p>
                     </div>
                   </div>
                 );
@@ -995,22 +1013,23 @@ tr:nth-child(even){background:#f9f9f9}
               return (
                 <button
                   key={key}
+                  type="button"
                   onClick={() => generateSalesReport(period, format)}
                   disabled={generatingSales !== null}
-                  className={`rounded-xl border-2 p-3 min-h-[96px] flex flex-col justify-between transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed text-white ${
-                    format === "pdf"
-                      ? "bg-[#000080] border-[#000060] hover:bg-[#0000a0]"
-                      : "bg-green-700 border-green-800 hover:bg-green-800"
-                  }`}
+                  className={cx(
+                    "rounded-md border border-line bg-surface p-3 min-h-[88px] flex flex-col justify-between text-start",
+                    "transition-colors hover:bg-surface-hover hover:border-accent",
+                    "disabled:opacity-60 disabled:pointer-events-none"
+                  )}
                 >
                   <div className="flex items-start gap-2">
-                    <span className="text-base flex-shrink-0">{icon}</span>
-                    <span className="text-xs font-semibold leading-snug">{label}</span>
+                    <Icon name="download" className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                    <span className="text-xs font-medium text-fg leading-snug">{label}</span>
                   </div>
                   <div className="mt-2">
                     {isGen
-                      ? <span className="text-[10px] opacity-80 animate-pulse">⏳ {isAr ? "جاري التحميل..." : "Generating..."}</span>
-                      : <span className="text-[10px] opacity-90 font-semibold">✅ {isAr ? "جاهز للتحميل" : "Ready to download"}</span>
+                      ? <span className="text-2xs text-fg-muted animate-pulse">{isAr ? "جاري التحميل..." : "Generating..."}</span>
+                      : <span className="text-2xs text-success-fg font-medium">{isAr ? "جاهز للتحميل" : "Ready to download"}</span>
                     }
                   </div>
                 </button>

@@ -39,19 +39,25 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
     const isAr = i18n.language === "ar";
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gray-50 text-center px-6">
+      <div className="h-screen w-screen flex items-center justify-center bg-canvas text-center px-6">
         <div className="max-w-sm">
-          <h1 className="text-lg font-semibold text-gray-800 mb-2">
+          <div className="w-11 h-11 rounded-full bg-danger-bg border border-danger-border text-danger-fg flex items-center justify-center mx-auto mb-4" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.3 3.9 2.4 17.4A2 2 0 0 0 4.1 20.4h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+              <path d="M12 9v4.5M12 17h.01" />
+            </svg>
+          </div>
+          <h1 className="text-lg font-semibold text-fg mb-2">
             {isAr ? "حدث خطأ غير متوقع" : "Something went wrong"}
           </h1>
-          <p className="text-sm text-gray-500 mb-5">
+          <p className="text-sm text-fg-muted mb-5">
             {isAr
               ? "حدث خطأ غير متوقع في التطبيق. لم تُفقد بياناتك — حاول إعادة التحميل."
               : "The app hit an unexpected error. Your data wasn't lost — try reloading."}
           </p>
           <button
             onClick={this.handleReload}
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="bg-accent text-accent-fg px-4 h-control rounded-md text-sm font-medium hover:bg-accent-hover transition-colors"
           >
             {isAr ? "إعادة التحميل" : "Reload"}
           </button>

@@ -4,8 +4,49 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pure Home</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- No webfont request: the app ships offline, and a blocked or slow Google
+       Fonts fetch used to leave the whole UI in a fallback face mid-session.
+       The stack in src/ui/tokens.css uses locally installed faces instead. -->
+  <script>
+    /*
+     * Display bootstrap -- runs BEFORE the first paint and before the React
+     * bundle loads, so the window never flashes the wrong shell on its way to
+     * the user's real theme (Light is the Pure Home default; a user who saved
+     * Dark must not see a light frame first).
+     *
+     * It only MIRRORS what the app already persists; it is not a second source
+     * of truth. It reads the same "wfm-settings" entry the settings store
+     * writes and the same "i18nextLng" entry i18next writes, then re-applies
+     * the identical data-* attributes applySettings() sets moments later. A
+     * saved preference therefore still wins -- this just stops the interim
+     * frame from being wrong. Everything is wrapped in try/catch so a private
+     * window or blocked storage degrades to the defaults rather than breaking
+     * startup.
+     */
+    (function () {
+      var root = document.documentElement;
+      var s = {};
+      try {
+        var raw = localStorage.getItem("wfm-settings");
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          s = (parsed && parsed.state && parsed.state.settings) || {};
+        }
+      } catch (e) { /* storage unavailable -- fall through to defaults */ }
+
+      root.setAttribute("data-theme", s.theme || "light");
+      root.setAttribute("data-font", s.fontSize || "medium");
+      root.setAttribute("data-scale", s.interfaceScale || "normal");
+      root.setAttribute("data-bg", s.background || "day");
+      root.setAttribute("data-contrast", s.highContrast ? "high" : "normal");
+      root.setAttribute("data-readability", s.improvedReadability ? "on" : "off");
+
+      var lng = "ar";
+      try { lng = localStorage.getItem("i18nextLng") || "ar"; } catch (e) {}
+      root.setAttribute("dir", lng === "ar" ? "rtl" : "ltr");
+      root.setAttribute("lang", lng);
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

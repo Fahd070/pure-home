@@ -2,6 +2,10 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../store/appStore";
 import axios from "axios";
+import { Button } from "../ui/Button";
+import { Input, Field } from "../ui/Field";
+import { Callout } from "../ui/Feedback";
+import { Icon } from "../ui/icons";
 
 export default function ServerSetup() {
   const { serverUrl, setServerUrl } = useAppStore();
@@ -27,56 +31,65 @@ export default function ServerSetup() {
   }
 
   return (
-    <div className="h-full flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <button onClick={() => navigate("/")} className="text-slate-400 hover:text-slate-600 text-sm mb-4 flex items-center gap-1">
-          ← Back / رجوع
+    <div className="h-full flex items-center justify-center bg-canvas p-6 overflow-y-auto">
+      <div className="bg-surface border border-line rounded-lg shadow-md p-7 w-full max-w-md">
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="text-fg-muted hover:text-fg text-2xs mb-5 inline-flex items-center gap-1.5 transition-colors"
+        >
+          <Icon name="chevronStart" className="w-3.5 h-3.5 rtl:rotate-180" />
+          Back / رجوع
         </button>
 
-        <h1 className="text-xl font-bold mb-1">Server Setup / إعداد الخادم</h1>
+        <h1 className="text-base font-semibold text-fg mb-4">Server Setup / إعداد الخادم</h1>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-5 text-xs text-slate-600 space-y-1">
-          <p className="font-semibold text-slate-700">Backend connection:</p>
+        <div className="bg-surface-subtle border border-line-subtle rounded-md p-3 mb-5 text-2xs text-fg-secondary space-y-1">
+          <p className="font-semibold text-fg">Backend connection:</p>
           <p>All departments connect to the shared cloud backend.</p>
-          <p>Default: <code className="bg-slate-100 px-1 rounded">https://pure-home-singapore.onrender.com</code></p>
+          <p>
+            Default: <code className="font-mono bg-surface-active px-1 py-0.5 rounded-sm">https://pure-home-singapore.onrender.com</code>
+          </p>
           <p>Click <strong>Test &amp; Save</strong> to verify connectivity. Green = connected.</p>
-          <div className="border-t border-slate-200 pt-1 mt-1">
-            <p className="font-semibold text-slate-700">إعداد الخادم:</p>
+          <div className="border-t border-line-subtle pt-1.5 mt-1.5" dir="rtl">
+            <p className="font-semibold text-fg">إعداد الخادم:</p>
             <p>جميع الأقسام متصلة بالخادم المشترك على الإنترنت.</p>
             <p>لا تحتاج لتغييره إلا بتعليمات من المسؤول.</p>
           </div>
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Server URL</label>
-            <input
+          <Field
+            label="Server URL"
+            htmlFor="server-url"
+            hint={<>This PC is currently using: <span className="font-mono text-fg-secondary">{serverUrl}</span></>}
+          >
+            <Input
+              id="server-url"
               value={url}
               onChange={e => { setUrl(e.target.value); setStatus("idle"); setError(""); }}
               placeholder="https://pure-home-singapore.onrender.com"
-              className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="font-mono"
+              invalid={status === "error"}
             />
-            <p className="text-slate-400 text-xs mt-1">
-              This PC is currently using: <span className="font-mono text-slate-600">{serverUrl}</span>
-            </p>
-          </div>
+          </Field>
 
-          {status === "ok" && (
-            <div className="flex items-center gap-2 text-green-600 text-sm font-medium">
-              <span>✓</span> Connected — redirecting...
-            </div>
-          )}
-          {status === "error" && <p className="text-red-500 text-sm">{error}</p>}
+          {status === "ok" && <Callout tone="success">Connected — redirecting...</Callout>}
+          {status === "error" && <Callout tone="danger">{error}</Callout>}
 
-          <button
+          <Button
+            variant="primary"
+            block
             onClick={handleConnect}
-            disabled={testing || !url.trim()}
-            className="w-full bg-slate-800 text-white py-2 rounded-lg font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors"
+            disabled={!url.trim()}
+            loading={testing}
           >
             {testing ? "Testing connection..." : "Test & Save"}
-          </button>
+          </Button>
 
-          <button
+          <Button
+            variant="ghost"
+            block
             onClick={() => {
               const trimmed = url.trim().replace(/\/$/, "");
               if (!/^https?:\/\/.+/.test(trimmed)) {
@@ -87,10 +100,9 @@ export default function ServerSetup() {
               setServerUrl(trimmed);
               navigate("/");
             }}
-            className="w-full text-slate-500 text-sm hover:text-slate-700 transition-colors"
           >
             Save without testing
-          </button>
+          </Button>
         </div>
       </div>
     </div>

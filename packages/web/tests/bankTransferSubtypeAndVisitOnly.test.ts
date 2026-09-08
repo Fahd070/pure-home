@@ -57,7 +57,7 @@ describe('Part B: Visit Only (urgent-visits form)', () => {
     expect(urgentSrc).toMatch(/if \(r\.serviceType === "VISIT_ONLY"\) \{[\s\S]*?amount: "", paymentGroup: "", transferType: ""/);
   });
   it('the payment method and transfer type sections are both hidden when Visit Only is selected', () => {
-    expect(urgentSrc).toMatch(/\{!isVisitOnly && \(\s*<div>\s*<label[^>]*>\{t\("urgentAppts\.paymentMethod"\)/);
+    expect(urgentSrc).toMatch(/\{!isVisitOnly && \(\s*<div>\s*<Label required>\{t\("urgentAppts\.paymentMethod"\)\}<\/Label>/);
     expect(urgentSrc).toMatch(/\{!isVisitOnly && record\.paymentGroup === "BANK_TRANSFER" && \(/);
   });
   it('the amount input is disabled while Visit Only is selected', () => {
@@ -85,7 +85,10 @@ describe('Part C: Bank Transfer subtype (urgent-visits form)', () => {
   });
   it('the Transfer Type section only renders when paymentGroup is Bank Transfer', () => {
     expect(urgentSrc).toMatch(/\{!isVisitOnly && record\.paymentGroup === "BANK_TRANSFER" && \(/);
-    expect(urgentSrc).toMatch(/\(\["COMMERCIAL","PERSONAL"\] as Array<"COMMERCIAL" \| "PERSONAL">\)\.map\(tt =>/);
+    // The two subtypes are now one exclusive Segmented control rather than
+    // two independently-styled buttons -- same two options, same exclusivity.
+    expect(urgentSrc).toMatch(/Segmented<"COMMERCIAL" \| "PERSONAL">/);
+    expect(urgentSrc).toMatch(/options=\{\["COMMERCIAL", "PERSONAL"\]\}/);
   });
   it('Cash never requires a transfer subtype in resolvePaymentMethod()', () => {
     expect(urgentSrc).toMatch(/if \(record\.paymentGroup === "CASH"\) return "CASH";/);
@@ -105,7 +108,7 @@ describe('Part D: Bank Transfer subtype in the normal Technician completion flow
     expect(taskDetailSrc).toMatch(/const paymentMethodValid = completeForm\.paymentGroup === "CASH" \|\| !!completeForm\.transferType;/);
   });
   it('selecting a payment group always clears transferType (must be re-chosen every time)', () => {
-    expect(taskDetailSrc).toMatch(/onClick=\{\(\) => setCompleteForm\(f => \(\{ \.\.\.f, paymentGroup: pg, transferType: "" \}\)\)\}/);
+    expect(taskDetailSrc).toMatch(/onChange=\{pg => setCompleteForm\(f => \(\{ \.\.\.f, paymentGroup: pg, transferType: "" \}\)\)\}/);
   });
   it('the Transfer Type section only renders when paymentGroup is Bank Transfer', () => {
     expect(taskDetailSrc).toMatch(/\{completeForm\.paymentGroup === "BANK_TRANSFER" && \(/);

@@ -97,7 +97,7 @@ describe('Part A: Admin Technicians detail modal shows full completion details',
 describe('Part B: Urgent completion form renders a required Technician Name field', () => {
   it('15. renders the Technician Name field with the correct label', () => {
     expect(technicianUrgentSrc).toMatch(/t\("tasks\.technicianName"\)/);
-    expect(technicianUrgentSrc).toMatch(/type="text" required value=\{record\.technicianName\}/);
+    expect(technicianUrgentSrc).toMatch(/type="text" required[\s\S]{0,60}value=\{record\.technicianName\}/);
   });
   it('16. the field is required and gates form submission via isRecordValid', () => {
     expect(technicianUrgentSrc).toMatch(/const technicianNameValid = !!trimmedTechnicianName && FIRST_NAME_RE\.test\(trimmedTechnicianName\);/);
@@ -109,7 +109,10 @@ describe('Part B: Urgent completion form renders a required Technician Name fiel
     expect(technicianUrgentSrc).toMatch(/technicianName: firstNameOf\(user\?\.name\)/);
   });
   it('18. missing/invalid name blocks the submit button client-side (disabled on !isRecordValid)', () => {
-    expect(technicianUrgentSrc).toMatch(/disabled=\{submitMutation\.isPending \|\| !isRecordValid\}/);
+    // The shared Button sets disabled={disabled || loading}, so an invalid
+    // form and an in-flight submit both still block the click.
+    expect(technicianUrgentSrc).toMatch(/disabled=\{!isRecordValid\}/);
+    expect(technicianUrgentSrc).toMatch(/loading=\{submitMutation\.isPending\}/);
   });
   it('19-20-21-22. reuses Modification #13\'s exact FIRST_NAME_RE/firstNameOf rather than a second validator', () => {
     expect(technicianUrgentSrc).toMatch(/import \{ FIRST_NAME_RE, firstNameOf \} from "\.\/TaskDetail";/);

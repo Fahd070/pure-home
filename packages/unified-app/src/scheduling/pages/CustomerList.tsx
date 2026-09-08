@@ -7,6 +7,14 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import { dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Input, Select, Textarea, Field } from "../../ui/Field";
+import { Badge, Tone } from "../../ui/Badge";
+import { Toolbar } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { Modal } from "../../ui/Modal";
+import { Icon } from "../../ui/icons";
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -16,38 +24,37 @@ function formatCycle(cycle: string, freq: number, t: any) {
   return cycle;
 }
 
+/**
+ * Maintenance countdown. The three states used to be told apart by a coloured
+ * emoji circle inside a coloured pill -- the same information encoded twice,
+ * and the emoji rendered at a different size on every machine. One toned badge
+ * with a dot carries it now, and the dot is not the only cue: the label itself
+ * says overdue / due today / due in N.
+ */
 function MaintenanceBadge({ c, t }: { c: any; t: any }) {
-  if (c.alertLevel === "overdue") return (
-    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-      🔴 {t("countdown.overdueBy", { days: c.overdueCount })}
-    </span>
-  );
+  if (c.alertLevel === "overdue") {
+    return <Badge tone="danger" dot>{t("countdown.overdueBy", { days: c.overdueCount })}</Badge>;
+  }
   if (c.alertLevel === "soon") {
     const label = c.daysUntil === 0 ? t("countdown.dueToday") : c.daysUntil === 1 ? t("countdown.dueTomorrow") : t("countdown.dueIn", { days: c.daysUntil });
-    return (
-      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-        🟡 {label}
-      </span>
-    );
+    return <Badge tone="warning" dot>{label}</Badge>;
   }
-  if (c.daysUntil !== null) return (
-    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-      🟢 {t("countdown.dueIn", { days: c.daysUntil })}
-    </span>
-  );
+  if (c.daysUntil !== null) {
+    return <Badge tone="success" dot>{t("countdown.dueIn", { days: c.daysUntil })}</Badge>;
+  }
   return null;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  SCHEDULED: "bg-blue-100 text-blue-700",
-  RESCHEDULED: "bg-yellow-100 text-yellow-700",
-  CANCELLED: "bg-red-100 text-red-700",
-  PENDING: "bg-slate-100 text-slate-600",
-  COMPLETED: "bg-green-100 text-green-700",
-  IN_PROGRESS: "bg-orange-100 text-orange-700",
-  POSTPONED: "bg-purple-100 text-purple-700",
-  APPROVED: "bg-teal-100 text-teal-700",
-  PENDING_APPROVAL: "bg-slate-100 text-slate-600",
+const STATUS_TONES: Record<string, Tone> = {
+  SCHEDULED: "info",
+  RESCHEDULED: "warning",
+  CANCELLED: "danger",
+  PENDING: "neutral",
+  COMPLETED: "success",
+  IN_PROGRESS: "progress",
+  POSTPONED: "pending",
+  APPROVED: "accent",
+  PENDING_APPROVAL: "neutral",
 };
 
 function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClose: () => void; onSuccess: () => void }) {
@@ -80,43 +87,40 @@ function ScheduleModal({ customer, onClose, onSuccess }: { customer: any; onClos
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl space-y-4">
-        <h3 className="font-semibold text-slate-800">
-          {t("scheduling.scheduleMaintenance")} — {customer.name}
-        </h3>
+    <Modal
+      open
+      onClose={onClose}
+      closeOnBackdrop={false}
+      size="sm"
+      title={t("scheduling.scheduleMaintenance")}
+      description={customer.name}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" disabled={!scheduledDate} loading={schedule.isPending} onClick={() => schedule.mutate()}>
+            {t("scheduling.scheduleMaintenance")}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
         <PreviousMaintenanceNoteBox note={prevNote} />
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("appointments.type")}</label>
-          <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm">
+        <Field label={t("appointments.type")} htmlFor="sched-type">
+          <Select id="sched-type" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
             <option value="MAINTENANCE">{t("appointments.maintenance")}</option>
             <option value="INSTALLATION">{t("appointments.installation")}</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("common.date")} *</label>
-          <input type="date" lang="en-GB" dir="ltr" value={form.date}
-            onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("common.notes")}</label>
-          <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3}
-            className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none" />
-        </div>
-        <div className="flex gap-3 pt-1">
-          <button onClick={() => schedule.mutate()} disabled={!scheduledDate || schedule.isPending}
-            style={{ backgroundColor: "#008000" }}
-            className="flex-1 text-white py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-            {schedule.isPending ? t("common.loading") : t("scheduling.scheduleMaintenance")}
-          </button>
-          <button onClick={onClose} className="flex-1 border py-2 rounded-lg text-sm hover:bg-slate-50">
-            {t("common.cancel")}
-          </button>
-        </div>
+          </Select>
+        </Field>
+        <Field label={t("common.date")} htmlFor="sched-date" required>
+          <Input id="sched-date" type="date" lang="en-GB" dir="ltr" value={form.date}
+            onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+        </Field>
+        <Field label={t("common.notes")} htmlFor="sched-notes">
+          <Textarea id="sched-notes" rows={3} value={form.notes}
+            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+        </Field>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -156,60 +160,55 @@ export function HistoryModal({ customer, onClose, apiClient = api }: { customer:
     return "appointments.pending";
   }
 
-  function apptStatusColor(a: any) {
-    if (a.isUrgent && a.urgentVisitRecord) return STATUS_COLORS.COMPLETED;
-    return STATUS_COLORS[a.workStatus || a.status] || "bg-slate-100 text-slate-600";
+  function apptStatusTone(a: any): Tone {
+    if (a.isUrgent && a.urgentVisitRecord) return STATUS_TONES.COMPLETED;
+    return STATUS_TONES[a.workStatus || a.status] || "neutral";
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-slate-800">
-              {t("scheduling.maintenanceHistory")} — {customer.name}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {customer.secondaryPhone ? `${t("customers.primaryPhone")}: ${customer.phone}` : customer.phone}
-              {customer.secondaryPhone && <span className="ms-2">{t("customers.secondaryPhone")}: {customer.secondaryPhone}</span>}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
-        </div>
-
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      className="max-h-[88vh]"
+      title={`${t("scheduling.maintenanceHistory")} — ${customer.name}`}
+      description={
+        <>
+          <span dir="ltr">{customer.secondaryPhone ? `${t("customers.primaryPhone")}: ${customer.phone}` : customer.phone}</span>
+          {customer.secondaryPhone && <span className="ms-2" dir="ltr">{t("customers.secondaryPhone")}: {customer.secondaryPhone}</span>}
+        </>
+      }
+    >
+      <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-slate-50 rounded-lg p-3">
-            <p className="text-xs text-slate-500 mb-1">{t("scheduling.lastMaintenance")}</p>
-            <p className="text-sm font-medium">
-              {lastMaint
-                ? formatGregorianDate(lastMaint.scheduledDate)
-                : t("scheduling.noLast")}
+          <div className="bg-surface-subtle border border-line-subtle rounded-md p-3">
+            <p className="text-2xs uppercase tracking-wide text-fg-muted mb-1">{t("scheduling.lastMaintenance")}</p>
+            <p className="text-[0.8125rem] font-medium text-fg tabular-nums" dir="ltr">
+              {lastMaint ? formatGregorianDate(lastMaint.scheduledDate) : t("scheduling.noLast")}
             </p>
           </div>
-          <div className="bg-slate-50 rounded-lg p-3">
-            <p className="text-xs text-slate-500 mb-1">{t("scheduling.nextMaintenance")}</p>
-            <p className="text-sm font-medium">
-              {nextMaintenance
-                ? formatGregorianDate(nextMaintenance)
-                : t("scheduling.noNext")}
+          <div className="bg-surface-subtle border border-line-subtle rounded-md p-3">
+            <p className="text-2xs uppercase tracking-wide text-fg-muted mb-1">{t("scheduling.nextMaintenance")}</p>
+            <p className="text-[0.8125rem] font-medium text-fg tabular-nums" dir="ltr">
+              {nextMaintenance ? formatGregorianDate(nextMaintenance) : t("scheduling.noNext")}
             </p>
           </div>
         </div>
 
         {customer.previousServiceType && (
-          <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
-            <p className="text-xs text-slate-500 mb-1 font-medium">{t("customers.previousService")}</p>
+          <div className="bg-surface-subtle border border-line-subtle rounded-md p-3 space-y-1 text-[0.8125rem]">
+            <p className="text-2xs uppercase tracking-wide text-fg-muted mb-1">{t("customers.previousService")}</p>
             <p>
-              <span className="text-slate-400">{t("customers.previousService")}: </span>
+              <span className="text-fg-muted">{t("customers.previousService")}: </span>
               {customer.previousServiceType === "INSTALLATION" ? t("customers.previousInstallation") : t("customers.previousMaintenance")}
             </p>
             <p>
-              <span className="text-slate-400">{t("customers.previousServiceDate")}: </span>
-              <span dir="ltr">{formatGregorianDate(customer.previousServiceDate)}</span>
+              <span className="text-fg-muted">{t("customers.previousServiceDate")}: </span>
+              <span dir="ltr" className="tabular-nums">{formatGregorianDate(customer.previousServiceDate)}</span>
             </p>
             {customer.previousServiceNote && (
               <p>
-                <span className="text-slate-400">{t("customers.previousServiceNote")}: </span>
+                <span className="text-fg-muted">{t("customers.previousServiceNote")}: </span>
                 {customer.previousServiceNote}
               </p>
             )}
@@ -217,82 +216,87 @@ export function HistoryModal({ customer, onClose, apiClient = api }: { customer:
         )}
 
         {isLoading ? (
-          <p className="text-center py-6 text-slate-400">{t("common.loading")}</p>
+          <Loading label={t("common.loading")} />
         ) : !appointments.length ? (
-          <p className="text-center py-6 text-slate-400">{t("scheduling.noHistory")}</p>
+          <EmptyState icon={<Icon name="appointments" className="w-5 h-5" />} title={t("scheduling.noHistory")} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b">
+          <div className="border border-line rounded-md overflow-hidden">
+            <Table>
+              <THead>
                 <tr>
-                  <th className="text-start px-3 py-2">{t("common.date")}</th>
-                  <th className="text-start px-3 py-2">{t("appointments.type")}</th>
-                  <th className="text-start px-3 py-2">{t("common.status")}</th>
-                  <th className="text-start px-3 py-2">{t("appointments.technician")}</th>
-                  <th className="text-start px-3 py-2">{t("common.actions")}</th>
+                  <TH width="6.5rem">{t("common.date")}</TH>
+                  <TH>{t("appointments.type")}</TH>
+                  <TH width="8rem">{t("common.status")}</TH>
+                  <TH>{t("appointments.technician")}</TH>
+                  <TH width="7rem">{t("common.actions")}</TH>
                 </tr>
-              </thead>
-              <tbody>
+              </THead>
+              <TBody>
                 {appointments.map((a: any) => (
                   <React.Fragment key={a.id}>
-                    <tr className="border-b hover:bg-slate-50">
-                      <td className="px-3 py-2 whitespace-nowrap" dir="ltr">
-                        {formatGregorianDate(a.scheduledDate)}
-                      </td>
-                      <td className="px-3 py-2">
+                    <tr className="border-b border-line-subtle hover:bg-surface-hover transition-colors">
+                      <TD className="tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                      <TD>
                         {a.isUrgent
                           ? `${t("urgentAppts.title")} — ${a.urgentVisitRecord?.serviceType === "INSTALLATION" ? t("appointments.installation") : a.urgentVisitRecord?.serviceType === "VISIT_ONLY" ? t("urgentAppts.visitOnly") : t("appointments.maintenance")}`
                           : a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={"text-xs px-2 py-0.5 rounded font-medium " + apptStatusColor(a)}>
-                          {t(apptStatusKey(a))}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{a.urgentVisitRecord?.submittedBy?.name || a.technician?.name || "—"}</td>
-                      <td className="px-3 py-2">
+                      </TD>
+                      <TD><Badge tone={apptStatusTone(a)} dot>{t(apptStatusKey(a))}</Badge></TD>
+                      <TD className="text-fg-secondary">{a.urgentVisitRecord?.submittedBy?.name || a.technician?.name || "—"}</TD>
+                      <TD>
                         {(a.status === "SCHEDULED" || a.status === "RESCHEDULED" || a.status === "PENDING") && (
-                          <button onClick={() => cancelAppt.mutate(a.id)} disabled={cancelAppt.isPending}
-                            className="text-xs text-red-600 hover:underline disabled:opacity-50">
+                          <Button
+                            size="sm" variant="ghost"
+                            onClick={() => cancelAppt.mutate(a.id)}
+                            loading={cancelAppt.isPending}
+                            className="text-danger-fg hover:bg-danger-bg"
+                          >
                             {t("appointments.cancelled")}
-                          </button>
+                          </Button>
                         )}
-                      </td>
+                      </TD>
                     </tr>
+
+                    {/* Detail rows hang off the appointment they belong to, tinted
+                        by what they are: completion state, a forward-looking note,
+                        or the urgent record. */}
                     {a.workStatus === "COMPLETED" && (
-                      <tr className="border-b bg-slate-50/70">
-                        <td colSpan={5} className="px-3 py-1.5 text-xs text-slate-600">
+                      <tr className="border-b border-line-subtle bg-surface-subtle">
+                        <td colSpan={5} className="px-3 py-1.5 text-2xs text-fg-secondary">
                           {a.actualCompletionDate && (
-                            <span className="me-3"><span className="font-medium">{t("tasks.completionDate")}:</span> <span dir="ltr">{formatGregorianDate(a.actualCompletionDate)}</span></span>
+                            <span className="me-3">
+                              <span className="font-medium">{t("tasks.completionDate")}:</span>{" "}
+                              <span dir="ltr" className="tabular-nums">{formatGregorianDate(a.actualCompletionDate)}</span>
+                            </span>
                           )}
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${a.maintenanceConfirmed ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                          <Badge tone={a.maintenanceConfirmed ? "success" : "pending"}>
                             {a.maintenanceConfirmed ? t("appointments.operationConfirmed") : t("appointments.awaitingMaintenanceConfirmation")}
-                          </span>
+                          </Badge>
                         </td>
                       </tr>
                     )}
                     {a.nextMaintenanceNote && (
-                      <tr className="border-b bg-blue-50/50">
-                        <td colSpan={5} className="px-3 py-1.5 text-xs text-blue-700">
+                      <tr className="border-b border-line-subtle bg-info-bg">
+                        <td colSpan={5} className="px-3 py-1.5 text-2xs text-info-fg">
                           <span className="font-medium">{t("tasks.nextMaintenanceNote")}:</span> {a.nextMaintenanceNote}
                         </td>
                       </tr>
                     )}
                     {a.isUrgent && a.urgentVisitRecord && (
-                      <tr className="border-b bg-rose-50/50">
-                        <td colSpan={5} className="px-3 py-1.5 text-xs text-rose-700">
+                      <tr className="border-b border-line-subtle bg-urgent-bg">
+                        <td colSpan={5} className="px-3 py-1.5 text-2xs text-urgent-fg">
                           <span className="font-medium">{t("urgentAppts.serviceDetails")}:</span> {a.urgentVisitRecord.serviceDetails || a.urgentVisitRecord.serviceNotes || a.urgentVisitRecord.notes || "—"}
                         </td>
                       </tr>
                     )}
                   </React.Fragment>
                 ))}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -328,66 +332,97 @@ export default function CustomerList() {
     queryFn: () => api.get("/customers", { params: { search, limit: 50, includeSchedule: true } }).then(r => r.data)
   });
 
+  const customers: any[] = data?.data || [];
+
   return (
     <div className="space-y-4">
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.search")}
-        className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+      <Toolbar>
+        <div className="relative w-80 max-w-full">
+          <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t("common.search")}
+            aria-label={t("common.search")}
+            className="ps-8"
+          />
+        </div>
+        <Button variant="primary" className="ms-auto" onClick={() => navigate("/scheduling/customers/add")}>
+          <Icon name="add" className="w-3.5 h-3.5" />
+          {t("customers.add")}
+        </Button>
+      </Toolbar>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? (
-          <p className="text-center py-8 text-slate-400">{t("common.loading")}</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b">
+      {isLoading ? (
+        <Loading label={t("common.loading")} />
+      ) : !customers.length ? (
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState icon={<Icon name="customers" className="w-5 h-5" />} title={t("common.noRecords")} />
+        </div>
+      ) : (
+        <TableShell>
+          <Table className="min-w-[900px]">
+            <THead>
               <tr>
-                <th className="text-start px-4 py-3">{t("common.name")}</th>
-                <th className="text-start px-4 py-3">{t("common.phone")}</th>
-                <th className="text-start px-4 py-3">{t("customers.maintenanceCycle")}</th>
-                <th className="text-start px-4 py-3">{t("reports.nextMaintenance")}</th>
-                <th className="text-start px-4 py-3">{t("customers.district")}</th>
-                <th className="text-start px-4 py-3">{t("common.actions")}</th>
+                <TH>{t("common.name")}</TH>
+                <TH width="9rem">{t("common.phone")}</TH>
+                <TH width="10rem">{t("customers.maintenanceCycle")}</TH>
+                <TH width="12rem">{t("reports.nextMaintenance")}</TH>
+                <TH width="9rem">{t("customers.district")}</TH>
+                <TH width="12rem">{t("common.actions")}</TH>
               </tr>
-            </thead>
-            <tbody>
-              {(data?.data || []).map((c: any) => (
-                <tr key={c.id} onClick={() => navigate(`/scheduling/customers/${c.id}`)} className="border-b hover:bg-slate-50 cursor-pointer">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3">{c.phone}</td>
-                  <td className="px-4 py-3 text-green-700 font-medium text-xs">
-                    {formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="space-y-1">
+            </THead>
+            <TBody>
+              {customers.map((c: any) => (
+                <TR key={c.id} onClick={() => navigate(`/scheduling/customers/${c.id}`)}>
+                  <TD className="font-medium">{c.name}</TD>
+                  <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
+                  <TD className="text-fg-secondary text-2xs">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</TD>
+                  <TD>
+                    <div className="flex flex-col items-start gap-1">
                       <MaintenanceBadge c={c} t={t} />
                       {c.nextMaintenance && (
-                        <p className="text-xs text-slate-400" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</p>
+                        <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-4 py-3">{c.address?.district || "—"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button onClick={event => { event.stopPropagation(); setScheduleModal(c); }}
-                        style={{ backgroundColor: "#008000" }}
-                        className="text-white text-xs px-3 py-1.5 rounded-lg hover:opacity-90 font-medium whitespace-nowrap">
-                        📅 {t("scheduling.scheduleMaintenance")}
-                      </button>
-                      <button onClick={event => { event.stopPropagation(); setHistoryModal(c); }}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 whitespace-nowrap">
-                        📋 {t("scheduling.viewHistory")}
-                      </button>
-                      <button onClick={event => { event.stopPropagation(); navigate(`/scheduling/customers/${c.id}/edit`); }}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 whitespace-nowrap">
-                        {t("customers.edit")}
-                      </button>
+                  </TD>
+                  <TD className="text-fg-secondary">{c.address?.district || "—"}</TD>
+                  <TD>
+                    {/* Scheduling is a booking desk, so the schedule action is the
+                        one labelled button; the rest are icons to keep the row
+                        readable at 1280 wide. */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm" variant="primary"
+                        onClick={event => { event.stopPropagation(); setScheduleModal(c); }}
+                      >
+                        <Icon name="calendar" className="w-3.5 h-3.5" />
+                        {t("scheduling.scheduleMaintenance")}
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => { event.stopPropagation(); setHistoryModal(c); }}
+                        title={t("scheduling.viewHistory")}
+                        aria-label={t("scheduling.viewHistory")}
+                      >
+                        <Icon name="messages" className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={event => { event.stopPropagation(); navigate(`/scheduling/customers/${c.id}/edit`); }}
+                        title={t("customers.edit")}
+                        aria-label={t("customers.edit")}
+                      >
+                        <Icon name="edit" className="w-4 h-4" />
+                      </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            </TBody>
+          </Table>
+        </TableShell>
+      )}
 
       {scheduleModal && (
         <ScheduleModal

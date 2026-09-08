@@ -9,6 +9,16 @@ import { HELP } from "../../helpContent";
 import { dateOnlyToApiDate, formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 import { isValidPrimaryPhone } from "../../utils/phone";
 import { fetchAllPages } from "../../utils/fetchAllPages";
+import { Button } from "../../ui/Button";
+import { Input, Field } from "../../ui/Field";
+import { Badge } from "../../ui/Badge";
+import { PageHeader } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { Modal, ConfirmDialog } from "../../ui/Modal";
+import { Segmented } from "../../ui/Segmented";
+import { Icon } from "../../ui/icons";
+import { cx } from "../../ui/cx";
 
 type Tab = "list" | "records";
 
@@ -24,6 +34,9 @@ export default function UrgentAppointments() {
   const socket = useSocket();
   const [tab, setTab] = useState<Tab>("list");
   const [showForm, setShowForm] = useState(false);
+  // Replaces window.confirm(): the native dialog cannot be themed or
+  // translated, and this one deletes related records with it.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [visitDetail, setVisitDetail] = useState<any | null>(null);
 
@@ -151,354 +164,329 @@ export default function UrgentAppointments() {
   // components/Sidebar.tsx), never a localStorage-only counter.
   const outstandingCount = (apptData || []).filter((a: any) => !a.urgentVisitRecord).length;
 
+  /** Label/value row inside the visit-record detail. */
+  const fact = (label: React.ReactNode, value: React.ReactNode) => (
+    <div className="flex gap-2">
+      <span className="text-fg-muted min-w-[120px] flex-shrink-0 text-2xs">{label}:</span>
+      <span className="text-fg-secondary text-2xs break-words min-w-0">{value}</span>
+    </div>
+  );
+
+  const factGroup = (title: React.ReactNode, children: React.ReactNode, className?: string) => (
+    <section>
+      <p className="text-2xs font-semibold uppercase tracking-wide text-fg-muted mb-2">{title}</p>
+      <div className={cx("rounded-md p-3 space-y-2 border", className || "bg-surface-subtle border-line-subtle")}>
+        {children}
+      </div>
+    </section>
+  );
+
+  const urgentInput = (
+    id: string,
+    label: string,
+    key: string,
+    required = false,
+    dir?: "ltr",
+  ) => (
+    <Field label={label} htmlFor={id} required={required}>
+      <Input
+        id={id}
+        required={required}
+        dir={dir}
+        value={(form as any)[key]}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+      />
+    </Field>
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-800">{t("urgentAppts.title")}</h1>
-          {outstandingCount > 0 && (
-            <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-semibold">
-              {isAr ? `${outstandingCount} بانتظار الفني` : `${outstandingCount} awaiting technician`}
-            </span>
-          )}
-        </div>
-        <button onClick={() => setShowForm(v => !v)}
-          style={{ backgroundColor: "#000080" }}
-          className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90">
-          🚨 {t("urgentAppts.newUrgent")}
-        </button>
-      </div>
+      <PageHeader
+        title={t("urgentAppts.title")}
+        subtitle={
+          outstandingCount > 0
+            ? <Badge tone="urgent" dot>{isAr ? `${outstandingCount} بانتظار الفني` : `${outstandingCount} awaiting technician`}</Badge>
+            : undefined
+        }
+        actions={
+          <Button variant={showForm ? "secondary" : "primary"} onClick={() => setShowForm(v => !v)}>
+            <Icon name={showForm ? "close" : "add"} className="w-3.5 h-3.5" />
+            {showForm ? t("common.cancel") : t("urgentAppts.newUrgent")}
+          </Button>
+        }
+      />
 
       {showForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="font-semibold text-slate-700">{t("urgentAppts.newUrgent")}</h2>
+        <div className="bg-surface border border-line rounded-md">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line">
+            <h2 className="text-sm font-semibold text-fg">{t("urgentAppts.newUrgent")}</h2>
             <HelpButton titleAr={HELP["admin.urgentAppointments"].titleAr} contentAr={HELP["admin.urgentAppointments"].contentAr} />
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.date")} *</label>
-              <input type="date" lang="en-GB" dir="ltr" required value={form.date}
-                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              {t("urgentAppts.customerInfo")}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerName")} *</label>
-                <input required value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+          <form onSubmit={handleSubmit}>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Field label={t("common.date")} htmlFor="urgent-date" required>
+                  <Input
+                    id="urgent-date" type="date" lang="en-GB" dir="ltr" required
+                    value={form.date}
+                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                  />
+                </Field>
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.customerPhone")} *</label>
-                <input required dir="ltr" value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <h3 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted mb-2">
+                  {t("urgentAppts.customerInfo")}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {urgentInput("urgent-cust-name", t("urgentAppts.customerName"), "customerName", true)}
+                  {urgentInput("urgent-cust-phone", t("urgentAppts.customerPhone"), "customerPhone", true, "ltr")}
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-1 text-xs font-semibold text-slate-600">
-              {t("urgentAppts.locationInfo")}
-              <HelpButton titleAr={HELP["form.urgentLocation"].titleAr} contentAr={HELP["form.urgentLocation"].contentAr} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.city")} *</label>
-                <input required value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.district")} *</label>
-                <input required value={form.district} onChange={e => setForm(f => ({ ...f, district: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.street")} *</label>
-                <input required value={form.street} onChange={e => setForm(f => ({ ...f, street: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.postalCode")}</label>
-                <input value={form.postalCode} onChange={e => setForm(f => ({ ...f, postalCode: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.buildingNo")}</label>
-                <input value={form.buildingNo} onChange={e => setForm(f => ({ ...f, buildingNo: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.floorNo")}</label>
-                <input value={form.floorNo} onChange={e => setForm(f => ({ ...f, floorNo: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("urgentAppts.apartmentNo")}</label>
-                <input value={form.apartmentNo} onChange={e => setForm(f => ({ ...f, apartmentNo: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.notes")}</label>
-                <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <div className="flex items-center gap-1.5 mb-2">
+                  <h3 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">
+                    {t("urgentAppts.locationInfo")}
+                  </h3>
+                  <HelpButton titleAr={HELP["form.urgentLocation"].titleAr} contentAr={HELP["form.urgentLocation"].contentAr} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {urgentInput("urgent-city", t("urgentAppts.city"), "city", true)}
+                  {urgentInput("urgent-district", t("urgentAppts.district"), "district", true)}
+                  {urgentInput("urgent-street", t("urgentAppts.street"), "street", true)}
+                  {urgentInput("urgent-postal", t("urgentAppts.postalCode"), "postalCode")}
+                  {urgentInput("urgent-building", t("urgentAppts.buildingNo"), "buildingNo")}
+                  {urgentInput("urgent-floor", t("urgentAppts.floorNo"), "floorNo")}
+                  {urgentInput("urgent-apartment", t("urgentAppts.apartmentNo"), "apartmentNo")}
+                  {urgentInput("urgent-notes", t("common.notes"), "notes")}
+                </div>
               </div>
             </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-slate-50">{t("common.cancel")}</button>
-              <button type="submit" disabled={createMutation.isPending}
-                style={{ backgroundColor: "#000080" }}
-                className="text-white text-sm px-4 py-2 rounded-lg hover:opacity-90 disabled:opacity-50">
-                {createMutation.isPending ? "..." : t("urgentAppts.sendToTech")}
-              </button>
+
+            <div className="px-4 py-2.5 border-t border-line bg-surface-subtle flex gap-2 justify-end">
+              <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>{t("common.cancel")}</Button>
+              <Button type="submit" variant="primary" loading={createMutation.isPending}>
+                {t("urgentAppts.sendToTech")}
+              </Button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="flex gap-2 border-b pb-1">
-        {(["list", "records"] as Tab[]).map(t2 => (
-          <button key={t2} onClick={() => setTab(t2)}
-            className={`px-4 py-2 text-sm rounded-t-lg font-medium transition-colors ${tab === t2 ? "bg-white border border-b-white text-slate-800" : "text-slate-500 hover:text-slate-700"}`}>
-            {t2 === "list" ? (isAr ? "المواعيد العاجلة" : "Urgent Appointments") : (isAr ? "سجلات الزيارات" : "Visit Records")}
-          </button>
-        ))}
-      </div>
+      {/* Explicit generic: without it T widens to string (the labels record is
+          keyed by string), so onChange could not be handed setTab. */}
+      <Segmented<Tab>
+        fullWidth={false}
+        value={tab}
+        options={["list", "records"]}
+        labels={{
+          list: isAr ? "المواعيد العاجلة" : "Urgent Appointments",
+          records: isAr ? "سجلات الزيارات" : "Visit Records",
+        }}
+        onChange={setTab}
+        ariaLabel={t("urgentAppts.title")}
+      />
 
       {tab === "list" && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          {apptLoading ? (
-            <p className="text-center py-10 text-slate-400">{t("common.loading")}</p>
-          ) : !(apptData?.length) ? (
-            <p className="text-center py-10 text-slate-400">{t("urgentAppts.noRecords")}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[560px]">
-                <thead className="bg-slate-50 border-b">
-                  <tr>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "الموقع" : "Location"}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.date")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.notes")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "الرؤية" : "Visibility"}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {apptData.map((a: any) => (
-                    <tr key={a.id} className="border-b hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-sm">{locationText(a)}</div>
-                        {a.urgentLocation && (() => {
-                          const loc = parseLocation(a.urgentLocation);
-                          if (!loc) return null;
-                          return (
-                            <div className="text-xs text-slate-400 mt-0.5">
-                              {[loc.buildingNo && `${isAr ? "م" : "B"}${loc.buildingNo}`, loc.floorNo && `${isAr ? "ط" : "F"}${loc.floorNo}`, loc.apartmentNo && `${isAr ? "ش" : "A"}${loc.apartmentNo}`].filter(Boolean).join(" | ")}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap" dir="ltr">{formatGregorianDate(a.scheduledDate)}</td>
-                      <td className="px-4 py-3 text-slate-500 text-xs max-w-[180px] truncate">{a.notes || "—"}</td>
-                      <td className="px-4 py-3">
-                        {a.visibleToScheduling ? (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{t("urgentAppts.approved")}</span>
-                        ) : (
-                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">{t("urgentAppts.hidden")}</span>
+        apptLoading ? (
+          <Loading label={t("common.loading")} />
+        ) : !(apptData?.length) ? (
+          <div className="bg-surface border border-line rounded-md">
+            <EmptyState icon={<Icon name="urgent" className="w-5 h-5" />} title={t("urgentAppts.noRecords")} />
+          </div>
+        ) : (
+          <TableShell>
+            <Table className="min-w-[760px]">
+              <THead>
+                <tr>
+                  <TH>{isAr ? "الموقع" : "Location"}</TH>
+                  <TH width="7rem">{t("common.date")}</TH>
+                  <TH>{t("common.notes")}</TH>
+                  <TH width="8rem">{isAr ? "الرؤية" : "Visibility"}</TH>
+                  <TH width="12rem">{t("common.actions")}</TH>
+                </tr>
+              </THead>
+              <TBody>
+                {apptData.map((a: any) => (
+                  <TR key={a.id}>
+                    <TD>
+                      <div className="font-medium text-fg">{locationText(a)}</div>
+                      {a.urgentLocation && (() => {
+                        const loc = parseLocation(a.urgentLocation);
+                        if (!loc) return null;
+                        const parts = [
+                          loc.buildingNo && `${isAr ? "م" : "B"}${loc.buildingNo}`,
+                          loc.floorNo && `${isAr ? "ط" : "F"}${loc.floorNo}`,
+                          loc.apartmentNo && `${isAr ? "ش" : "A"}${loc.apartmentNo}`,
+                        ].filter(Boolean).join(" | ");
+                        return parts ? <div className="text-2xs text-fg-muted mt-0.5">{parts}</div> : null;
+                      })()}
+                    </TD>
+                    <TD className="tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                    <TD className="text-fg-secondary text-2xs max-w-[220px] truncate" title={a.notes || undefined}>
+                      {a.notes || "—"}
+                    </TD>
+                    <TD>
+                      <Badge tone={a.visibleToScheduling ? "success" : "pending"} dot>
+                        {a.visibleToScheduling ? t("urgentAppts.approved") : t("urgentAppts.hidden")}
+                      </Badge>
+                    </TD>
+                    <TD>
+                      <div className="flex gap-1 items-center">
+                        {!a.visibleToScheduling && (
+                          <Button size="sm" variant="primary" loading={approveMutation.isPending} onClick={() => approveMutation.mutate(a.id)}>
+                            {t("urgentAppts.approve")}
+                          </Button>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2 items-center">
-                          {!a.visibleToScheduling && (
-                            <button onClick={() => approveMutation.mutate(a.id)} disabled={approveMutation.isPending}
-                              className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                              {t("urgentAppts.approve")}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              if (window.confirm(isAr ? "هل تريد حذف هذا الموعد العاجل؟ سيتم حذف جميع السجلات المرتبطة به." : "Delete this urgent appointment? All related records will be removed.")) {
-                                deleteMutation.mutate(a.id);
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
-                            className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 disabled:opacity-50">
-                            {isAr ? "حذف" : "Delete"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                        <Button
+                          size="sm" variant="ghost" iconOnly
+                          onClick={() => setPendingDelete(a.id)}
+                          title={isAr ? "حذف" : "Delete"}
+                          aria-label={isAr ? "حذف" : "Delete"}
+                          className="hover:text-danger-fg hover:bg-danger-bg"
+                        >
+                          <Icon name="trash" className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </TableShell>
+        )
       )}
 
       {tab === "records" && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          {visitLoading ? (
-            <p className="text-center py-10 text-slate-400">{t("common.loading")}</p>
-          ) : !(visitData?.length) ? (
-            <p className="text-center py-10 text-slate-400">{t("urgentAppts.noRecords")}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[600px]">
-                <thead className="bg-slate-50 border-b">
-                  <tr>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("urgentAppts.customerName")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("urgentAppts.customerPhone")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("urgentAppts.serviceType")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("urgentAppts.paymentMethod")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("urgentAppts.amount")}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "الفني" : "Technician"}</th>
-                    <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.date")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visitData.map((v: any) => (
-                    <tr key={v.id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => setVisitDetail(v)}>
-                      <td className="px-4 py-3 font-medium">{v.customerName || v.appointment?.customer?.name || "—"}</td>
-                      <td className="px-4 py-3 text-slate-600">{v.customerPhone || "—"}</td>
-                      <td className="px-4 py-3 text-xs font-medium">
-                        {v.serviceType ? (SERVICE_LABELS[v.serviceType] || v.serviceType) : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {v.paymentMethod ? (
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            v.paymentMethod === "CASH" ? "bg-green-100 text-green-700" :
-                            "bg-blue-100 text-blue-700"}`}>
-                            {PAYMENT_LABELS[v.paymentMethod] || v.paymentMethod}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">{v.amount != null ? `${v.amount.toFixed(2)}` : "—"}</td>
-                      <td className="px-4 py-3 text-slate-600">{v.submittedBy?.name || "—"}</td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs" dir="ltr">{formatGregorianDate(v.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        visitLoading ? (
+          <Loading label={t("common.loading")} />
+        ) : !(visitData?.length) ? (
+          <div className="bg-surface border border-line rounded-md">
+            <EmptyState icon={<Icon name="queue" className="w-5 h-5" />} title={t("urgentAppts.noRecords")} />
+          </div>
+        ) : (
+          <TableShell>
+            <Table className="min-w-[860px]">
+              <THead>
+                <tr>
+                  <TH>{t("urgentAppts.customerName")}</TH>
+                  <TH width="9rem">{t("urgentAppts.customerPhone")}</TH>
+                  <TH width="8rem">{t("urgentAppts.serviceType")}</TH>
+                  <TH width="11rem">{t("urgentAppts.paymentMethod")}</TH>
+                  <TH width="7rem" align="end">{t("urgentAppts.amount")}</TH>
+                  <TH width="9rem">{isAr ? "الفني" : "Technician"}</TH>
+                  <TH width="7rem">{t("common.date")}</TH>
+                </tr>
+              </THead>
+              <TBody>
+                {visitData.map((v: any) => (
+                  <TR key={v.id} onClick={() => setVisitDetail(v)}>
+                    <TD className="font-medium">{v.customerName || v.appointment?.customer?.name || "—"}</TD>
+                    <TD className="text-fg-secondary"><span dir="ltr">{v.customerPhone || "—"}</span></TD>
+                    <TD className="text-fg-secondary text-2xs">
+                      {v.serviceType ? (SERVICE_LABELS[v.serviceType] || v.serviceType) : "—"}
+                    </TD>
+                    <TD>
+                      {v.paymentMethod ? (
+                        <Badge tone={v.paymentMethod === "CASH" ? "success" : "info"}>
+                          {PAYMENT_LABELS[v.paymentMethod] || v.paymentMethod}
+                        </Badge>
+                      ) : (
+                        <span className="text-2xs text-fg-muted">—</span>
+                      )}
+                    </TD>
+                    <TD align="end" className="font-semibold tabular-nums">
+                      {v.amount != null ? v.amount.toFixed(2) : "—"}
+                    </TD>
+                    <TD className="text-fg-secondary">{v.submittedBy?.name || "—"}</TD>
+                    <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                      <span dir="ltr">{formatGregorianDate(v.createdAt)}</span>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </TableShell>
+        )
       )}
 
       {visitDetail && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
-          onClick={() => setVisitDetail(null)}>
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
-            onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b flex justify-between items-center shrink-0 bg-gradient-to-r from-orange-50 to-white rounded-t-xl">
-              <h3 className="font-bold text-slate-800 text-base">
-                {isAr ? "تفاصيل الزيارة العاجلة" : "Urgent Visit Details"}
-              </h3>
-              <button onClick={() => setVisitDetail(null)}
-                className="text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 shrink-0">
-                ✕
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-5 space-y-5">
-
-              {/* Section 1 — Visit Information */}
-              <div>
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
-                  {isAr ? "معلومات الزيارة" : "Visit Information"}
-                </p>
-                <div className="bg-slate-50 rounded-xl p-4 space-y-2.5">
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "اسم الفني" : "Technician"}:</span>
-                    <span className="font-semibold text-slate-800 text-sm">{visitDetail.submittedBy?.name || "—"}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "اسم العميل" : "Customer"}:</span>
-                    <span className="text-slate-700 text-xs">{visitDetail.customerName || visitDetail.appointment?.customer?.name || "—"}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "رقم الجوال" : "Phone"}:</span>
-                    <span className="text-slate-700 text-xs">{visitDetail.customerPhone || "—"}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "الموقع" : "Location"}:</span>
-                    <span className="text-slate-700 text-xs">{visitDetail.appointment ? locationText(visitDetail.appointment) : "—"}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "نوع الخدمة" : "Service Type"}:</span>
-                    <span className="text-slate-700 text-xs">{visitDetail.serviceType ? (SERVICE_LABELS[visitDetail.serviceType] || visitDetail.serviceType) : "—"}</span>
-                  </div>
-                  {visitDetail.appointment?.scheduledDate && (
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تاريخ الموعد" : "Appointment Date"}:</span>
-                      <span className="text-slate-700 text-xs" dir="ltr">
-                        {formatGregorianDate(visitDetail.appointment.scheduledDate)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Section 2 — Details (only when present -- customerDetails/serviceNotes are the
-                  only two free-text fields the active technician form actually populates) */}
-              {(visitDetail.customerDetails || visitDetail.serviceNotes) && (
-                <div>
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
-                    {isAr ? "التفاصيل" : "Details"}
-                  </p>
-                  <div className="bg-blue-50/60 rounded-xl p-4 space-y-2.5 border border-blue-100">
-                    {visitDetail.customerDetails && (
-                      <div className="flex gap-2">
-                        <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "تفاصيل العميل" : "Customer Details"}:</span>
-                        <span className="text-slate-700 text-xs break-words">{visitDetail.customerDetails}</span>
-                      </div>
-                    )}
-                    {visitDetail.serviceNotes && (
-                      <div className="flex gap-2">
-                        <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "ملاحظات الخدمة" : "Service Notes"}:</span>
-                        <span className="text-slate-700 text-xs break-words">{visitDetail.serviceNotes}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Section 3 — Payment (Admin-only page -- API already returns raw values, no Scheduling exposure here) */}
-              <div>
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
-                  {isAr ? "معلومات الدفع" : "Payment Information"}
-                </p>
-                <div className="bg-green-50/70 rounded-xl p-4 space-y-2.5 border border-green-100">
-                  <div className="flex gap-2 items-center">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "المبلغ" : "Amount"}:</span>
-                    <span className="font-bold text-green-700 text-base">
-                      {visitDetail.amount != null ? visitDetail.amount.toFixed(2) : "0.00"} {isAr ? "ريال" : "SAR"}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 min-w-[120px] shrink-0 text-xs">{isAr ? "طريقة الدفع" : "Payment Method"}:</span>
-                    <span className="text-slate-700 text-xs">
-                      {visitDetail.serviceType === "VISIT_ONLY"
-                        ? (isAr ? "غير مطلوب (زيارة فقط)" : "N/A (Visit Only)")
-                        : (PAYMENT_LABELS[visitDetail.paymentMethod] || visitDetail.paymentMethod || "—")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-            <div className="p-4 border-t shrink-0 flex items-center justify-between">
-              <span className="text-xs text-slate-400" dir="ltr">
+        <Modal
+          open
+          onClose={() => setVisitDetail(null)}
+          size="md"
+          className="max-h-[88vh]"
+          title={isAr ? "تفاصيل الزيارة العاجلة" : "Urgent Visit Details"}
+          footer={
+            <div className="flex items-center justify-between w-full gap-3">
+              <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">
                 {isAr ? "أُرسلت في: " : "Submitted: "}{formatGregorianDate(visitDetail.createdAt)} {formatGregorianTime(visitDetail.createdAt)}
               </span>
-              <button onClick={() => setVisitDetail(null)}
-                className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-medium transition-colors">
-                {isAr ? "إغلاق" : "Close"}
-              </button>
+              <Button variant="secondary" onClick={() => setVisitDetail(null)}>{isAr ? "إغلاق" : "Close"}</Button>
             </div>
+          }
+        >
+          <div className="space-y-4">
+            {factGroup(isAr ? "معلومات الزيارة" : "Visit Information", (
+              <>
+                {fact(isAr ? "اسم الفني" : "Technician", <span className="font-semibold text-fg">{visitDetail.submittedBy?.name || "—"}</span>)}
+                {fact(isAr ? "اسم العميل" : "Customer", visitDetail.customerName || visitDetail.appointment?.customer?.name || "—")}
+                {fact(isAr ? "رقم الجوال" : "Phone", <span dir="ltr">{visitDetail.customerPhone || "—"}</span>)}
+                {fact(isAr ? "الموقع" : "Location", visitDetail.appointment ? locationText(visitDetail.appointment) : "—")}
+                {fact(isAr ? "نوع الخدمة" : "Service Type", visitDetail.serviceType ? (SERVICE_LABELS[visitDetail.serviceType] || visitDetail.serviceType) : "—")}
+                {visitDetail.appointment?.scheduledDate && fact(
+                  isAr ? "تاريخ الموعد" : "Appointment Date",
+                  <span dir="ltr" className="tabular-nums">{formatGregorianDate(visitDetail.appointment.scheduledDate)}</span>
+                )}
+              </>
+            ))}
+
+            {/* Details (only when present -- customerDetails/serviceNotes are the
+                only two free-text fields the active technician form populates) */}
+            {(visitDetail.customerDetails || visitDetail.serviceNotes) && factGroup(isAr ? "التفاصيل" : "Details", (
+              <>
+                {visitDetail.customerDetails && fact(isAr ? "تفاصيل العميل" : "Customer Details", visitDetail.customerDetails)}
+                {visitDetail.serviceNotes && fact(isAr ? "ملاحظات الخدمة" : "Service Notes", visitDetail.serviceNotes)}
+              </>
+            ))}
+
+            {/* Payment (Admin-only page -- API already returns raw values, no Scheduling exposure here) */}
+            {factGroup(isAr ? "معلومات الدفع" : "Payment Information", (
+              <>
+                {fact(
+                  isAr ? "المبلغ" : "Amount",
+                  <span className="font-semibold text-fg text-sm tabular-nums">
+                    {visitDetail.amount != null ? visitDetail.amount.toFixed(2) : "0.00"} {isAr ? "ريال" : "SAR"}
+                  </span>
+                )}
+                {fact(
+                  isAr ? "طريقة الدفع" : "Payment Method",
+                  visitDetail.serviceType === "VISIT_ONLY"
+                    ? (isAr ? "غير مطلوب (زيارة فقط)" : "N/A (Visit Only)")
+                    : (PAYMENT_LABELS[visitDetail.paymentMethod] || visitDetail.paymentMethod || "—")
+                )}
+              </>
+            ), "bg-success-bg border-success-border")}
           </div>
-        </div>
+        </Modal>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate(pendingDelete);
+          setPendingDelete(null);
+        }}
+        title={isAr ? "حذف هذا الموعد العاجل؟" : "Delete this urgent appointment?"}
+        message={isAr ? "سيتم حذف جميع السجلات المرتبطة به." : "All related records will be removed."}
+        confirmLabel={isAr ? "حذف" : "Delete"}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

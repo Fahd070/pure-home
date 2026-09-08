@@ -1,0 +1,293 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PURE HOME — DESIGN TOKENS
+   ---------------------------------------------------------------------------
+   One unified Pure Home identity: neutral canvas, neutral surfaces, subtle
+   borders, a single controlled brand accent (deep teal), and semantic colors
+   used only where they carry operational meaning.
+
+   Every token is declared for the light theme on bare :root, then redefined
+   (values only, never new tokens) for dark. Departments no longer repaint the
+   application chrome — they are one product.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+  /* Segoe UI is the Windows system face and covers both Latin and Arabic, so a
+     single stack serves LTR and RTL without a network round-trip. Noto Sans
+     Arabic / Cairo follow as explicit Arabic fallbacks for non-Windows hosts. */
+  --ph-font: "Segoe UI Variable Text", "Segoe UI", Inter, "Noto Sans Arabic",
+             "Cairo", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  --ph-font-mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+
+  /* ── Spacing scale (4 / 8 / 12 / 16 / 24 / 32) ──────────────────────────── */
+  --ph-space-1: 4px;
+  --ph-space-2: 8px;
+  --ph-space-3: 12px;
+  --ph-space-4: 16px;
+  --ph-space-6: 24px;
+  --ph-space-8: 32px;
+
+  /* ── Radius (4 / 8 / 12 only — controls stay crisp) ─────────────────────── */
+  --ph-radius-sm: 4px;
+  --ph-radius-md: 8px;
+  --ph-radius-lg: 12px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  /* Desktop-scale durations: long enough to read as continuous, short enough
+     that a fast operator never waits on the interface. */
+  --ph-motion-fast: 120ms;
+  --ph-motion:      180ms;
+  --ph-ease:        cubic-bezier(0.2, 0, 0.2, 1);
+  --ph-ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Density ────────────────────────────────────────────────────────────── */
+  --ph-row-h: 38px;          /* desktop table row */
+  --ph-control-h: 32px;      /* inputs, buttons, selects */
+  --ph-control-h-sm: 26px;
+  --ph-titlebar-h: 32px;
+  --ph-commandbar-h: 48px;
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────── */
+  --ph-canvas:          #f5f6f8;
+  --ph-surface:         #ffffff;
+  --ph-surface-raised:  #ffffff;
+  --ph-surface-subtle:  #f7f8fa;
+  --ph-surface-hover:   #f0f2f5;
+  --ph-surface-active:  #e9edf1;
+  --ph-overlay:         rgba(15, 20, 26, 0.42);
+
+  /* ── Application chrome (title bar + navigation rail) ───────────────────── */
+  --ph-titlebar-bg:     #e4e7eb;
+  --ph-titlebar-fg:     #2b3138;
+  --ph-titlebar-border: #d3d8de;
+  --ph-nav-bg:          #edeff2;
+  --ph-nav-fg:          #3c434c;
+  --ph-nav-fg-muted:    #5e6670;
+  --ph-nav-hover:       #e3e6eb;
+  --ph-nav-active-bg:   #ffffff;
+  --ph-nav-active-fg:   #101418;
+
+  /* ── Borders & focus ────────────────────────────────────────────────────── */
+  --ph-border:        #dde1e6;
+  --ph-border-subtle: #e8ebee;
+  --ph-border-strong: #c3c9d0;
+  --ph-focus:         #0f5f6b;
+  --ph-focus-halo:    rgba(15, 95, 107, 0.24);
+
+  /* ── Foreground ─────────────────────────────────────────────────────────── */
+  --ph-fg:           #171a1f;
+  --ph-fg-secondary: #4b535c;
+  --ph-fg-muted:     #5f666f;
+  --ph-fg-inverse:   #ffffff;
+
+  /* ── Brand accent ───────────────────────────────────────────────────────── */
+  --ph-accent:            #0f5f6b;
+  --ph-accent-hover:      #0c4d57;
+  --ph-accent-pressed:    #093c44;
+  --ph-accent-fg:         #ffffff;
+  --ph-accent-subtle:     #e4f0f1;
+  --ph-accent-subtle-fg:  #0b4a54;
+  --ph-accent-border:     #b9d7da;
+
+  /* ── Semantic tones ─────────────────────────────────────────────────────── */
+  --ph-success-bg: #e6f4ec; --ph-success-fg: #14653c; --ph-success-border: #b7ddc6; --ph-success-solid: #1a7f4b;
+  --ph-warning-bg: #fdf3e2; --ph-warning-fg: #8a5400; --ph-warning-border: #eed9b0; --ph-warning-solid: #b06d00;
+  --ph-danger-bg:  #fdeceb; --ph-danger-fg:  #9c2b23; --ph-danger-border:  #f2c2be; --ph-danger-solid:  #c0392f;
+  --ph-info-bg:    #e9f2fa; --ph-info-fg:    #14588f; --ph-info-border:    #bcd7ee; --ph-info-solid:    #1a6fb5;
+  --ph-urgent-bg:  #fdefe7; --ph-urgent-fg:  #9a3412; --ph-urgent-border:  #f3cdb6; --ph-urgent-solid:  #c2410c;
+  --ph-pending-bg: #fdf6df; --ph-pending-fg: #7a5c00; --ph-pending-border: #ecdda6; --ph-pending-solid: #a37f00;
+  --ph-progress-bg:#eaf0fb; --ph-progress-fg:#234e9c; --ph-progress-border:#c3d3f0; --ph-progress-solid:#2b5fbd;
+  --ph-neutral-bg: #f0f2f5; --ph-neutral-fg: #4b535c; --ph-neutral-border: #dde1e6; --ph-neutral-solid: #6b7480;
+
+  /* ── Elevation (restrained; borders do most of the separating) ──────────── */
+  --ph-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --ph-shadow-md: 0 2px 8px rgba(16, 24, 40, 0.08);
+  --ph-shadow-lg: 0 10px 32px rgba(16, 24, 40, 0.16);
+
+  color-scheme: light;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DARK THEME
+   Real token values — replaces the previous filter/invert approximation, which
+   inverted photographs, status colors and brand color alike. An explicit
+   choice wins; "system" follows the OS.
+   ═══════════════════════════════════════════════════════════════════════════ */
+html[data-theme="dark"] {
+  --ph-canvas:          #14171b;
+  --ph-surface:         #1b1f24;
+  --ph-surface-raised:  #21262c;
+  --ph-surface-subtle:  #21262c;
+  --ph-surface-hover:   #262c33;
+  --ph-surface-active:  #2d343c;
+  --ph-overlay:         rgba(0, 0, 0, 0.62);
+
+  --ph-titlebar-bg:     #0d1014;
+  --ph-titlebar-fg:     #d7dde4;
+  --ph-titlebar-border: #23292f;
+  --ph-nav-bg:          #101317;
+  --ph-nav-fg:          #c3cad2;
+  --ph-nav-fg-muted:    #8b949e;
+  --ph-nav-hover:       #1c2126;
+  --ph-nav-active-bg:   #262c33;
+  --ph-nav-active-fg:   #f2f5f8;
+
+  --ph-border:        #2c333b;
+  --ph-border-subtle: #23292f;
+  --ph-border-strong: #3d454e;
+  --ph-focus:         #43b9c8;
+  --ph-focus-halo:    rgba(67, 185, 200, 0.28);
+
+  --ph-fg:           #e6eaee;
+  --ph-fg-secondary: #b3bcc5;
+  --ph-fg-muted:     #838d97;
+  --ph-fg-inverse:   #101418;
+
+  --ph-accent:            #2fa8b8;
+  --ph-accent-hover:      #43b9c8;
+  --ph-accent-pressed:    #1f8e9d;
+  --ph-accent-fg:         #04191c;
+  --ph-accent-subtle:     #123037;
+  --ph-accent-subtle-fg:  #6fd0dd;
+  --ph-accent-border:     #1d4a53;
+
+  --ph-success-bg: #102a1c; --ph-success-fg: #6cd39a; --ph-success-border: #1e4a33; --ph-success-solid: #2f9e63;
+  --ph-warning-bg: #2e2410; --ph-warning-fg: #e6b45c; --ph-warning-border: #4d3c17; --ph-warning-solid: #b8811f;
+  --ph-danger-bg:  #2e1615; --ph-danger-fg:  #f2938c; --ph-danger-border:  #4d2523; --ph-danger-solid:  #c33f35;
+  --ph-info-bg:    #12212f; --ph-info-fg:    #7cb8e8; --ph-info-border:    #1e3a52; --ph-info-solid:    #3d84c6;
+  --ph-urgent-bg:  #2f1a10; --ph-urgent-fg:  #f0a173; --ph-urgent-border:  #4f2c19; --ph-urgent-solid:  #d4602a;
+  --ph-pending-bg: #2b2610; --ph-pending-fg: #ddc272; --ph-pending-border: #47401b; --ph-pending-solid: #ab8a22;
+  --ph-progress-bg:#161f33; --ph-progress-fg:#8fb2ee; --ph-progress-border:#263654; --ph-progress-solid:#4272cf;
+  --ph-neutral-bg: #262c33; --ph-neutral-fg: #b3bcc5; --ph-neutral-border: #2c333b; --ph-neutral-solid: #7b858f;
+
+  --ph-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --ph-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --ph-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    --ph-canvas:          #14171b;
+    --ph-surface:         #1b1f24;
+    --ph-surface-raised:  #21262c;
+    --ph-surface-subtle:  #21262c;
+    --ph-surface-hover:   #262c33;
+    --ph-surface-active:  #2d343c;
+    --ph-overlay:         rgba(0, 0, 0, 0.62);
+
+    --ph-titlebar-bg:     #0d1014;
+    --ph-titlebar-fg:     #d7dde4;
+    --ph-titlebar-border: #23292f;
+    --ph-nav-bg:          #101317;
+    --ph-nav-fg:          #c3cad2;
+    --ph-nav-fg-muted:    #8b949e;
+    --ph-nav-hover:       #1c2126;
+    --ph-nav-active-bg:   #262c33;
+    --ph-nav-active-fg:   #f2f5f8;
+
+    --ph-border:        #2c333b;
+    --ph-border-subtle: #23292f;
+    --ph-border-strong: #3d454e;
+    --ph-focus:         #43b9c8;
+    --ph-focus-halo:    rgba(67, 185, 200, 0.28);
+
+    --ph-fg:           #e6eaee;
+    --ph-fg-secondary: #b3bcc5;
+    --ph-fg-muted:     #838d97;
+    --ph-fg-inverse:   #101418;
+
+    --ph-accent:            #2fa8b8;
+    --ph-accent-hover:      #43b9c8;
+    --ph-accent-pressed:    #1f8e9d;
+    --ph-accent-fg:         #04191c;
+    --ph-accent-subtle:     #123037;
+    --ph-accent-subtle-fg:  #6fd0dd;
+    --ph-accent-border:     #1d4a53;
+
+    --ph-success-bg: #102a1c; --ph-success-fg: #6cd39a; --ph-success-border: #1e4a33; --ph-success-solid: #2f9e63;
+    --ph-warning-bg: #2e2410; --ph-warning-fg: #e6b45c; --ph-warning-border: #4d3c17; --ph-warning-solid: #b8811f;
+    --ph-danger-bg:  #2e1615; --ph-danger-fg:  #f2938c; --ph-danger-border:  #4d2523; --ph-danger-solid:  #c33f35;
+    --ph-info-bg:    #12212f; --ph-info-fg:    #7cb8e8; --ph-info-border:    #1e3a52; --ph-info-solid:    #3d84c6;
+    --ph-urgent-bg:  #2f1a10; --ph-urgent-fg:  #f0a173; --ph-urgent-border:  #4f2c19; --ph-urgent-solid:  #d4602a;
+    --ph-pending-bg: #2b2610; --ph-pending-fg: #ddc272; --ph-pending-border: #47401b; --ph-pending-solid: #ab8a22;
+    --ph-progress-bg:#161f33; --ph-progress-fg:#8fb2ee; --ph-progress-border:#263654; --ph-progress-solid:#4272cf;
+    --ph-neutral-bg: #262c33; --ph-neutral-fg: #b3bcc5; --ph-neutral-border: #2c333b; --ph-neutral-solid: #7b858f;
+
+    --ph-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+    --ph-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.45);
+    --ph-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.55);
+
+    color-scheme: dark;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SETTINGS HOOKS — the same data-* attributes applySettings() has always set
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Background: "night" deepens the canvas without switching the whole theme. */
+html[data-bg="night"] {
+  --ph-canvas:         #e7eaee;
+  --ph-surface-subtle: #f2f4f7;
+}
+html[data-theme="dark"][data-bg="night"],
+html[data-theme="system"][data-bg="night"] {
+  --ph-canvas: #0d1014;
+}
+
+/* High contrast: stronger borders and text, not a global filter. */
+html[data-contrast="high"] {
+  --ph-border:        #8d959e;
+  --ph-border-subtle: #a7aeb6;
+  --ph-border-strong: #4b535c;
+  --ph-fg:            #000000;
+  --ph-fg-secondary:  #22272d;
+  --ph-fg-muted:      #3f464e;
+  --ph-nav-fg:        #1a1f25;
+  --ph-nav-fg-muted:  #343b43;
+  --ph-accent:        #0a4a55;
+  --ph-accent-subtle: #d3e6e8;
+}
+html[data-theme="dark"][data-contrast="high"],
+html[data-theme="system"][data-contrast="high"] {
+  --ph-border:        #6b757f;
+  --ph-border-subtle: #5b646d;
+  --ph-border-strong: #97a1ab;
+  --ph-fg:            #ffffff;
+  --ph-fg-secondary:  #dfe5ea;
+  --ph-fg-muted:      #bcc4cc;
+  --ph-nav-fg:        #eef2f5;
+  --ph-nav-fg-muted:  #c8d0d8;
+  --ph-accent:        #5fd0de;
+  --ph-accent-subtle: #17414a;
+}
+
+/* Font size: rem-based scaling — unchanged contract. */
+html[data-font="small"]  { font-size: 13px; }
+html[data-font="medium"] { font-size: 14px; }
+html[data-font="large"]  { font-size: 16px; }
+html[data-font="xlarge"] { font-size: 18px; }
+
+/* Interface scale: adjusts real density tokens rather than zooming pixels. */
+html[data-scale="compact"] {
+  --ph-row-h: 32px;
+  --ph-control-h: 28px;
+  --ph-control-h-sm: 24px;
+}
+html[data-scale="comfortable"] {
+  --ph-row-h: 46px;
+  --ph-control-h: 36px;
+  --ph-control-h-sm: 30px;
+}
+
+/* Improved readability — unchanged contract. */
+html[data-readability="on"] p,
+html[data-readability="on"] td,
+html[data-readability="on"] li,
+html[data-readability="on"] span,
+html[data-readability="on"] label {
+  line-height: 1.75 !important;
+  letter-spacing: 0.02em !important;
+}

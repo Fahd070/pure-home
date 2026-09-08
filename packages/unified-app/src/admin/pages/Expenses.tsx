@@ -5,11 +5,19 @@ import { api } from "../api/client";
 import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
+import { Button } from "../../ui/Button";
+import { Input, Select, Field } from "../../ui/Field";
+import { Badge, Tone } from "../../ui/Badge";
+import { PageHeader } from "../../ui/Surface";
+import { EmptyState, Loading } from "../../ui/Feedback";
+import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { ConfirmDialog } from "../../ui/Modal";
+import { Icon } from "../../ui/icons";
 
-const STATUS_COLORS: Record<string, string> = {
-  PENDING:  "bg-yellow-100 text-yellow-700",
-  APPROVED: "bg-green-100 text-green-700",
-  REJECTED: "bg-red-100 text-red-700",
+const STATUS_TONES: Record<string, Tone> = {
+  PENDING:  "pending",
+  APPROVED: "success",
+  REJECTED: "danger",
 };
 
 function buildInvoicePdfHtml(expense: any, isAr: boolean) {
@@ -198,6 +206,8 @@ export default function AdminExpenses() {
   const isAr = i18n.language === "ar";
   const qc = useQueryClient();
   const [filters, setFilters] = useState({ technicianId: "", from: "", to: "", status: "" });
+  // Replaces confirm(): the native dialog cannot be themed or translated.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
@@ -285,123 +295,160 @@ export default function AdminExpenses() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">{t("expenses.title")}</h1>
-          <p className="text-sm text-slate-500">
+      <PageHeader
+        title={t("expenses.title")}
+        subtitle={
+          <span className="tabular-nums">
             {isAr ? `الإجمالي: ${totalAmount.toFixed(2)} ريال` : `Total: ${totalAmount.toFixed(2)} SAR`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={downloadAllInvoices} disabled={generating}
-            style={{ backgroundColor: "#000080" }} className="text-white text-sm px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50">
-            📥 {isAr ? "تنزيل الفواتير" : "Download Invoices"}
-          </button>
-        </div>
-      </div>
+          </span>
+        }
+        actions={
+          <Button variant="secondary" loading={generating} onClick={downloadAllInvoices}>
+            <Icon name="download" className="w-3.5 h-3.5" />
+            {isAr ? "تنزيل الفواتير" : "Download Invoices"}
+          </Button>
+        }
+      />
 
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{isAr ? "الفني" : "Technician"}</label>
-            <select value={filters.technicianId} onChange={e => setFilters(f => ({ ...f, technicianId: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+      {/* Filters sit in their own strip directly above the table they filter. */}
+      <div className="bg-surface border border-line rounded-md p-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Field label={isAr ? "الفني" : "Technician"} htmlFor="exp-filter-tech">
+            <Select
+              id="exp-filter-tech"
+              value={filters.technicianId}
+              onChange={e => setFilters(f => ({ ...f, technicianId: e.target.value }))}
+            >
               <option value="">{t("common.all")}</option>
               {(techData || []).map((tech: any) => (
                 <option key={tech.id} value={tech.id}>{tech.name}</option>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateFrom")}</label>
-            <input type="date" lang="en-GB" dir="ltr" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("reports.dateTo")}</label>
-            <input type="date" lang="en-GB" dir="ltr" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">{t("common.status")}</label>
-            <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            </Select>
+          </Field>
+
+          <Field label={t("reports.dateFrom")} htmlFor="exp-filter-from">
+            <Input
+              id="exp-filter-from" type="date" lang="en-GB" dir="ltr"
+              value={filters.from}
+              onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
+            />
+          </Field>
+
+          <Field label={t("reports.dateTo")} htmlFor="exp-filter-to">
+            <Input
+              id="exp-filter-to" type="date" lang="en-GB" dir="ltr"
+              value={filters.to}
+              onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
+            />
+          </Field>
+
+          <Field label={t("common.status")} htmlFor="exp-filter-status">
+            <Select
+              id="exp-filter-status"
+              value={filters.status}
+              onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+            >
               <option value="">{t("common.all")}</option>
-              {["PENDING", "APPROVED", "REJECTED"].map(s => (
-                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+              {["PENDING", "APPROVED", "REJECTED"].map(sv => (
+                <option key={sv} value={sv}>{STATUS_LABEL[sv]}</option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </Field>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {isLoading ? (
-          <p className="text-center py-10 text-slate-400">{t("common.loading")}</p>
-        ) : !filteredExpenses.length ? (
-          <p className="text-center py-10 text-slate-400">{t("expenses.noExpenses")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b">
-                <tr>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">#</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{isAr ? "الفني" : "Technician"}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("expenses.category")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("expenses.amount")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("expenses.date")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("expenses.description")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.status")}</th>
-                  <th className="text-start px-4 py-3 font-medium text-slate-600">{t("common.actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredExpenses.map((e: any, i: number) => (
-                  <tr key={e.id} className="border-b hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-400 text-xs">{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">{e.technician?.name || "—"}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {isAr ? (CATEGORY_AR[e.category] || e.category) : e.category}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-slate-800">{e.amount.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs" dir="ltr">
-                      {formatGregorianDate(e.date)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs max-w-[200px] truncate">{e.description || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[e.status] || ""}`}>
-                        {STATUS_LABEL[e.status] || e.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 items-center flex-wrap">
-                        {e.status === "PENDING" && (
-                          <>
-                            <button onClick={() => statusMutation.mutate({ id: e.id, status: "APPROVED" })}
-                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700">
-                              {isAr ? "قبول" : "Approve"}
-                            </button>
-                            <button onClick={() => statusMutation.mutate({ id: e.id, status: "REJECTED" })}
-                              className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700">
-                              {isAr ? "رفض" : "Reject"}
-                            </button>
-                          </>
-                        )}
-                        <button onClick={() => generateInvoice(e)}
-                          className={`text-xs px-2 py-1 rounded border flex items-center gap-1 ${e.invoiceGenerated ? "border-green-300 text-green-700 bg-green-50" : "border-indigo-200 text-indigo-600 hover:bg-indigo-50"}`}>
-                          {e.invoiceGenerated ? "✓" : "📄"} {isAr ? "فاتورة" : "Invoice"}
-                        </button>
-                        <button onClick={() => { if (confirm(isAr ? "حذف هذا المصروف؟" : "Delete this expense?")) deleteMutation.mutate(e.id); }}
-                          className="text-xs text-slate-400 hover:text-red-600 px-1">✕</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {isLoading ? (
+        <Loading label={t("common.loading")} />
+      ) : !filteredExpenses.length ? (
+        <div className="bg-surface border border-line rounded-md">
+          <EmptyState icon={<Icon name="expenses" className="w-5 h-5" />} title={t("expenses.noExpenses")} />
+        </div>
+      ) : (
+        <TableShell>
+          <Table className="min-w-[1000px]">
+            <THead>
+              <tr>
+                <TH width="3rem" align="end">#</TH>
+                <TH>{isAr ? "الفني" : "Technician"}</TH>
+                <TH width="8rem">{t("expenses.category")}</TH>
+                <TH width="7rem" align="end">{t("expenses.amount")}</TH>
+                <TH width="7rem">{t("expenses.date")}</TH>
+                <TH>{t("expenses.description")}</TH>
+                <TH width="8rem">{t("common.status")}</TH>
+                <TH width="16rem">{t("common.actions")}</TH>
+              </tr>
+            </THead>
+            <TBody>
+              {filteredExpenses.map((e: any, i: number) => (
+                <TR key={e.id}>
+                  <TD align="end" className="text-fg-muted text-2xs tabular-nums">{i + 1}</TD>
+                  <TD className="font-medium">{e.technician?.name || "—"}</TD>
+                  <TD className="text-fg-secondary">{isAr ? (CATEGORY_AR[e.category] || e.category) : e.category}</TD>
+                  {/* Money right-aligned and tabular so a column of figures
+                      lines up digit-for-digit. */}
+                  <TD align="end" className="font-semibold tabular-nums">{e.amount.toFixed(2)}</TD>
+                  <TD className="text-fg-secondary text-2xs tabular-nums whitespace-nowrap">
+                    <span dir="ltr">{formatGregorianDate(e.date)}</span>
+                  </TD>
+                  <TD className="text-fg-secondary text-2xs max-w-[240px] truncate" title={e.description || undefined}>
+                    {e.description || "—"}
+                  </TD>
+                  <TD>
+                    <Badge tone={STATUS_TONES[e.status] ?? "neutral"} dot>
+                      {STATUS_LABEL[e.status] || e.status}
+                    </Badge>
+                  </TD>
+                  <TD>
+                    <div className="flex gap-1 items-center flex-wrap">
+                      {e.status === "PENDING" && (
+                        <>
+                          <Button size="sm" variant="primary" onClick={() => statusMutation.mutate({ id: e.id, status: "APPROVED" })}>
+                            {isAr ? "قبول" : "Approve"}
+                          </Button>
+                          <Button size="sm" variant="secondary" className="text-danger-fg" onClick={() => statusMutation.mutate({ id: e.id, status: "REJECTED" })}>
+                            {isAr ? "رفض" : "Reject"}
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        size="sm"
+                        variant={e.invoiceGenerated ? "subtle" : "secondary"}
+                        onClick={() => generateInvoice(e)}
+                      >
+                        <Icon name={e.invoiceGenerated ? "check" : "download"} className="w-3.5 h-3.5" />
+                        {isAr ? "فاتورة" : "Invoice"}
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" iconOnly
+                        onClick={() => setPendingDelete(e.id)}
+                        title={t("common.delete")}
+                        aria-label={t("common.delete")}
+                        className="hover:text-danger-fg hover:bg-danger-bg"
+                      >
+                        <Icon name="trash" className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </TableShell>
+      )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) deleteMutation.mutate(pendingDelete);
+          setPendingDelete(null);
+        }}
+        title={isAr ? "حذف هذا المصروف؟" : "Delete this expense?"}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

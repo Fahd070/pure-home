@@ -7,6 +7,11 @@ import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime } from "../../utils/dateTimeInput";
 import type { AxiosInstance } from "axios";
+import { Button } from "../../ui/Button";
+import { Badge } from "../../ui/Badge";
+import { Callout, Loading, EmptyState } from "../../ui/Feedback";
+import { Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
+import { Icon } from "../../ui/icons";
 
 function formatCycle(cycle: string, freq: number, isAr: boolean) {
   const n = Number(freq) || 1;
@@ -32,8 +37,8 @@ export default function CustomerDetail({ apiClient = api, queryScope = "admin" }
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ["customer", queryScope, id], queryFn: () => apiClient.get(`/customers/${id}`).then(r => r.data.data) });
 
-  if (isLoading) return <p className="text-center py-12">{t("common.loading")}</p>;
-  if (!data) return <p className="text-center py-12">{t("common.error")}</p>;
+  if (isLoading) return <Loading label={t("common.loading")} />;
+  if (!data) return <Callout tone="danger">{t("common.error")}</Callout>;
 
   const c = data;
   const addr = c.address;
@@ -105,106 +110,154 @@ ${(c.appointments || []).length > 0 ? `
     }
   }
 
+  /** One label/value pair in the customer summary grid. */
+  const detail = (label: React.ReactNode, value: React.ReactNode) => (
+    <div className="min-w-0">
+      <dt className="text-2xs uppercase tracking-wide text-fg-muted">{label}</dt>
+      <dd className="text-[0.8125rem] text-fg mt-0.5">{value}</dd>
+    </div>
+  );
+
+  /** A bordered sub-panel for one optional group of customer facts. */
+  const panel = (title: React.ReactNode, children: React.ReactNode) => (
+    <div className="bg-surface-subtle border border-line-subtle rounded-md p-3">
+      <p className="text-2xs uppercase tracking-wide text-fg-muted mb-2">{title}</p>
+      <div className="space-y-1 text-[0.8125rem]">{children}</div>
+    </div>
+  );
+
+  const line = (label: React.ReactNode, value: React.ReactNode) => (
+    <p><span className="text-fg-muted">{label}: </span>{value}</p>
+  );
+
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-700">← {t("common.back")}</button>
-        <button onClick={handleExportPdf}
-          style={{ backgroundColor: "#000080" }}
-          className="text-white text-sm px-4 py-1.5 rounded-lg hover:opacity-90 flex items-center gap-1.5">
-          📄 {t("reports.exportCustomerPdf")}
+    <div className="max-w-4xl mx-auto space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="text-fg-muted hover:text-fg text-2xs inline-flex items-center gap-1.5 transition-colors"
+        >
+          <Icon name="chevronStart" className="w-3.5 h-3.5 rtl:rotate-180" />
+          {t("common.back")}
         </button>
+        <Button variant="secondary" onClick={handleExportPdf}>
+          <Icon name="download" className="w-3.5 h-3.5" />
+          {t("reports.exportCustomerPdf")}
+        </Button>
       </div>
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-xl font-bold">{c.name}</h2>
-            <p className="text-slate-500">{c.secondaryPhone ? `${t("customers.primaryPhone")}: ${c.phone}` : c.phone}</p>
-            {c.secondaryPhone && <p className="text-slate-500">{t("customers.secondaryPhone")}: {c.secondaryPhone}</p>}
+
+      <div className="bg-surface border border-line rounded-md">
+        <div className="flex items-start justify-between gap-4 p-4 border-b border-line">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-fg truncate">{c.name}</h2>
+            <p className="text-xs text-fg-secondary mt-1">
+              {c.secondaryPhone ? `${t("customers.primaryPhone")}: ${c.phone}` : c.phone}
+            </p>
+            {c.secondaryPhone && (
+              <p className="text-xs text-fg-secondary">{t("customers.secondaryPhone")}: {c.secondaryPhone}</p>
+            )}
           </div>
-          <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.isActive ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+          <Badge tone={c.isActive ? "success" : "neutral"} dot>
             {c.isActive ? t("common.active") : t("common.inactive")}
-          </span>
+          </Badge>
         </div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div><span className="text-slate-400">{t("customers.maintenanceCycle")}: </span>{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr)}</div>
-          <div><span className="text-slate-400">{t("customers.frequency")}: </span>{c.maintenanceFrequency}</div>
-          <div><span className="text-slate-400">{t("reports.lastMaintenance")}: </span><span dir="ltr">{lastMaintenance ? formatGregorianDate(lastMaintenance.actualCompletionDate || lastMaintenance.scheduledDate) : "—"}</span></div>
-          <div><span className="text-slate-400">{t("reports.nextMaintenance")}: </span><span dir="ltr">{c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "—"}</span></div>
-          <div><span className="text-slate-400">{t("reports.registrationDate")}: </span><span dir="ltr">{formatGregorianDate(c.createdAt)}</span></div>
+
+        <div className="p-4 space-y-4">
+          <dl className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            {detail(t("customers.maintenanceCycle"), formatCycle(c.maintenanceCycle, c.maintenanceFrequency, isAr))}
+            {detail(t("customers.frequency"), <span className="tabular-nums">{c.maintenanceFrequency}</span>)}
+            {detail(t("reports.registrationDate"), <span dir="ltr" className="tabular-nums">{formatGregorianDate(c.createdAt)}</span>)}
+            {detail(
+              t("reports.lastMaintenance"),
+              <span dir="ltr" className="tabular-nums">
+                {lastMaintenance ? formatGregorianDate(lastMaintenance.actualCompletionDate || lastMaintenance.scheduledDate) : "—"}
+              </span>
+            )}
+            {detail(
+              t("reports.nextMaintenance"),
+              <span dir="ltr" className="tabular-nums">{c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "—"}</span>
+            )}
+          </dl>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {addr && panel(t("customers.address"), (
+              <>
+                <p>{addr.city}، {addr.district}، {addr.street}</p>
+                {addr.buildingNo && (
+                  <p>
+                    {t("customers.buildingNo")}: {addr.buildingNo}
+                    {addr.floorNo && ` | ${t("customers.floorNo")}: ${addr.floorNo}`}
+                  </p>
+                )}
+                {addr.apartmentNo && <p>{t("customers.apartmentNo")}: {addr.apartmentNo}</p>}
+                {addr.postalCode && <p>{t("customers.postalCode")}: {addr.postalCode}</p>}
+              </>
+            ))}
+
+            {(c.installationDate || c.installationNote || c.installationAmount != null || c.installationPaymentMethod) &&
+              panel(t("customers.installationSection"), (
+                <>
+                  {c.installationDate && line(
+                    t("reports.installationDate"),
+                    <span dir="ltr" className="tabular-nums">{formatGregorianDate(c.installationDate)}</span>
+                  )}
+                  {c.installationAmount != null && line(
+                    t("customers.installationCost"),
+                    <span className="tabular-nums">{c.installationAmount}</span>
+                  )}
+                  {c.installationPaymentMethod && line(
+                    t("customers.installationPaymentMethod"),
+                    formatInstallationPaymentMethod(c.installationPaymentMethod, t)
+                  )}
+                  {c.installationNote && line(t("customers.installationNote"), c.installationNote)}
+                </>
+              ))}
+
+            {c.previousServiceType && panel(t("customers.previousService"), (
+              <>
+                {line(
+                  t("customers.previousService"),
+                  c.previousServiceType === "INSTALLATION" ? t("customers.previousInstallation") : t("customers.previousMaintenance")
+                )}
+                {line(
+                  t("customers.previousServiceDate"),
+                  <span dir="ltr" className="tabular-nums">{formatGregorianDate(c.previousServiceDate)}</span>
+                )}
+                {c.previousServiceNote && line(t("customers.previousServiceNote"), c.previousServiceNote)}
+              </>
+            ))}
+
+            {c.notes && panel(t("common.notes"), <p className="whitespace-pre-wrap">{c.notes}</p>)}
+          </div>
         </div>
-        {addr && (
-          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm">
-            <p className="font-medium mb-1">{t("customers.address")}</p>
-            <p>{addr.city}، {addr.district}، {addr.street}</p>
-            {addr.buildingNo && <p>{t("customers.buildingNo")}: {addr.buildingNo} {addr.floorNo && `| ${t("customers.floorNo")}: ${addr.floorNo}`}</p>}
-            {addr.apartmentNo && <p>{t("customers.apartmentNo")}: {addr.apartmentNo}</p>}
-            {addr.postalCode && <p>{t("customers.postalCode")}: {addr.postalCode}</p>}
-          </div>
-        )}
-        {c.notes && <p className="mt-3 text-sm text-slate-500">{c.notes}</p>}
-        {(c.installationDate || c.installationNote || c.installationAmount != null || c.installationPaymentMethod) && (
-          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
-            <p className="font-medium mb-1">{t("customers.installationSection")}</p>
-            {c.installationDate && (
-              <p>
-                <span className="text-slate-400">{t("reports.installationDate")}: </span>
-                <span dir="ltr">{formatGregorianDate(c.installationDate)}</span>
-              </p>
-            )}
-            {c.installationAmount != null && (
-              <p>
-                <span className="text-slate-400">{t("customers.installationCost")}: </span>
-                {c.installationAmount}
-              </p>
-            )}
-            {c.installationPaymentMethod && (
-              <p>
-                <span className="text-slate-400">{t("customers.installationPaymentMethod")}: </span>
-                {formatInstallationPaymentMethod(c.installationPaymentMethod, t)}
-              </p>
-            )}
-            {c.installationNote && (
-              <p>
-                <span className="text-slate-400">{t("customers.installationNote")}: </span>
-                {c.installationNote}
-              </p>
-            )}
-          </div>
-        )}
-        {c.previousServiceType && (
-          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
-            <p className="font-medium mb-1">{t("customers.previousService")}</p>
-            <p>
-              <span className="text-slate-400">{t("customers.previousService")}: </span>
-              {c.previousServiceType === "INSTALLATION" ? t("customers.previousInstallation") : t("customers.previousMaintenance")}
-            </p>
-            <p>
-              <span className="text-slate-400">{t("customers.previousServiceDate")}: </span>
-              <span dir="ltr">{formatGregorianDate(c.previousServiceDate)}</span>
-            </p>
-            {c.previousServiceNote && (
-              <p>
-                <span className="text-slate-400">{t("customers.previousServiceNote")}: </span>
-                {c.previousServiceNote}
-              </p>
-            )}
-          </div>
+      </div>
+
+      <div className="bg-surface border border-line rounded-md overflow-hidden">
+        <h3 className="text-sm font-semibold text-fg px-4 py-3 border-b border-line">{t("nav.appointments")}</h3>
+        {!c.appointments?.length ? (
+          <EmptyState icon={<Icon name="appointments" className="w-5 h-5" />} title={t("common.noRecords")} />
+        ) : (
+          <Table>
+            <THead>
+              <tr>
+                <TH width="7rem">{t("common.date")}</TH>
+                <TH>{t("appointments.type")}</TH>
+                <TH width="10rem">{t("common.status")}</TH>
+              </tr>
+            </THead>
+            <TBody>
+              {c.appointments.map((a: any) => (
+                <TR key={a.id}>
+                  <TD className="tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
+                  <TD>{a.type}</TD>
+                  <TD className="text-fg-secondary">{a.status}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
         )}
       </div>
-      {c.appointments?.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <h3 className="font-semibold mb-3">{t("nav.appointments")}</h3>
-          <div className="space-y-2">
-            {c.appointments.map((a: any) => (
-              <div key={a.id} className="flex justify-between text-sm py-2 border-b last:border-0">
-                <span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span> — {a.type}
-                <span className="text-slate-500">{a.status}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

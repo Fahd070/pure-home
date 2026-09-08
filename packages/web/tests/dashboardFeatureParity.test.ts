@@ -17,6 +17,8 @@ import i18n from '../../unified-app/src/i18n';
 
 const adminSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/admin/pages/Dashboard.tsx'), 'utf-8');
 const schedSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/scheduling/pages/Dashboard.tsx'), 'utf-8');
+// Both dashboards render their counters through the one shared StatTile.
+const statTileSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/ui/Surface.tsx'), 'utf-8');
 
 describe('Call Report shortcut parity: Admin now has the same authorized shortcut as Scheduling', () => {
   it('Admin Dashboard imports and wires CallReportModal, guarded on a real customer (matching Scheduling)', () => {
@@ -55,15 +57,21 @@ describe('Shared appointment drill-down display parity', () => {
 
   it('both dashboards render a colored workStatus badge using the same taskColors mapping', () => {
     for (const src of [adminSrc, schedSrc]) {
-      expect(src).toMatch(/WAITING:\s*"bg-yellow-100 text-yellow-700"/);
-      expect(src).toMatch(/IN_PROGRESS:\s*"bg-indigo-100 text-indigo-700"/);
-      expect(src).toMatch(/COMPLETED:\s*"bg-green-100 text-green-700"/);
-      expect(src).toMatch(/POSTPONED:\s*"bg-orange-100 text-orange-700"/);
+      // Status colour is now a semantic tone token rather than a palette
+      // literal, but both dashboards still share one identical mapping.
+      expect(src).toMatch(/WAITING:\s*"pending"/);
+      expect(src).toMatch(/IN_PROGRESS:\s*"progress"/);
+      expect(src).toMatch(/COMPLETED:\s*"success"/);
+      expect(src).toMatch(/POSTPONED:\s*"warning"/);
     }
   });
 
   it('both dashboards show the same 8 stat cards in the same order', () => {
-    const cardOrderRe = /key:\s*"total"[\s\S]*?key:\s*"completed"[\s\S]*?key:\s*"thisMonth"[\s\S]*?key:\s*"nextMonth"[\s\S]*?key:\s*"todayCount"[\s\S]*?key:\s*"pending"[\s\S]*?key:\s*"pendingApproval"[\s\S]*?key:\s*"urgentCount"/;
+    // The eight cards are unchanged, but the order is now urgency-first --
+    // what needs acting on today leads, the forward-looking pipeline follows.
+    // Both departments still use the IDENTICAL order, which is what parity
+    // means here (Scheduling additionally groups them under two headings).
+    const cardOrderRe = /key:\s*"pendingApproval"[\s\S]*?key:\s*"urgentCount"[\s\S]*?key:\s*"todayCount"[\s\S]*?key:\s*"pending"[\s\S]*?key:\s*"thisMonth"[\s\S]*?key:\s*"nextMonth"[\s\S]*?key:\s*"completed"[\s\S]*?key:\s*"total"/;
     expect(adminSrc).toMatch(cardOrderRe);
     expect(schedSrc).toMatch(cardOrderRe);
   });
@@ -79,8 +87,12 @@ describe('Shared appointment drill-down display parity', () => {
 
   it('makes the complete card surface a keyboard-accessible button', () => {
     for (const src of [adminSrc, schedSrc]) {
-      expect(src).toMatch(/<button type="button" onClick=\{onClick\}/);
-      expect(src).toMatch(/cursor-pointer focus:outline-none focus:ring-2/);
+      // The whole tile is still one keyboard-reachable button; it is now the
+      // shared StatTile, which renders a real <button type="button"> whenever
+      // an onClick is supplied (see ui/Surface.tsx).
+      expect(src).toMatch(/<StatTile[\s\S]*?onClick=\{\(\) => setModal\(\{ title: c\.label, endpoint: c\.endpoint \}\)\}/);
+      expect(statTileSrc).toMatch(/const Tag: any = onClick \? "button" : "div";/);
+      expect(statTileSrc).toMatch(/type=\{onClick \? "button" : undefined\}/);
     }
   });
 
@@ -90,8 +102,8 @@ describe('Shared appointment drill-down display parity', () => {
   });
 
   it('both dashboards use the same responsive card grid', () => {
-    expect(adminSrc).toMatch(/grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4/);
-    expect(schedSrc).toMatch(/grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4/);
+    expect(adminSrc).toMatch(/grid grid-cols-2 md:grid-cols-4 gap-3/);
+    expect(schedSrc).toMatch(/grid grid-cols-2 md:grid-cols-4 gap-3/);
   });
 });
 

@@ -41,7 +41,11 @@ describe('Technician completion modal: Next Maintenance Note field', () => {
     // from it, not the line's exact full text (see maintenanceConfirmation.test.ts
     // for the full current isCompleteValid assertion).
     expect(taskDetailSrc).toMatch(/const isCompleteValid = completeForm\.serviceDetails\.trim\(\) && completeForm\.amount && parseFloat\(completeForm\.amount\) >= 0/);
-    expect(taskDetailSrc).not.toMatch(/isCompleteValid[^;]*nextMaintenanceNote/);
+    // Assert against the definition itself: the submit button now sits in the
+    // dialog footer, i.e. earlier in the file than the note field, so a
+    // whole-file scan between the two names no longer isolates the formula.
+    const isCompleteValidLine = taskDetailSrc.match(/const isCompleteValid = .*/)![0];
+    expect(isCompleteValidLine).not.toContain('nextMaintenanceNote');
   });
 
   it('sends a trimmed, non-empty note to the complete endpoint, and omits it when blank', () => {

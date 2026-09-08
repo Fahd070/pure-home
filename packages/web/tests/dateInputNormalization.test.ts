@@ -106,15 +106,19 @@ describe('No user-facing time field remains in any business-date scheduling form
 
 describe('Native date-only inputs (business-date fields with no time) are locked to Gregorian/English-digit rendering', () => {
   const NATIVE_DATE_ONLY_SITES: Array<[string, RegExp]> = [
-    ['technician/pages/TaskDetail.tsx', /type="date" required lang="en-GB" dir="ltr" value=\{completeForm\.actualCompletionDate\}/],
-    ['technician/pages/TaskDetail.tsx', /type="date" lang="en-GB" dir="ltr" value=\{postponeDate\}/],
-    ['technician/pages/Expenses.tsx', /type="date" required lang="en-GB" dir="ltr" value=\{form\.date\}/],
-    ['admin/pages/Expenses.tsx', /type="date" lang="en-GB" dir="ltr" value=\{filters\.from\}/],
-    ['admin/pages/Expenses.tsx', /type="date" lang="en-GB" dir="ltr" value=\{filters\.to\}/],
-    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr" value=\{filters\.dateFrom\}/],
-    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr" value=\{filters\.dateTo\}/],
-    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr" value=\{apptFilters\.dateFrom\}/],
-    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr" value=\{apptFilters\.dateTo\}/],
+    // These now render through the shared <Input> primitive, which forwards
+    // every attribute straight to the underlying <input>, so the same
+    // lang/dir lock still reaches the DOM -- the value binding just sits on
+    // the following line.
+    ['technician/pages/TaskDetail.tsx', /type="date" required lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{completeForm\.actualCompletionDate\}/],
+    ['technician/pages/TaskDetail.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{postponeDate\}/],
+    ['technician/pages/Expenses.tsx', /type="date" required lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{form\.date\}/],
+    ['admin/pages/Expenses.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{filters\.from\}/],
+    ['admin/pages/Expenses.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{filters\.to\}/],
+    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{filters\.dateFrom\}/],
+    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{filters\.dateTo\}/],
+    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{apptFilters\.dateFrom\}/],
+    ['admin/pages/Reports.tsx', /type="date" lang="en-GB" dir="ltr"[\s\S]{0,60}value=\{apptFilters\.dateTo\}/],
   ];
 
   it.each(NATIVE_DATE_ONLY_SITES)('%s has the expected lang="en-GB" dir="ltr" native date input', (rel, re) => {
@@ -131,7 +135,11 @@ describe('Native date-only inputs (business-date fields with no time) are locked
         if (entry.isDirectory()) walk(full);
         else if (/\.tsx?$/.test(entry.name) && full !== excluded) {
           const text = fs.readFileSync(full, 'utf-8');
-          for (const m of text.matchAll(/<input[^>]*type="date"[^>]*>/g)) {
+          // Covers both the raw element and the shared <Input> primitive, which
+          // forwards every attribute straight through to a real <input>. Without
+          // the second pattern a date field could silently lose the Gregorian
+          // lock just by being written with the design-system component.
+          for (const m of text.matchAll(/<(?:input|Input)[^>]*type="date"[^>]*\/?>/g)) {
             if (!m[0].includes('lang="en-GB"')) offenders.push(`${full}: ${m[0].slice(0, 60)}`);
           }
         }
@@ -197,6 +205,6 @@ describe('Existing report timestamps that legitimately include time were not acc
 describe('Regression: Modification #8 (actualCompletionDate date-only, capped at today) still holds', () => {
   it('TaskDetail.tsx still requires actualCompletionDate via a native date-only input, capped at today', () => {
     const s = src('technician/pages/TaskDetail.tsx');
-    expect(s).toMatch(/type="date" required lang="en-GB" dir="ltr" value=\{completeForm\.actualCompletionDate\}\s+max=\{todayDateInputValue\(\)\}/);
+    expect(s).toMatch(/type="date" required lang="en-GB" dir="ltr"\s+value=\{completeForm\.actualCompletionDate\}\s+max=\{todayDateInputValue\(\)\}/);
   });
 });

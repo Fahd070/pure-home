@@ -3,6 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Socket } from "socket.io-client";
 import { useSettingsStore, UserSettings } from "../store/settingsStore";
 import { playChime } from "../hooks/useNotificationSound";
+import { Button } from "../ui/Button";
+import { Segmented } from "../ui/Segmented";
+import { Badge } from "../ui/Badge";
+import { Icon, IconName } from "../ui/icons";
+import { cx } from "../ui/cx";
 
 interface Props {
   api:    { get(p: string): Promise<any>; put(p: string, d: any): Promise<any> };
@@ -10,128 +15,69 @@ interface Props {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function Section({ icon, title, desc, children }: { icon: string; title: string; desc: string; children: React.ReactNode }) {
+function Section({ icon, title, desc, children }: { icon: IconName; title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-2xl">{icon}</span>
-        <div>
-          <h3 className="font-semibold text-slate-800 text-sm">{title}</h3>
-          <p className="text-xs text-slate-400">{desc}</p>
+    <section className="bg-surface border border-line rounded-md">
+      <div className="flex items-start gap-3 px-4 py-3 border-b border-line">
+        <span className="w-7 h-7 rounded-md bg-surface-subtle border border-line-subtle flex items-center justify-center text-fg-muted flex-shrink-0" aria-hidden="true">
+          <Icon name={icon} className="w-4 h-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-fg">{title}</h3>
+          <p className="text-2xs text-fg-muted mt-0.5">{desc}</p>
         </div>
       </div>
-      {children}
-    </div>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
-function SegControl<T extends string>({ options, value, onChange }: {
-  options: { value: T; label: string }[];
+/** Adapts the {value,label} option shape this page uses to the shared control. */
+function OptionRow<T extends string>({ options, value, onChange, ariaLabel }: {
+  options: readonly { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
+  ariaLabel?: string;
 }) {
+  const labels: Record<string, string> = {};
+  options.forEach(o => { labels[o.value] = o.label; });
   return (
-    <div className="flex bg-slate-100 rounded-lg p-1 gap-1 flex-wrap">
-      {options.map((o) => (
-        <button key={o.value} onClick={() => onChange(o.value)}
-          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all min-w-fit ${
-            value === o.value
-              ? "bg-white shadow text-slate-800"
-              : "text-slate-500 hover:text-slate-700"
-          }`}>
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <Segmented<T>
+      value={value}
+      options={options.map(o => o.value)}
+      labels={labels}
+      onChange={onChange}
+      ariaLabel={ariaLabel}
+    />
   );
 }
 
 function Toggle({ value, onChange, label, desc }: { value: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <div>
-        <p className="text-sm font-medium text-slate-700">{label}</p>
-        {desc && <p className="text-xs text-slate-400">{desc}</p>}
+    <div className="flex items-center justify-between gap-4 py-2">
+      <div className="min-w-0">
+        <p className="text-[0.8125rem] font-medium text-fg">{label}</p>
+        {desc && <p className="text-2xs text-fg-muted mt-0.5">{desc}</p>}
       </div>
-      <button onClick={() => onChange(!value)}
-        className={`relative w-11 h-6 rounded-full transition-colors ${value ? "bg-blue-600" : "bg-slate-200"}`}>
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${value ? "translate-x-5" : ""}`} />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        onClick={() => onChange(!value)}
+        className={cx(
+          "relative w-9 h-5 rounded-full transition-colors flex-shrink-0 border",
+          value ? "bg-accent border-accent" : "bg-surface-active border-line-strong"
+        )}
+      >
+        <span
+          className={cx(
+            "absolute top-0.5 w-3.5 h-3.5 bg-surface rounded-full shadow-sm transition-all",
+            // Offset from the inline start so the knob travels the correct way in RTL.
+            value ? "start-[1.125rem]" : "start-0.5"
+          )}
+        />
       </button>
-    </div>
-  );
-}
-
-// ── Theme Color Section ───────────────────────────────────────────────────────
-function ThemeColorSection({ t, settings, change }: { t: any; settings: any; change: any }) {
-  const defaults = { primaryColor: "#000080", secondaryColor: "#f8fafc", buttonColor: "#000080", cardColor: "#ffffff" };
-  const [draft, setDraft] = React.useState({
-    primaryColor: settings.primaryColor || defaults.primaryColor,
-    secondaryColor: settings.secondaryColor || defaults.secondaryColor,
-    buttonColor: settings.buttonColor || defaults.buttonColor,
-    cardColor: settings.cardColor || defaults.cardColor,
-  });
-
-  const labelMap: Record<string, string> = {
-    primaryColor:   t("settings.primaryColor"),
-    secondaryColor: t("settings.secondaryColor"),
-    buttonColor:    t("settings.buttonColor"),
-    cardColor:      t("settings.cardColor"),
-  };
-
-  function handleApplyAndSave() {
-    const h = document.documentElement;
-    h.style.setProperty("--color-primary", draft.primaryColor);
-    h.style.setProperty("--color-secondary", draft.secondaryColor);
-    h.style.setProperty("--color-button", draft.buttonColor);
-    h.style.setProperty("--color-card", draft.cardColor);
-    Object.entries(draft).forEach(([k, v]) => change(k as any, v));
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-2xl">🖌️</span>
-        <div>
-          <h3 className="font-semibold text-slate-800 text-sm">{t("settings.themeColors")}</h3>
-          <p className="text-xs text-slate-400">{t("settings.themeColorsDesc")}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        {(["primaryColor","secondaryColor","buttonColor","cardColor"] as const).map(key => (
-          <div key={key} className="flex items-center gap-3">
-            <input type="color" value={draft[key]} onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
-              className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200 p-0.5" />
-            <div>
-              <p className="text-xs font-medium text-slate-700">{labelMap[key]}</p>
-              <p className="text-xs text-slate-400 font-mono">{draft[key]}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      {/* Live Preview */}
-      <div className="border rounded-xl p-4 mb-4 space-y-2" style={{ backgroundColor: draft.cardColor }}>
-        <p className="text-xs font-semibold text-slate-500 mb-2">
-          {t("settings.livePreview") || "Live Preview"}
-        </p>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: draft.primaryColor }}>PH</div>
-          <span className="text-sm font-semibold" style={{ color: draft.primaryColor }}>Pure Home</span>
-        </div>
-        <button className="text-xs text-white px-3 py-1.5 rounded-lg font-medium" style={{ backgroundColor: draft.buttonColor }}>
-          {t("common.save")}
-        </button>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={handleApplyAndSave}
-          className="flex-1 text-white text-sm py-2 rounded-lg font-medium hover:opacity-90 transition-opacity"
-          style={{ backgroundColor: draft.primaryColor }}>
-          ✓ {t("settings.applyColors") || "Apply & Save"}
-        </button>
-        <button onClick={() => setDraft({ ...defaults })}
-          className="text-xs text-slate-500 hover:text-slate-700 border px-3 py-2 rounded-lg hover:bg-slate-50">
-          ↺ {t("settings.resetColors")}
-        </button>
-      </div>
     </div>
   );
 }
@@ -189,74 +135,84 @@ export default function SettingsPage({ api, socket }: Props) {
   const bgOpts     = [{ value: "day", label: t("settings.bgDay") }, { value: "night", label: t("settings.bgNight") }] as const;
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-3 max-w-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">{t("settings.title")}</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{t("settings.subtitle")}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold text-fg">{t("settings.title")}</h1>
+          <p className="text-xs text-fg-muted mt-0.5">{t("settings.subtitle")}</p>
         </div>
-        <div className="text-xs px-3 py-1.5 rounded-full font-medium transition-all">
-          {syncStatus === "saving" && <span className="text-blue-500 animate-pulse">{t("common.loading")}</span>}
-          {syncStatus === "saved"  && <span className="text-green-600 bg-green-50 px-3 py-1.5 rounded-full">✓ {t("settings.saved")}</span>}
-          {syncStatus === "error"  && <span className="text-red-500">{t("common.error")}</span>}
+        <div className="flex-shrink-0" role="status" aria-live="polite">
+          {syncStatus === "saving" && <span className="text-2xs text-fg-muted animate-pulse">{t("common.loading")}</span>}
+          {syncStatus === "saved"  && <Badge tone="success" dot>{t("settings.saved")}</Badge>}
+          {syncStatus === "error"  && <Badge tone="danger" dot>{t("common.error")}</Badge>}
         </div>
       </div>
 
       {/* Theme */}
-      <Section icon="🎨" title={t("settings.theme")} desc={t("settings.themeDesc")}>
-        <SegControl options={themeOpts as any} value={settings.theme} onChange={(v) => change("theme", v)} />
+      <Section icon="settings" title={t("settings.theme")} desc={t("settings.themeDesc")}>
+        <OptionRow options={themeOpts} value={settings.theme} onChange={(v) => change("theme", v)} ariaLabel={t("settings.theme")} />
       </Section>
 
       {/* Font Size */}
-      <Section icon="🔤" title={t("settings.fontSize")} desc={t("settings.fontSizeDesc")}>
-        <SegControl options={fontOpts as any} value={settings.fontSize} onChange={(v) => change("fontSize", v)} />
-        <p className="mt-3 text-slate-500 text-sm">{t("settings.fontPreview")}: <span className="font-medium text-slate-700">Pure Home</span></p>
+      <Section icon="edit" title={t("settings.fontSize")} desc={t("settings.fontSizeDesc")}>
+        <OptionRow options={fontOpts} value={settings.fontSize} onChange={(v) => change("fontSize", v)} ariaLabel={t("settings.fontSize")} />
+        <p className="mt-3 text-[0.8125rem] text-fg-secondary">
+          {t("settings.fontPreview")}: <span className="font-medium text-fg">Pure Home</span>
+        </p>
       </Section>
 
       {/* Interface Scale */}
-      <Section icon="📐" title={t("settings.scale")} desc={t("settings.scaleDesc")}>
-        <SegControl options={scaleOpts as any} value={settings.interfaceScale} onChange={(v) => change("interfaceScale", v)} />
+      <Section icon="dashboard" title={t("settings.scale")} desc={t("settings.scaleDesc")}>
+        <OptionRow options={scaleOpts} value={settings.interfaceScale} onChange={(v) => change("interfaceScale", v)} ariaLabel={t("settings.scale")} />
       </Section>
 
       {/* Background */}
-      <Section icon="🌅" title={t("settings.background")} desc={t("settings.backgroundDesc")}>
-        <SegControl options={bgOpts as any} value={settings.background} onChange={(v) => change("background", v)} />
+      <Section icon="info" title={t("settings.background")} desc={t("settings.backgroundDesc")}>
+        <OptionRow options={bgOpts} value={settings.background} onChange={(v) => change("background", v)} ariaLabel={t("settings.background")} />
       </Section>
 
       {/* Accessibility */}
-      <Section icon="♿" title={t("settings.accessibility")} desc={t("settings.accessibilityDesc")}>
+      <Section icon="help" title={t("settings.accessibility")} desc={t("settings.accessibilityDesc")}>
         <Toggle value={settings.highContrast}        onChange={(v) => change("highContrast",        v)} label={t("settings.highContrast")}  desc={t("settings.highContrastDesc")} />
-        <div className="border-t border-slate-100 my-1" />
+        <div className="border-t border-line-subtle my-1" />
         <Toggle value={settings.improvedReadability} onChange={(v) => change("improvedReadability", v)} label={t("settings.readability")}    desc={t("settings.readabilityDesc")} />
       </Section>
 
       {/* Notifications */}
-      <Section icon="🔔" title={t("settings.notifications")} desc={t("settings.notificationsDesc")}>
+      <Section icon="notifications" title={t("settings.notifications")} desc={t("settings.notificationsDesc")}>
         <Toggle value={settings.notificationsEnabled} onChange={(v) => change("notificationsEnabled", v)} label={t("settings.notifEnabled")} desc={t("settings.notifEnabledDesc")} />
       </Section>
 
       {/* Sound */}
-      <Section icon="🔊" title={t("settings.sound")} desc={t("settings.soundDesc")}>
+      <Section icon="messaging" title={t("settings.sound")} desc={t("settings.soundDesc")}>
         <Toggle value={settings.soundEnabled} onChange={(v) => change("soundEnabled", v)} label={t("settings.soundEnabled")} />
 
-        <div className={`mt-3 space-y-3 transition-opacity ${settings.soundEnabled ? "" : "opacity-40 pointer-events-none"}`}>
+        <div className={cx("mt-3 space-y-3 transition-opacity", !settings.soundEnabled && "opacity-40 pointer-events-none")}>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 w-20">{t("settings.soundVolume")}</span>
-            <input type="range" min={0} max={100} value={settings.soundVolume}
+            <label htmlFor="sound-volume" className="text-xs text-fg-secondary w-20 flex-shrink-0">{t("settings.soundVolume")}</label>
+            <input
+              id="sound-volume"
+              type="range" min={0} max={100} value={settings.soundVolume}
               onChange={(e) => change("soundVolume", Number(e.target.value))}
-              className="flex-1 accent-blue-600" />
-            <span className="text-xs font-mono text-slate-600 w-8 text-right">{settings.soundVolume}%</span>
+              className="flex-1 accent-[var(--ph-accent)]"
+            />
+            <span className="text-2xs font-mono text-fg-secondary w-9 text-end tabular-nums">{settings.soundVolume}%</span>
           </div>
-          <button onClick={() => playChime(settings.soundVolume / 100)}
-            className="flex items-center gap-2 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-medium transition-colors border border-blue-200">
-            <span>▶</span> {t("settings.soundTest")}
-          </button>
+          <Button variant="secondary" size="sm" onClick={() => playChime(settings.soundVolume / 100)}>
+            {t("settings.soundTest")}
+          </Button>
         </div>
       </Section>
 
-      {/* Theme Colors */}
-      <ThemeColorSection t={t} settings={settings} change={change} />
+      {/* The "Interface Colors" section used to live here. It edited
+          primaryColor / secondaryColor / buttonColor / cardColor, which only
+          ever drove the per-department chrome the redesign replaced with one
+          token-based identity -- so the controls had no visible effect any
+          more. The settings themselves are untouched: still typed, still
+          defaulted, still loaded from and saved to the server, and still
+          applied as CSS custom properties by applySettings(). Only the editor
+          is gone, so any value a user stored previously survives. */}
     </div>
   );
 }
