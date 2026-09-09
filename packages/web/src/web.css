@@ -124,7 +124,55 @@ button, [role="button"], a {
    shrinks further for one-thumb use and denser data.
    ════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
-  #root, #root > div { height: 100dvh; height: 100vh; }
+  /* ── Scroll architecture ────────────────────────────────────────────────
+     This rule used to read `height: 100dvh; height: 100vh`. The later
+     declaration wins, so 100vh was the value that actually applied -- and on
+     a phone 100vh is the LARGE viewport (URL bar collapsed), not the visible
+     one. With the URL bar showing, the shell was therefore taller than the
+     screen: the end of main's scroll area sat underneath the browser toolbar
+     and could not be reached, and because the layout overflowed the visual
+     viewport the browser would let the *document* be dragged (iOS allows this
+     even with body{overflow:hidden}), carrying the whole shell -- header
+     included -- up off-screen. Whether either symptom appeared depended on
+     the URL bar's current state, which is why it behaved intermittently.
+
+     Order matters here: vh first as the fallback, dvh second so it wins
+     wherever supported and the shell tracks the visible viewport exactly. */
+  #root, #root > div {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* The document itself must never scroll or rubber-band -- main owns
+     scrolling (below), so any document-level movement is unwanted by
+     definition. */
+  html, body {
+    overscroll-behavior: none;
+  }
+
+  /* main is the ONE vertical scroll owner. AppFrame already renders the
+     command bar as a flex sibling of main rather than inside it, so the
+     header needs no sticky/fixed treatment -- it sits outside the scrolling
+     box and stays pinned on its own once the shell is the correct height.
+     `contain` keeps a fling that reaches either end from chaining out to the
+     document, which is what otherwise toggles the URL bar mid-scroll and
+     resizes the layout underneath the user. */
+  main {
+    overscroll-behavior-y: contain;
+  }
+
+  /* Wide data tables scroll horizontally inside their own box. That box was
+     overflow:auto -- a scroll container on BOTH axes -- despite never having
+     any vertical overflow, and a container that scrolls horizontally can
+     capture a diagonal touch drag and swallow its vertical component for the
+     whole gesture. Pinning the vertical axis to hidden removes that
+     possibility without changing anything the user sees: vertical pans that
+     begin on a table now chain straight up to main. Verified safe -- no page
+     passes TableShell a scrollClassName, so no table scrolls vertically
+     inside itself. */
+  div.overflow-auto:has(> table) {
+    overflow-y: hidden;
+  }
 
   input, select, textarea { font-size: 16px !important; }
 
