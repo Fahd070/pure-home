@@ -67,9 +67,19 @@ router.post('/', requireRole('TECHNICIAN'), async (req: AuthRequest, res, next) 
     // persisted (UrgentVisitRecord has no such column -- see schema.prisma;
     // the real completer is already reliably identified via submittedById/
     // submittedBy, so no duplicate name column was added).
+    // v4 decision D4: no longer REQUIRED. The urgent-visit submitter is already
+    // identified authoritatively by req.user!.userId (stored as submittedById
+    // below), and v4 gives every technician their own account -- so asking them
+    // to also type their own name added a value that could only ever disagree
+    // with the real actor. It was never persisted at all (UrgentVisitRecord has
+    // no such column), so nothing is lost by dropping the requirement.
+    //
+    // Still accepted and still format-validated when present, because employees
+    // on Desktop v3.6.5 keep sending it and must not start receiving 400s.
     const trimmedTechnicianName = body.technicianName?.trim() || '';
-    if (!trimmedTechnicianName) return res.status(400).json({ success: false, message: 'Technician name is required' });
-    if (!FIRST_NAME_RE.test(trimmedTechnicianName)) return res.status(400).json({ success: false, message: 'Please enter first name only' });
+    if (trimmedTechnicianName && !FIRST_NAME_RE.test(trimmedTechnicianName)) {
+      return res.status(400).json({ success: false, message: 'Please enter first name only' });
+    }
 
     // Visit Only: amount/payment method are not required and never trusted
     // from the payload -- normalized below regardless of what was submitted,

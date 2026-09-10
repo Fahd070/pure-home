@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -11,11 +12,16 @@ import { PageHeader } from "../../ui/Surface";
 import { Callout } from "../../ui/Feedback";
 import { Icon, IconName } from "../../ui/icons";
 import { cx } from "../../ui/cx";
+import { TechnicianAccessCodeDialog } from "../components/TechnicianAccessCodeDialog";
+import { TechnicianEmployee, useTechnicianEmployees } from "../hooks/useTechnicianEmployees";
 
+// v4 Requirement #12: the Technicians department no longer has ONE shared code.
+// It is replaced below by per-technician entries drawn from the same employee
+// records the Employees page manages, so this list is removed from the generic
+// department rotation form.
 const DEPTS: { key: string; labelKey: string; icon: IconName }[] = [
   { key: "admin",      labelKey: "accessCodes.adminDept",      icon: "dashboard" },
   { key: "scheduling", labelKey: "accessCodes.schedulingDept", icon: "appointments" },
-  { key: "technician", labelKey: "accessCodes.technicianDept", icon: "technicians" },
 ];
 
 type DeptKey = "admin" | "scheduling" | "technician";
@@ -52,20 +58,39 @@ export default function AccessCodes() {
   const qc = useQueryClient();
   const socket = useSocket();
 
+  // Same records, same hook, same cache entry as the Employees page -- never a
+  // second technician list maintained here.
+  const { list: technicianList, migration } = useTechnicianEmployees();
+  const technicians: TechnicianEmployee[] = technicianList.data || [];
+  // Once retired the shared login can never authenticate again, so its rotation
+  // control is hidden -- rotating a permanently dead credential is meaningless.
+  const sharedRetired = migration.data?.sharedLoginRetired === true;
+  const [codeTarget, setCodeTarget] = useState<TechnicianEmployee | null>(null);
+
   const [forms, setForms]   = useState<Record<DeptKey, FormState>>({ admin: blank(), scheduling: blank(), technician: blank() });
   const [touched, setTouched] = useState<Record<DeptKey, Partial<Record<keyof FormState, boolean>>>>({ admin: {}, scheduling: {}, technician: {} });
 
   useEffect(() => {
     if (!socket) return;
     const onConfigUpdated = (data: any) => {
+      // Branch on the payload's own `type`. This handler previously treated EVERY
+      // config event as a department-code rotation, so another admin merely
+      // renaming a technician told this one their access codes had changed
+      // remotely -- and it invalidated ["access-codes"], a key no query in the
+      // app defines, so the roster and migration panel never actually refreshed.
+      if (data?.type === "technician-employees" || data?.type === "technician-cutover") {
+        qc.invalidateQueries({ queryKey: ["technician-employees"] });
+        qc.invalidateQueries({ queryKey: ["technician-migration"] });
+        return;
+      }
+
       if (data?.updatedDepts) {
         (data.updatedDepts as DeptKey[]).forEach(dept => {
           setForms(f => ({ ...f, [dept]: blank() }));
           setTouched(t => ({ ...t, [dept]: {} }));
         });
+        toast(t("accessCodes.codesUpdatedRemotely"), { icon: "🔄" });
       }
-      qc.invalidateQueries({ queryKey: ["access-codes"] });
-      toast(t("accessCodes.codesUpdatedRemotely"), { icon: "🔄" });
     };
     socket.on("config:updated", onConfigUpdated);
     return () => { socket.off("config:updated", onConfigUpdated); };
@@ -246,7 +271,99 @@ export default function AccessCodes() {
             </section>
           );
         })}
+
+        {/* ── Technicians: one entry per technician employee ── */}
+        <section className="bg-surface border border-line rounded-md">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-line">
+            <span
+              className="w-7 h-7 rounded-md bg-surface-subtle border border-line-subtle flex items-center justify-center text-fg-muted flex-shrink-0"
+              aria-hidden="true"
+            >
+              <Icon name="technicians" className="w-4 h-4" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-fg">{t("accessCodes.technicianDept")}</h3>
+              <p className="text-2xs text-fg-muted">{t("accessCodes.technicianPerPersonDesc")}</p>
+            </div>
+            <Link
+              to="/admin/employees"
+              className="ms-auto flex-shrink-0 text-2xs text-accent hover:underline inline-flex items-center gap-1"
+            >
+              {t("employees.title")}
+              <Icon name="chevronEnd" className="w-3 h-3 rtl:rotate-180" />
+            </Link>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* The legacy shared department code is STILL ACCEPTED for login
+                until cutover, so while that is true Administration must be able
+                to rotate it -- otherwise a leaked shared code could not be
+                changed during the exact window it still works. It disappears
+                once retirement is recorded, because from then on it cannot
+                authenticate anything. */}
+            {!sharedRetired && (
+              <div className="rounded-md border border-warning-border bg-warning-bg p-3 space-y-3">
+                <p className="text-2xs text-warning-fg">{t("accessCodes.legacySharedStillActive")}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {codeField("technician", "technician-current", t("accessCodes.currentCode"), "currentCode", "showCurrent",
+                    (touched.technician?.currentCode && clientErrors(forms.technician).currentCode) || undefined)}
+                  {codeField("technician", "technician-new", t("accessCodes.newCode"), "newCode", "showNew",
+                    (touched.technician?.newCode && clientErrors(forms.technician).newCode) || undefined)}
+                  {codeField("technician", "technician-confirm", t("accessCodes.confirmCode"), "confirmCode", "showConfirm",
+                    (touched.technician?.confirmCode && clientErrors(forms.technician).confirmCode) || undefined)}
+                </div>
+                {forms.technician.serverError === "WRONG_CURRENT" && (
+                  <p className="text-2xs text-danger-fg font-medium">{t("accessCodes.errWrongCurrent")}</p>
+                )}
+                <div className="flex justify-end">
+                  <Button
+                    variant="secondary"
+                    loading={updateCode.isPending && updateCode.variables?.dept === "technician"}
+                    onClick={() => handleSubmit("technician")}
+                  >
+                    {t("accessCodes.updateCode")}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {technicians.length === 0 ? (
+              <Callout tone="info">{t("employees.noneAddFromEmployees")}</Callout>
+            ) : (
+              <div className="divide-y divide-line-subtle -my-1">
+                {technicians.map(tech => (
+                  <div key={tech.id} className={cx("flex items-center gap-3 py-2.5", !tech.isActive && "opacity-60")}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.8125rem] font-medium text-fg truncate">{tech.name}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {tech.hasAccessCode ? (
+                          // Masked only -- the stored code is a one-way hash and
+                          // is never sent to the client.
+                          <Badge tone="success" dot>
+                            <span className="font-mono tracking-[0.3em]" dir="ltr">••••</span>
+                          </Badge>
+                        ) : (
+                          <Badge tone="warning" dot>{t("employees.noCodeYet")}</Badge>
+                        )}
+                        {!tech.isActive && <Badge tone="neutral">{t("common.inactive")}</Badge>}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => setCodeTarget(tech)}>
+                      {tech.hasAccessCode ? t("employees.changeAccessCode") : t("employees.setAccessCode")}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
+
+      <TechnicianAccessCodeDialog
+        technician={codeTarget}
+        open={!!codeTarget}
+        onClose={() => setCodeTarget(null)}
+      />
     </div>
   );
 }

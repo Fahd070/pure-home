@@ -1,7 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import authRoutes from './routes/auth';
 import customerRoutes from './routes/customers';
 import appointmentRoutes from './routes/appointments';
@@ -16,6 +16,7 @@ import settingsRoutes from './routes/settings';
 import callReportRoutes from './routes/call-reports';
 import expenseRoutes from './routes/expenses';
 import urgentVisitRoutes from './routes/urgent-visits';
+import employeeRoutes from './routes/employees';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './prisma';
 
@@ -55,7 +56,52 @@ app.use(cors({
 app.use(express.json({ limit: '5mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, message: { success: false, message: 'Too many attempts, try again later' } });
+// The limiter stores are constructed explicitly and exported ONLY so the test
+// suite can reset counters between test files. Production behaviour, windows and
+// limits are completely unchanged by this -- nothing calls resetAll() at runtime.
+// Without it, a test file that legitimately exercises repeated failed logins
+// would poison every later file on the same IP.
+export const authLimiterStore = new MemoryStore();
+export const technicianCodeLimiterStore = new MemoryStore();
+
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, store: authLimiterStore, message: { success: false, message: 'Too many attempts, try again later' } });
+
+// v4 decision D8: technician access codes stay 4 digits by deliberate
+// operational choice, which is only a 10,000-value space. The generic 50/15min
+// auth limiter is far too permissive against that: an attacker gets 50 guesses
+// per window per IP, and with several technicians each holding a distinct valid
+// code the chance of hitting SOME valid code is meaningfully higher than
+// guessing one specific credential.
+//
+// This is a second, tighter limiter layered on top -- it never replaces or
+// loosens the existing one.
+//
+// Scoped by `skip` rather than by a custom keyGenerator on purpose. The limiter
+// therefore only ever observes technician code-login attempts, so its ordinary
+// per-IP counter IS "per IP per technician department" without hand-rolling a
+// key (which in express-rate-limit v7 would also need explicit IPv6
+// normalisation to be correct). Administration and Scheduling code-login are
+// completely untouched and keep their existing budget.
+//
+// `skipSuccessfulRequests` means a technician signing in normally never consumes
+// budget -- only FAILURES count, so a legitimately busy shift cannot lock the
+// team out.
+//
+// Deliberately per-IP and time-boxed rather than a per-account lockout: locking
+// an account after N failures would let anyone who knows a technician exists
+// deny them access at will, turning a brute-force defence into a denial-of-service
+// tool. The window simply expires.
+const technicianCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  store: technicianCodeLimiterStore,
+  skipSuccessfulRequests: true,
+  skip: (req) => (req.body as any)?.dept !== 'technician',
+  // Same generic wording and shape as every other rejected attempt, so a caller
+  // cannot learn anything about whether a code was close, valid, or belongs to
+  // an inactive account.
+  message: { success: false, message: 'Too many attempts, try again later' },
+});
 
 // Health check — no auth required, used by monitoring and client connectivity tests
 app.get('/health', async (_req, res) => {
@@ -81,7 +127,7 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authLimiter, technicianCodeLimiter, authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/technicians', technicianRoutes);
@@ -95,5 +141,6 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/call-reports', callReportRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/urgent-visits', urgentVisitRoutes);
+app.use('/api/employees', employeeRoutes);
 app.use(errorHandler);
 export default app;

@@ -94,44 +94,47 @@ describe('Part A: Admin Technicians detail modal shows full completion details',
   });
 });
 
-describe('Part B: Urgent completion form renders a required Technician Name field', () => {
-  it('15. renders the Technician Name field with the correct label', () => {
-    expect(technicianUrgentSrc).toMatch(/t\("tasks\.technicianName"\)/);
-    expect(technicianUrgentSrc).toMatch(/type="text" required[\s\S]{0,60}value=\{record\.technicianName\}/);
+describe('Part B: Urgent completion form derives the technician from the session (v4 D4)', () => {
+  // SUPERSEDED BY v4 DECISION D4: the urgent-visit form no longer asks the
+  // technician to type their own name. Their identity comes from their own
+  // authenticated account and is stored as submittedById. Inverted rather than
+  // deleted -- the ABSENCE of the field is now the regression risk.
+  it('15. no longer renders a Technician Name field', () => {
+    expect(technicianUrgentSrc).not.toMatch(/t\("tasks\.technicianName"\)/);
+    expect(technicianUrgentSrc).not.toMatch(/id="urgent-tech-name"/);
   });
-  it('16. the field is required and gates form submission via isRecordValid', () => {
-    expect(technicianUrgentSrc).toMatch(/const technicianNameValid = !!trimmedTechnicianName && FIRST_NAME_RE\.test\(trimmedTechnicianName\);/);
-    expect(technicianUrgentSrc).toMatch(/const isRecordValid = .*&& technicianNameValid;/);
+  it('16. form submission no longer gates on a typed name', () => {
+    expect(technicianUrgentSrc).not.toMatch(/technicianNameValid/);
+    expect(technicianUrgentSrc).toMatch(/const isRecordValid = paymentValid && amountValid;/);
   });
-  it('17. the authenticated Technician\'s first name pre-fills the field when the form opens', () => {
-    expect(technicianUrgentSrc).toMatch(/import \{ useAuthStore \} from "\.\.\/store\/authStore";/);
-    expect(technicianUrgentSrc).toMatch(/const \{ user \} = useAuthStore\(\);/);
-    expect(technicianUrgentSrc).toMatch(/technicianName: firstNameOf\(user\?\.name\)/);
+  it('17. shows the authenticated technician back to them instead of asking for a name', () => {
+    expect(technicianUrgentSrc).toMatch(/t\("tasks\.completingAs"\)/);
+    expect(technicianUrgentSrc).toMatch(/\{user\?\.name\}/);
   });
-  it('18. missing/invalid name blocks the submit button client-side (disabled on !isRecordValid)', () => {
+  it('18. an incomplete form still blocks the submit button client-side (disabled on !isRecordValid)', () => {
     // The shared Button sets disabled={disabled || loading}, so an invalid
     // form and an in-flight submit both still block the click.
     expect(technicianUrgentSrc).toMatch(/disabled=\{!isRecordValid\}/);
     expect(technicianUrgentSrc).toMatch(/loading=\{submitMutation\.isPending\}/);
   });
-  it('19-20-21-22. reuses Modification #13\'s exact FIRST_NAME_RE/firstNameOf rather than a second validator', () => {
-    expect(technicianUrgentSrc).toMatch(/import \{ FIRST_NAME_RE, firstNameOf \} from "\.\/TaskDetail";/);
-    expect(technicianUrgentSrc).not.toMatch(/const FIRST_NAME_RE\s*=/); // no locally re-declared regex
+  it('19-20-21-22. no longer imports or declares any technician-name validator', () => {
+    expect(technicianUrgentSrc).not.toMatch(/FIRST_NAME_RE/);
+    expect(technicianUrgentSrc).not.toMatch(/firstNameOf/);
   });
   it('23-24. shows an inline error only once the field is non-empty and invalid (matches the normal-completion UX convention)', () => {
-    expect(technicianUrgentSrc).toMatch(/const technicianNameError = trimmedTechnicianName && !technicianNameValid/);
+    expect(technicianUrgentSrc).not.toMatch(/technicianNameError/);
   });
-  it('25-26. submitted technicianName is sent as business data alongside the payload, never replacing appointmentId/customer identity fields', () => {
-    expect(technicianUrgentSrc).toMatch(/technicianName: trimmedTechnicianName,/);
+  it('25-26. no technician name is sent at all; identity travels in the JWT', () => {
+    expect(technicianUrgentSrc).not.toMatch(/technicianName:/);
     expect(technicianUrgentSrc).toMatch(/appointmentId: submitModal\.appt\.id,/);
   });
 });
 
-describe('Part B backend: urgent-visits requires and validates technicianName without persisting it', () => {
-  it('technicianName is required in the Zod schema shape (validated in the handler, not silently optional-and-ignored)', () => {
+describe('Part B backend: urgent-visits accepts an optional technicianName, validates format, never persists it', () => {
+  it('technicianName stays accepted (v3.6.5 clients send it) and is still format-validated when present', () => {
     expect(backendUrgentVisitsSrc).toMatch(/technicianName:\s*z\.string\(\)\.max\(100\)\.optional\(\)/);
-    expect(backendUrgentVisitsSrc).toMatch(/if \(!trimmedTechnicianName\) return res\.status\(400\)/);
-    expect(backendUrgentVisitsSrc).toMatch(/if \(!FIRST_NAME_RE\.test\(trimmedTechnicianName\)\) return res\.status\(400\)/);
+    expect(backendUrgentVisitsSrc).not.toMatch(/if \(!trimmedTechnicianName\) return res\.status\(400\)/);
+    expect(backendUrgentVisitsSrc).toMatch(/if \(trimmedTechnicianName && !FIRST_NAME_RE\.test\(trimmedTechnicianName\)\)/);
   });
   it('the create() call\'s data block does not include technicianName (never persisted)', () => {
     const createBlock = backendUrgentVisitsSrc.match(/prisma\.urgentVisitRecord\.create\(\{[\s\S]*?\n {4}\}\);/)?.[0] || '';

@@ -69,6 +69,10 @@ export interface MaintenanceScheduleCustomer {
   maintenanceCycle: MaintenanceCycleType;
   maintenanceFrequency: number;
   previousServiceDate: Date | null;
+  // v4 Requirement #4: optional, because several call sites legitimately select
+  // only the recurrence fields. When absent it is simply not available as a
+  // baseline -- it is never defaulted to "now", which would fabricate a due date.
+  installationDate?: Date | null;
 }
 
 // Source-of-truth priority for the date recurrence is added to:
@@ -79,7 +83,15 @@ export interface MaintenanceScheduleCustomer {
 //   2. If the customer has no in-system completion yet, previousServiceDate
 //      (historical service that happened before the customer existed in the
 //      system) establishes the FIRST next-maintenance baseline only.
-//   3. Otherwise there is no computable date.
+//   3. v4 Requirement #4: otherwise installationDate. A customer whose filter
+//      was installed but who has never had a recorded service is still on a
+//      maintenance cycle -- it simply started at installation. Before this
+//      fallback existed, such a customer had NO computable due date at all and
+//      was therefore invisible to every due calculation, dashboard bucket and
+//      overdue list, which is exactly the "only monitored if an appointment was
+//      manually scheduled" defect Requirement #4 exists to fix.
+//   4. Otherwise there is no computable date, and this returns null. Null is a
+//      real answer meaning "unknown", never a reason to substitute today's date.
 // Urgent appointments/visits are deliberately excluded -- they have no
 // actualCompletionDate field (see UrgentVisitRecord in schema.prisma) and are
 // not part of the customer's regular recurring-maintenance cycle.
@@ -92,8 +104,87 @@ export function computeNextMaintenanceDate(
     .map(a => ({ sourceDate: a.actualCompletionDate ?? a.completedAt ?? a.scheduledDate }))
     .sort((a, b) => new Date(b.sourceDate).getTime() - new Date(a.sourceDate).getTime());
 
-  const baseline = completions[0]?.sourceDate ?? customer.previousServiceDate ?? null;
+  const baseline =
+    completions[0]?.sourceDate ??
+    customer.previousServiceDate ??
+    customer.installationDate ??
+    null;
   if (!baseline) return null;
 
   return calculateNextMaintenanceDate(new Date(baseline), customer.maintenanceCycle, customer.maintenanceFrequency);
+}
+
+// ---------------------------------------------------------------------------
+// Maintenance priority
+// ---------------------------------------------------------------------------
+
+export type MaintenancePriority = 'OVERDUE' | 'DUE_SOON' | 'NORMAL' | 'UNKNOWN';
+
+/**
+ * The "due soon" window, in days.
+ *
+ * This is the ONE place the threshold lives (approved decision D3). It
+ * previously existed as a bare `daysUntil <= 10` literal duplicated in
+ * routes/customers.ts and routes/reports.ts, which meant the two surfaces could
+ * silently disagree; both now import this constant, including for the legacy
+ * `alertLevel` field they still emit for Desktop v3.6.5.
+ *
+ * The value is deliberately unchanged at 10, preserving today's behaviour
+ * exactly: the business has not yet approved a different threshold, and this
+ * refactor is not the place to quietly change what employees see. When a value
+ * is approved, it changes here and everywhere follows.
+ */
+export const DUE_SOON_DAYS = 10;
+
+/**
+ * Whole days from `now` until `dueDate`, using UTC date boundaries only.
+ *
+ * Date-only semantics matter here: "due in 1 day" must not flip to "overdue"
+ * because of a clock time. Both sides are floored to their UTC calendar day
+ * before subtracting, so the result counts calendar days, never elapsed hours.
+ * This matches the UTC-only convention used by the recurrence math above and by
+ * utils/dateTimeInput.ts on the frontend, and is what keeps the answer stable
+ * for Asia/Riyadh (UTC+3) viewers regardless of server timezone.
+ *
+ * Negative means overdue by that many days, so callers never have to reinvent
+ * the sign convention -- and the UI never has to render a negative "days
+ * remaining", which is the Requirement #5 defect.
+ */
+export function daysUntilDue(dueDate: Date, now: Date = new Date()): number {
+  const startOfDayUTC = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return Math.round((startOfDayUTC(new Date(dueDate)) - startOfDayUTC(now)) / 86400000);
+}
+
+/**
+ * The single classification used by dashboard buckets, customer list colours,
+ * overdue-first sorting and reports. Frontends render this value; they never
+ * recompute it, so a colour and a sort order can never disagree.
+ */
+export function getMaintenancePriority(dueDate: Date | null | undefined, now: Date = new Date()): MaintenancePriority {
+  if (!dueDate) return 'UNKNOWN';
+  const days = daysUntilDue(dueDate, now);
+  if (days < 0) return 'OVERDUE';
+  if (days <= DUE_SOON_DAYS) return 'DUE_SOON';
+  return 'NORMAL';
+}
+
+/**
+ * Both derived values a list row needs, computed once together so callers cannot
+ * pair a priority from one date with a day count from another.
+ *
+ * `daysUntil` is signed; `daysOverdue` is the positive magnitude for OVERDUE
+ * rows and null otherwise, so the UI can render "overdue by X days" without ever
+ * negating a number itself.
+ */
+export function describeMaintenanceDue(dueDate: Date | null | undefined, now: Date = new Date()) {
+  if (!dueDate) {
+    return { maintenancePriority: 'UNKNOWN' as MaintenancePriority, daysUntilMaintenance: null, daysOverdue: null };
+  }
+  const daysUntil = daysUntilDue(dueDate, now);
+  const priority = getMaintenancePriority(dueDate, now);
+  return {
+    maintenancePriority: priority,
+    daysUntilMaintenance: daysUntil,
+    daysOverdue: priority === 'OVERDUE' ? Math.abs(daysUntil) : null,
+  };
 }

@@ -1,7 +1,18 @@
-// Modification #13: PATCH /appointments/:id/complete now requires a
-// Technician-submitted "technicianName" (first name only) for a non-admin
-// completion. This is validated server-side and used as business/report
-// data. As of the completion-technician-name-display batch it IS persisted
+// PARTIALLY SUPERSEDED BY v4 DECISION D4.
+//
+// Modification #13 originally REQUIRED a Technician-submitted "technicianName"
+// (first name only) on every non-admin completion. v4 introduces per-technician
+// authenticated identities, so the technician is now known from the JWT and is
+// no longer asked to type their own name: the field is optional.
+//
+// Everything else in this file still holds and is deliberately kept: the field
+// is still ACCEPTED and still format-validated when present (employees on
+// Desktop v3.6.5 keep sending it, and their submitted value must keep being
+// stored exactly as before), and it is still never used as identity. The two
+// cases that asserted "missing name => 400" are inverted below, and marked.
+//
+// Original context retained for reference: this is validated server-side and
+// used as business/report data. As of the completion-technician-name-display batch it IS persisted
 // (Appointment.completionTechnicianName -- see
 // completionTechnicianNameAndSecondaryPhone.test.ts for persistence/display
 // coverage), but it is still never used as the audit actor (the
@@ -73,20 +84,36 @@ describe('Modification #13: Technician Name required on completion', () => {
   };
 
   // 6. Cannot submit without technicianName
-  it('Technician cannot complete without technicianName', async () => {
+  // SUPERSEDED BY v4 DECISION D4 (see the file header). These two cases
+  // previously asserted that a completion WITHOUT a typed technicianName was
+  // rejected with 400. v4 attributes every technician action to the
+  // authenticated JWT identity and therefore stops asking the technician to type
+  // their own name, so a missing name is now correct rather than an error.
+  //
+  // The assertions are inverted rather than deleted, because the behaviour still
+  // needs pinning down in both directions: a completion must now SUCCEED without
+  // a name, and it must store null rather than an empty string, so the display
+  // layer's "fall back to the technician relation" branch is actually reached.
+  it('Technician CAN complete without technicianName (v4 D4: identity comes from the JWT)', async () => {
     const id = await createInProgressAppointment();
     const res = await request(ts.baseUrl).patch(`/api/appointments/${id}/complete`).set('Authorization', `Bearer ${techToken}`).send(baseBody);
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/Technician name is required/i);
+    expect(res.status).toBe(200);
+
+    const row = await prisma.appointment.findUnique({ where: { id }, select: { completionTechnicianName: true, technicianId: true, workStatus: true } });
+    expect(row!.workStatus).toBe('COMPLETED');
+    expect(row!.completionTechnicianName).toBeNull();
+    // The authenticated technician remains the sole identity.
+    expect(row!.technicianId).toBe(users.technician.id);
   });
 
-  // 7. Whitespace-only is rejected (treated as missing)
-  it('rejects a whitespace-only technicianName', async () => {
+  it('a whitespace-only technicianName is stored as null, never as an empty string', async () => {
     const id = await createInProgressAppointment();
     const res = await request(ts.baseUrl).patch(`/api/appointments/${id}/complete`).set('Authorization', `Bearer ${techToken}`)
       .send({ ...baseBody, technicianName: '   ' });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/Technician name is required/i);
+    expect(res.status).toBe(200);
+
+    const row = await prisma.appointment.findUnique({ where: { id }, select: { completionTechnicianName: true } });
+    expect(row!.completionTechnicianName).toBeNull();
   });
 
   // 8. Multi-word English name rejected

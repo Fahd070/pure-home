@@ -172,23 +172,29 @@ describe('Completion details (Admin Technicians) + Urgent Technician Name', () =
     expect(task.maintenanceConfirmed).toBe(false);
   });
 
-  // ================= Part B: Urgent Technician Name (required, not persisted) =================
+  // ================= Part B: Urgent Technician Name (optional since v4 D4, never persisted) =================
 
-  it('7. POST /urgent-visits rejects a missing technicianName', async () => {
+  // SUPERSEDED BY v4 DECISION D4: technicianName is no longer required on an
+  // urgent visit either. The submitter is recorded authoritatively as
+  // submittedById from the authenticated session, and the typed string was never
+  // persisted at all (UrgentVisitRecord has no such column) -- so requiring it
+  // only created a value that could disagree with the real actor. Inverted
+  // rather than deleted: "accepted without a name, still attributed correctly"
+  // is now the property worth protecting against regression.
+  it('7. POST /urgent-visits succeeds without a technicianName, attributing the authenticated technician', async () => {
     const id = await createUrgentAppointment();
     const { technicianName, ...body } = urgentVisitBase;
     const res = await request(ts.baseUrl).post('/api/urgent-visits').set('Authorization', `Bearer ${techToken}`)
       .send({ ...body, appointmentId: id, serviceType: 'MAINTENANCE', amount: 200, paymentMethod: 'CASH' });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/Technician name is required/i);
+    expect(res.status).toBe(201);
+    expect(res.body.data.submittedById).toBe(users.technician.id);
   });
-
-  it('8. POST /urgent-visits rejects a whitespace-only technicianName', async () => {
+  it('8. POST /urgent-visits treats a whitespace-only technicianName as simply absent', async () => {
     const id = await createUrgentAppointment();
     const res = await request(ts.baseUrl).post('/api/urgent-visits').set('Authorization', `Bearer ${techToken}`)
       .send({ ...urgentVisitBase, technicianName: '   ', appointmentId: id, serviceType: 'MAINTENANCE', amount: 200, paymentMethod: 'CASH' });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/Technician name is required/i);
+    expect(res.status).toBe(201);
+    expect(res.body.data.submittedById).toBe(users.technician.id);
   });
 
   it('9. POST /urgent-visits rejects a multi-word English name ("Ahmed Ali")', async () => {

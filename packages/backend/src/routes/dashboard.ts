@@ -4,10 +4,11 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRole, emitToRoles } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
-import { stripCompletionAmount, stripCompletionAmountFromList } from '../services/completionPrivacy.service';
+import { stripCompletionAmount, stripCompletionAmountFromList, TECHNICIAN_PUBLIC_INCLUDE } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 import { DashboardOperationalCategory, getDashboardCategoryWheres } from '../services/dashboardCategorization.service';
+import { recalculateCustomerMaintenanceDue } from '../services/maintenanceDue.service';
 
 const router = Router();
 router.use(authenticate);
@@ -159,7 +160,7 @@ router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReques
     const total = await prisma.appointment.count({ where });
     let data: any[] = await prisma.appointment.findMany({
       where,
-      include: { technician: true, customer: { include: { address: true } } },
+      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: { include: { address: true } } },
       skip: (parseInt(page) - 1) * safeLimit, take: safeLimit,
       orderBy: { scheduledDate: 'desc' }
     });
@@ -196,7 +197,14 @@ router.delete('/appointment/:id', requireRole('ADMIN'), async (req: AuthRequest,
   try {
     const appt = await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
-    await prisma.appointment.delete({ where: { id: req.params.id } });
+    // Same reasoning AND the same transaction boundary as DELETE
+    // /api/appointments/:id -- this is a genuinely separate live call site (the
+    // Dashboard drill-down delete), which is exactly why it must share the
+    // behaviour rather than grow its own.
+    await prisma.$transaction(async (tx) => {
+      await tx.appointment.delete({ where: { id: req.params.id } });
+      if (appt.customerId) await recalculateCustomerMaintenanceDue(tx, appt.customerId);
+    });
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
     await writeAudit({

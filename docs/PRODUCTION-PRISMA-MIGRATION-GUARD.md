@@ -4,7 +4,9 @@ This document is the full background for the rule in the root [`CLAUDE.md`](../C
 
 No passwords, database URLs, Supabase credentials, or other production secrets appear anywhere in this document.
 
-## 1. Why the migration-tracking issue exists
+> **Status:** the historical migration-tracking gap this document was written about **has been reconciled** — see section 4 for the outcome and the last verified date. Sections 1–3 are retained because they explain *why* the verification rule exists and what failure mode it protects against; they describe history, not the current state. The rule in section 5 still applies before every new migration.
+
+## 1. Why the migration-tracking issue existed
 
 Prisma tracks which migrations have been applied to a given database in a table it manages itself, `_prisma_migrations`. This tracking only reflects reality if the database was under Prisma's management from the start, or was correctly *baselined* (told "these migrations' effects already exist, mark them applied without re-running their SQL") when Prisma management began.
 
@@ -22,31 +24,51 @@ This is exactly why the gap is safe to leave alone as long as nothing tries to l
 
 A brand-new migration (M8, or whatever comes next) deployed on top of this unreconciled history inherits that same risk: Prisma would try to apply it *after* running whatever it still believes is pending from M3–M7 first.
 
-## 4. Known historical M1–M7 state
+## 4. Reconciliation outcome and last verified state
 
-As last recorded (this is history, not a live status — see section 5):
+**The gap described in sections 1–3 was closed.** This section previously carried an "M1–M7" status table recording migrations 3–6 as never baselined and 7 as never reached. That table went stale twice over: the reconciliation completed on 2026-08-09, and the repository grew from 7 migrations to 14 while the table still described only the first 7.
 
-| Migration | Recorded production state |
-|---|---|
-| M1 | Baselined |
-| M2 | Baselined |
-| M3 | Baselining incomplete |
-| M4 | Baselining incomplete |
-| M5 | Baselining incomplete |
-| M6 | Baselining incomplete |
-| M7 | Never deployed as part of the onboarding attempt |
+### What actually happened
 
-The repository's actual migration directory names and count may not map 1:1 to this M1–M7 shorthand by the time a future session reads this — always cross-reference against the real `prisma/migrations/` folder and the real `_prisma_migrations` table contents, not this table's labels.
+- **2026-08-09** — the baselining of the then-outstanding migrations was completed. Migrations 1–6 were resolved as applied without replaying their SQL (`applied_steps_count = 0`), which is the correct outcome for a baselined migration whose effects already existed in the schema.
+- **2026-08-09 onward** — every migration added since has been applied by Prisma itself through a gated, manually-dispatched workflow (`applied_steps_count = 1`), each one verifying the prior chain state before writing.
+- **2026-09-09** — a read-only confirmation reported all 14 repository migrations recorded, finished, not rolled back, with no unknown extras in production.
+
+### Last verified state (2026-09-09)
+
+| Migrations | Count | Recorded production state |
+|---|---|---|
+| `20260605221150_init` … `20260626000000_system_configs_and_remaining_columns` | 6 | Baselined (`applied_steps_count = 0`) |
+| `20260627000000_appointments_customer_fk_set_null` … `20260818194741_add_customer_installation_details` | 8 | Deployed by Prisma (`applied_steps_count = 1`) |
+
+### Why this section is still not a substitute for verifying
+
+A recorded "all clear" is more dangerous than a recorded warning, because it invites action rather than caution. Do not read this section and proceed. Read it to know the expected starting point, then verify per section 5 — and update the date above with the result.
+
+Deliberately, this section names **no fixed migration count**. Migration names and counts change; a number written here would be wrong the moment the next migration is created, which is exactly how the previous table came to describe half a chain. Always cross-reference the real `prisma/migrations/` directory against the real `_prisma_migrations` contents.
 
 ## 5. Current production state must always be re-verified
 
-The table in section 4 is a historical snapshot, not a live source of truth. Time passes, other reconciliation work may happen outside of a recorded session, and Supabase itself may change. Before any reconciliation work begins, re-derive the actual current state directly:
+Section 4 is a historical snapshot, not a live source of truth. Time passes, other work may happen outside of a recorded session, and Supabase itself may change. Before any new migration is created or deployed, re-derive the actual current state directly:
 
 - Read the actual contents of the production `_prisma_migrations` table (which migration names it has rows for, and their `finished_at`/`rolled_back_at` status).
 - Compare that against the full list of migration folders in `packages/backend/prisma/migrations/`.
 - Compare both of those against the actual live schema (table/column/constraint inventory) in production.
 
 Only once those three views are reconciled with each other is it safe to reason about what a new migration would actually do.
+
+### The repository's own checker
+
+`packages/backend/scripts/verify-migration-reconciliation.ts` (`npm run migration:verify-reconciliation`) performs the first two comparisons, plus two schema assertions. Its safety properties are enforced by PostgreSQL rather than by convention:
+
+- Every statement runs inside an explicit `SET TRANSACTION READ ONLY` transaction, so any accidental write or DDL is rejected by the server (SQLSTATE `25006`), not merely avoided by the code.
+- `statement_timeout` and `lock_timeout` are set `LOCAL` to that transaction, so it cannot stall or block production.
+- No `prisma migrate` subcommand is invoked — no `deploy`, no `resolve`, no `dev`.
+- `DATABASE_URL` is never printed, and connection-string-shaped text is scrubbed from error output.
+
+It also checks for **drift in both directions**: a repository migration missing from the database, and a database migration absent from the repository (meaning the working tree is behind production).
+
+Critically, it discovers the expected chain by reading `prisma/migrations/` at run time. It previously carried a hardcoded seven-entry list, which silently verified only half the chain once the repository reached fourteen migrations and still reported `ALL CHECKS PASSED`. **Never reintroduce a hardcoded expected-migration list**: a verifier that cannot notice new migrations produces false confidence at exactly the moment a new migration is about to be deployed.
 
 ## 6. Safe reconciliation principles
 
@@ -67,8 +89,8 @@ Only once those three views are reconciled with each other is it safe to reason 
 
 ## 8. Three distinct kinds of "correct," and why conflating them is the actual risk
 
-- **Repository migration correctness** — whether the migration files in `packages/backend/prisma/migrations/` form a valid, applicable chain. This has been verified: all 7 migrations apply cleanly, in order, to a completely fresh disposable PostgreSQL database.
-- **Production schema correctness** — whether the actual tables/columns/constraints/indexes in the live Supabase database are what the application code expects. This is believed to be correct (the app runs fine), but has not been formally re-proven against every migration's specific effects.
-- **`_prisma_migrations` tracking correctness** — whether Prisma's own bookkeeping table accurately reflects what's really in the schema. This is the piece that is **known incomplete** (M3–M7 per the last recorded state).
+- **Repository migration correctness** — whether the migration files in `packages/backend/prisma/migrations/` form a valid, applicable chain. Verified continuously: the full chain is applied to a fresh disposable PostgreSQL database by the Production Validation workflow on every PR and every push to `main`, and again locally before any new migration is proposed. Deliberately stated without a count, so this line cannot go stale as the chain grows.
+- **Production schema correctness** — whether the actual tables/columns/constraints/indexes in the live Supabase database are what the application code expects. Strongly evidenced (the app runs, and each migration since 2026-08-09 was applied by Prisma itself with its effects verified afterward), but the only way to *prove* it for a specific migration's effects remains a direct read-only schema inspection.
+- **`_prisma_migrations` tracking correctness** — whether Prisma's own bookkeeping table accurately reflects what's really in the schema. This was the piece that was historically incomplete. It was reconciled on 2026-08-09 and last confirmed on 2026-09-09 (section 4). It is the piece most likely to drift silently again, because nothing in the running application ever reads it.
 
 The danger this whole document exists to prevent is treating any one of these three as a stand-in for the other two. Repository correctness says nothing about production's tracking correctness. Production schema correctness (the app working) says nothing about whether `_prisma_migrations` agrees. Only reconciling all three together, as described in section 5, makes it safe to deploy a new migration.

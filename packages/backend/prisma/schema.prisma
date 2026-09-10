@@ -39,6 +39,34 @@ model User {
   password  String
   role      UserRole
   isActive  Boolean  @default(true)
+  // v4 Requirement #12: per-technician access code, replacing the single shared
+  // department code that made every technician authenticate as one User row.
+  // Stored as a bcrypt hash using the SAME hashing the `password` field above
+  // already uses -- deliberately not a new hashing scheme, and deliberately not
+  // reversible: Administration can SET or REPLACE a code but can never read one
+  // back (see routes/employees.ts, which never selects this column into any
+  // response). Nullable so every existing user stays valid with no value, and so
+  // a technician with no code set simply falls back to the legacy shared
+  // department code -- which is what keeps employees on Desktop v3.6.5 able to
+  // log in throughout this transition (see services/technicianIdentity.service.ts).
+  accessCodeHash  String?
+  // When the access code was last set/replaced. Purely informational -- shown to
+  // Administration as "code set" vs "no code yet" state without ever revealing
+  // the code itself.
+  accessCodeSetAt DateTime?
+  // v4 decision D9: server-enforced session revocation.
+  //
+  // Every issued JWT carries the value this field had at login. middleware/auth.ts
+  // compares the token's copy against the stored one on every request, so bumping
+  // this immediately invalidates every token issued before the bump -- across
+  // process restarts and across multiple backend instances, because the source of
+  // truth is a database row rather than an in-memory blacklist.
+  //
+  // Bumped when Administration deactivates a technician and when their access
+  // code is changed. Deliberately an Int rather than a timestamp: comparison is
+  // exact equality with no clock-skew or precision question, and a monotonically
+  // increasing counter cannot be accidentally rewound by a clock change.
+  sessionVersion  Int       @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   customersCreated     Customer[]           @relation("CustomerCreatedBy")
@@ -52,6 +80,7 @@ model User {
   callReports          CallReport[]         @relation("CallReportCreatedBy")
   expenses             Expense[]            @relation("ExpenseByTechnician")
   urgentVisits         UrgentVisitRecord[]  @relation("UrgentVisitBy")
+  noAnswerRecords      CustomerNoAnswerRecord[] @relation("NoAnswerRecordedBy")
   @@map("users")
 }
 
@@ -106,6 +135,27 @@ model Customer {
   previousServiceType  String?
   previousServiceDate  DateTime?
   previousServiceNote  String?
+  // v4 Requirement #4 (decision D1): the MATERIALIZED next-maintenance due date.
+  //
+  // Never authoritative in its own right and never hand-edited: it is written
+  // exclusively by recalculateCustomerMaintenanceDue() in
+  // services/maintenanceSchedule.service.ts, which is itself the single source
+  // of truth for this date math. It exists only because a value computed in
+  // JavaScript cannot appear in a SQL ORDER BY, and Requirement #9 needs
+  // overdue-first ordering applied BEFORE the page slice -- sorting after
+  // pagination would silently show the wrong customers on every page but the
+  // first. Materializing it additionally turns the dashboard's due buckets
+  // (Requirement #4) into plain indexed counts instead of loading every
+  // customer's appointment history on every dashboard load.
+  //
+  // Nullable, and null is meaningful: it means "no baseline exists from which a
+  // due date could be derived" (no completed maintenance, no recorded previous
+  // service, no installation date). Such customers are deliberately NOT given a
+  // fabricated date -- they sort last and render as "—" rather than appearing
+  // falsely overdue. Because the value is fully derived, it can be recomputed
+  // from scratch at any time, which is what makes both the backfill and a
+  // rollback safe.
+  nextMaintenanceDueAt DateTime?
   version              Int              @default(1)
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
@@ -114,7 +164,43 @@ model Customer {
   address              Address?
   appointments         Appointment[]
   callReports          CallReport[]
+  branches             CustomerBranch[]
   @@map("customers")
+}
+
+// v4 Requirement #8: a customer may optionally operate from several branches.
+//
+// Domain rule, deliberately encoded by this shape: ONE CUSTOMER REMAINS ONE
+// CUSTOMER. Branches are detail records hanging off the customer, never
+// additional Customer rows -- so a multi-branch customer still appears exactly
+// once in every customer list, count, report and maintenance calculation.
+//
+// Appointments are deliberately NOT linked to a branch in this phase. The
+// approved scope treats branches as customer detail information only, and
+// adding an appointment->branch foreign key now would force every existing
+// appointment into a "which branch?" question that the business has not yet
+// answered.
+model CustomerBranch {
+  id               String   @id @default(uuid())
+  customerId       String
+  customer         Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // The only required detail: a branch with no name cannot be told apart from
+  // another branch in any list. Every other field is genuinely optional, so a
+  // customer can record "we have three branches" and fill in supervisor
+  // contacts later.
+  branchName       String
+  supervisorName   String?
+  supervisorMobile String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  // Justified, not speculative: this is the ONLY access pattern the table has
+  // (load one customer's branches), and it is also what makes the Cascade above
+  // an indexed delete rather than a sequential scan of every branch row on each
+  // customer deletion. Mirrors how `Address.customerId` is already indexed via
+  // its @unique.
+  @@index([customerId])
+  @@map("customer_branches")
 }
 
 model Address {
@@ -207,6 +293,7 @@ model Appointment {
   createdById         String?
   createdBy           User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
   postponements       PostponementRecord[]
+  noAnswerRecords     CustomerNoAnswerRecord[]
   urgentVisitRecord   UrgentVisitRecord?
   @@map("appointments")
 }
@@ -215,6 +302,17 @@ model PostponementRecord {
   id            String      @id @default(uuid())
   reason        String
   newDate       DateTime?
+  // v4 Requirement #6 (decision D2): the appointment's scheduledDate as it was
+  // immediately BEFORE this postponement moved it. Postponement is now a genuine
+  // reschedule -- the appointment's own scheduledDate is overwritten with the new
+  // agreed date -- so without capturing the old value here, "postponed from X to
+  // Y" becomes unanswerable the moment the write lands. This record is therefore
+  // the durable history, and it survives every later change to the appointment.
+  //
+  // Nullable because every PostponementRecord written before this field existed
+  // has no captured previous date; those rows render as "—" rather than being
+  // retroactively invented.
+  previousDate  DateTime?
   createdAt     DateTime    @default(now())
   appointmentId String?
   appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
@@ -223,15 +321,93 @@ model PostponementRecord {
   @@map("postponement_records")
 }
 
+// v4 Requirement #7: "Customer Did Not Answer" as a durable operational EVENT
+// rather than an appointment status.
+//
+// Chosen shape (documented decision -- see also routes/appointments.ts):
+// treating did-not-answer as a terminal workStatus would have removed the
+// appointment from the technician work queue (which filters
+// workStatus WAITING,IN_PROGRESS) and from every dashboard operational bucket
+// (see dashboardCategorization.service.ts, whose `active` filter uses the same
+// two values) -- i.e. the one outcome that most needs follow-up would have been
+// the one outcome that disappears from every follow-up surface. So the
+// appointment stays actionable and the attempt is recorded here instead.
+//
+// Deliberately mirrors PostponementRecord's shape rather than inventing a new
+// pattern: one row per attempt, so repeated failed contact attempts on the same
+// appointment all survive, and Cascade so they are cleaned up with the
+// appointment exactly as postponements are.
+model CustomerNoAnswerRecord {
+  id            String       @id @default(uuid())
+  // Optional free-text note from the technician. There is deliberately no
+  // technician-name field: the actor is the authenticated user below, never a
+  // string the client supplies (decision D4).
+  note          String?
+  createdAt     DateTime     @default(now())
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  recordedById  String?
+  recordedBy    User?        @relation("NoAnswerRecordedBy", fields: [recordedById], references: [id])
+  @@map("customer_no_answer_records")
+}
+
+// The Phase 2 work (unread badges, top banners, centre critical alert cards)
+// needs more than title/body/type/isRead. The additive fields below are the
+// MINIMUM foundation for that, bundled into Phase 1's single migration so a
+// second production migration is not required later.
+//
+// Deliberately NOT added, despite being proposed:
+//   * `targetRole` -- notifications are already per-user rows (`userId`), and a
+//     user's role is fixed, so a stored role would be a second, derivable copy
+//     of the targeting that `userId` already expresses. Role isolation is
+//     enforced by scoping every read to the authenticated user, not by a column.
+//   * `category` -- `type` already identifies the event, and the badge grouping
+//     Phase 2 needs is a mapping FROM type, not an independent value that could
+//     disagree with it.
+//   * `reviewedAt` -- `isRead` already expresses "the user has dealt with this",
+//     and a critical alert that is acknowledged should also stop counting toward
+//     its badge, which is exactly what a single flag gives.
+// Each can be added later if Phase 2 proves a real need; adding them now would
+// be adding columns nothing reads.
 model Notification {
   id        String   @id @default(uuid())
   title     String
   body      String
   type      String
+  // Selects the presentation surface in Phase 2: INFO -> sidebar badge only,
+  // CRITICAL -> also a top banner and a centre alert card. A plain validated
+  // string tag with a safe default rather than a Prisma enum, matching this
+  // schema's existing convention for small business tags (see
+  // Appointment.completionPaymentMethod) and avoiding a Postgres enum
+  // alteration -- the riskiest change type against this project's migration
+  // history. Existing rows all become INFO, which is correct for them.
+  severity  String   @default("INFO")
+  // What the notification is ABOUT, so Phase 2 can navigate from an alert to the
+  // appointment/customer it concerns, and so "which customers have a
+  // did-not-answer event" is a query rather than a string search. Today the
+  // appointment id is embedded inside the human-readable `body` text, which is
+  // not addressable.
+  entityType String?
+  entityId   String?
+  // The FOUNDATION for Phase 2 deduplication -- not yet in use. Nothing writes
+  // this today, so every row has NULL and (PostgreSQL permitting unlimited NULLs
+  // in a unique index) the constraint below is currently inert.
+  //
+  // Stated plainly because the distinction matters: the existing cron still
+  // deduplicates with `body: { contains: "[upcoming:<id>:7]" }`, a LIKE scan
+  // over free text that races between its own findFirst and createMany, and that
+  // race is UNCHANGED until Phase 2's producers populate this column. The column
+  // and constraint ship now only so Phase 2 needs no second production migration.
+  dedupeKey  String?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+  // Scoped per user, because the same logical event legitimately produces one
+  // row for each recipient. Safe to add to a populated table precisely because
+  // every existing row has dedupeKey = NULL, and PostgreSQL permits unlimited
+  // NULLs in a unique index.
+  @@unique([userId, dedupeKey])
   @@map("notifications")
 }
 

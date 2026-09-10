@@ -6,8 +6,9 @@ import { emitToRole, emitToRoles, emitToTechnician } from '../socket';
 import { SOCKET_EVENTS, SOCKET_ROOMS } from '../constants';
 import { writeAudit } from '../services/audit.service';
 import { emitEvent, EVENT_TYPES } from '../services/event.service';
-import { stripCompletionAmount, stripCompletionAmountFromList, stripInstallationFinancialsFromCustomer } from '../services/completionPrivacy.service';
+import { stripCompletionAmount, stripCompletionAmountFromList, stripInstallationFinancialsFromCustomer, TECHNICIAN_PUBLIC_INCLUDE } from '../services/completionPrivacy.service';
 import { resolveOrCreateUrgentCustomer, validateUrgentCustomerIdentity, InvalidCustomerIdentityError } from '../services/customerResolve.service';
+import { recalculateCustomerMaintenanceDue } from '../services/maintenanceDue.service';
 
 const router = Router();
 router.use(authenticate);
@@ -95,7 +96,7 @@ function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToSche
 
 const WORK_INCLUDE = {
   customer: { include: { address: true } },
-  technician: true,
+  technician: TECHNICIAN_PUBLIC_INCLUDE,
   postponements: { orderBy: { createdAt: 'desc' as const }, take: 1 },
   urgentVisitRecord: true,
 };
@@ -235,7 +236,7 @@ router.get('/pending-export-approval', requireRole('ADMIN'), async (req: AuthReq
   try {
     const appts = await prisma.appointment.findMany({
       where: { visibleToTechnician: false, adminApproved: false, isUrgent: false },
-      include: { customer: { include: { address: true } }, technician: true },
+      include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE },
       orderBy: { updatedAt: 'desc' },
     });
     res.json({ success: true, data: appts });
@@ -381,7 +382,7 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
           technicianId: body.technicianId ?? null,
           workStatus: 'WAITING',
         },
-        include: { customer: { include: { address: true } }, technician: true },
+        include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE },
       });
     });
     if (appt.customerId) {
@@ -437,16 +438,30 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       ? await prisma.appointment.findFirst({ where: { id: req.params.id, visibleToScheduling: true }, include: { customer: true } })
       : await prisma.appointment.findUnique({ where: { id: req.params.id }, include: { customer: true } });
     if (!existing) return res.status(404).json({ success: false, message: 'Not found' });
-    const updated = await prisma.appointment.update({
-      where: { id: req.params.id },
-      data: {
-        ...(body.scheduledDate ? { scheduledDate: new Date(body.scheduledDate), status: 'RESCHEDULED' } : {}),
-        ...(body.type !== undefined ? { type: body.type } : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(body.visibleToScheduling !== undefined ? { visibleToScheduling: body.visibleToScheduling } : {}),
-        version: { increment: 1 },
-      },
-      include: { customer: { include: { address: true } }, technician: true, urgentVisitRecord: true },
+    // scheduledDate is a due-date baseline for legacy COMPLETED appointments whose
+    // actualCompletionDate and completedAt are both null (the explicitly-supported
+    // legacy shape -- see computeNextMaintenanceDate). Moving it therefore carries
+    // the same consistency requirement as completion and deletion: the edit and
+    // the recalculated due date must commit together, or the stored due date
+    // silently describes a schedule that no longer exists.
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedAppt = await tx.appointment.update({
+        where: { id: req.params.id },
+        data: {
+          ...(body.scheduledDate ? { scheduledDate: new Date(body.scheduledDate), status: 'RESCHEDULED' } : {}),
+          ...(body.type !== undefined ? { type: body.type } : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(body.visibleToScheduling !== undefined ? { visibleToScheduling: body.visibleToScheduling } : {}),
+          version: { increment: 1 },
+        },
+        include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE, urgentVisitRecord: true },
+      });
+      // Only when the date actually moved -- a notes or visibility edit cannot
+      // change any due date.
+      if (updatedAppt.customerId && body.scheduledDate) {
+        await recalculateCustomerMaintenanceDue(tx, updatedAppt.customerId);
+      }
+      return updatedAppt;
     });
     const custNameUpd = existing.customer?.name || 'Urgent Visit';
     const custNameUpdAr = existing.customer?.name || 'زيارة عاجلة';
@@ -473,7 +488,7 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
     const updated = await prisma.appointment.update({
       where: { id: req.params.id },
       data: { visibleToScheduling: true, adminApproved: true, version: { increment: 1 } },
-      include: { customer: { include: { address: true } }, technician: true },
+      include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE },
     });
     // Modification #6: strip completionAmount before it reaches the SCHEDULING room.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
@@ -516,10 +531,14 @@ router.patch('/:id/export-to-technicians', requireRole('SCHEDULING'), async (req
       return res.status(409).json({ success: false, error: 'ALREADY_APPROVED', message: 'This appointment has already been exported and approved.' });
     }
 
+    // scheduledDate is a due-date baseline for legacy COMPLETED appointments whose
+    // actualCompletionDate and completedAt are both null (the explicitly-supported
+    // Export-to-approval changes only visibility flags -- no date, no completion
+    // state -- so no maintenance-due recalculation is involved.
     const appt = await prisma.appointment.update({
       where: { id: req.params.id },
       data: { visibleToTechnician: false, adminApproved: false, version: { increment: 1 } },
-      include: { customer: { include: { address: true } }, technician: true },
+      include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE },
     });
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
@@ -558,7 +577,7 @@ router.patch('/:id/approve-export', requireRole('ADMIN'), async (req: AuthReques
     const appt = await prisma.appointment.update({
       where: { id: req.params.id },
       data: { visibleToTechnician: true, adminApproved: true, version: { increment: 1 } },
-      include: { customer: { include: { address: true } }, technician: true },
+      include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE },
     });
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
@@ -611,7 +630,7 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
     const appt = await prisma.appointment.update({
       where: { id: req.params.id },
       data: updateData,
-      include: { customer: true, technician: true },
+      include: { customer: true, technician: TECHNICIAN_PUBLIC_INCLUDE },
     });
     const custNameSt = appt.customer?.name || 'Urgent Visit';
     const custNameStAr = appt.customer?.name || 'زيارة عاجلة';
@@ -661,7 +680,7 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
         workStatus: 'IN_PROGRESS', startedAt: new Date(), version: { increment: 1 },
         ...(before.technicianId === null && !isAdmin ? { technicianId: req.user!.userId } : {}),
       },
-      include: { technician: true, customer: { include: { address: true } } },
+      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: { include: { address: true } } },
     });
     if (appt.customerId) {
       await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
@@ -684,6 +703,12 @@ router.patch('/:id/start', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthR
     // Only the owning technician's job -- other technicians must not see it start.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STARTED, appt);
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_STARTED, techSafeAppt);
+    // The unassigned pool is visible to EVERY technician, so when a job
+    // leaves that pool the other technicians' queues must refresh too.
+    // Previously all technicians shared one User id, so the per-technician
+    // room above happened to reach all of them; with real identities it no
+    // longer does, and a stale queue means a tap that 404s.
+    if (before.technicianId === null) emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_STARTED, techSafeAppt);
     res.json({ success: true, data: isAdmin ? appt : techSafeAppt });
   } catch (e) { next(e); }
 });
@@ -734,8 +759,19 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       if (body.completionAmount == null || body.completionAmount < 0) return res.status(400).json({ success: false, message: 'Amount is required' });
       if (!body.completionPaymentMethod) return res.status(400).json({ success: false, message: 'Payment method is required' });
       if (!body.actualCompletionDate) return res.status(400).json({ success: false, message: 'Completion date is required' });
-      if (!trimmedTechnicianName) return res.status(400).json({ success: false, message: 'Technician name is required' });
-      if (!FIRST_NAME_RE.test(trimmedTechnicianName)) return res.status(400).json({ success: false, message: 'Please enter first name only' });
+      // v4 decision D4: the technician's identity now comes from the
+      // authenticated JWT, so the app no longer ASKS them to type their own
+      // name. The field is therefore no longer required.
+      //
+      // It is still accepted and still validated when present, because
+      // employees remain on Desktop v3.6.5 for this whole development cycle and
+      // that client always sends it -- rejecting or ignoring it would either
+      // break their completions or silently drop data they can see on screen.
+      // What changed is that a missing name is no longer an error, and the
+      // value is never treated as identity (see the persistence below).
+      if (trimmedTechnicianName && !FIRST_NAME_RE.test(trimmedTechnicianName)) {
+        return res.status(400).json({ success: false, message: 'Please enter first name only' });
+      }
     }
 
     let actualCompletionDate: Date | null = null;
@@ -764,9 +800,31 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       return res.status(409).json({ success: false, message: 'Job must be IN_PROGRESS before it can be completed' });
     }
 
-    const appt = await prisma.appointment.update({
+    // C9: the completion and the due-date it implies commit TOGETHER.
+    //
+    // Previously the completion committed first and the recalculation ran after
+    // it as a failure-tolerant side effect, so a failure there left a completed
+    // maintenance with an obsolete nextMaintenanceDueAt. That field is now
+    // foundational -- dashboard buckets, overdue detection, due-soon state,
+    // priority sorting and pagination order all read it -- so a stale value is a
+    // silently wrong operational picture, not a cosmetic lag.
+    //
+    // The recalculation runs inside this transaction, so it SEES the appointment
+    // it is reacting to and derives the date from the same history that is being
+    // committed. Socket emission, audit and event writes stay outside: a
+    // transaction must never be held open across network I/O.
+    const appt = await prisma.$transaction(async (tx) => {
+      const updated = await tx.appointment.update({
       where: { id: req.params.id },
       data: {
+        // Mirrors /start: a technician completing a job from the UNASSIGNED pool
+        // claims it. Without this the completion could commit with technicianId
+        // null AND completionTechnicianName null -- no attribution at all --
+        // which is reachable today because an ADMIN pressing Start does not
+        // assign anyone. The typed first name used to paper over exactly this
+        // case; removing it (decision D4) made the gap real, so ownership has to
+        // come from the JWT instead.
+        ...(before.technicianId === null && !isAdmin ? { technicianId: req.user!.userId } : {}),
         workStatus: 'COMPLETED', completedAt: new Date(),
         serviceDetails: body.serviceDetails,
         completionAmount: body.completionAmount,
@@ -774,11 +832,14 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
         completionImage: body.completionImage ?? null,
         nextMaintenanceNote: trimmedNextMaintenanceNote,
         actualCompletionDate,
-        // Completion-record field only -- see the schema comment and the Zod
-        // field comment above. Admin completions never submit this, so it
-        // stays null there (the display layer falls back to the technician
-        // relation); a Technician completion always has a validated value by
-        // this point.
+        // Completion-record field only -- never identity (v4 decision D4). The
+        // authenticated technician is the `technician` relation, resolved from
+        // the JWT by the ownership check above; this string is at most a
+        // historical artefact of what a v3.6.5 client typed.
+        //
+        // A v4 client sends nothing here, so this stores null and every display
+        // falls back to the technician relation. Existing rows are untouched:
+        // the values employees already submitted stay exactly as they are.
         completionTechnicianName: trimmedTechnicianName || null,
         // Modification #8: every completion submission starts a fresh Maintenance
         // review cycle -- the Technician can never self-confirm it, regardless of
@@ -786,11 +847,21 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
         maintenanceConfirmed: false,
         version: { increment: 1 },
       },
-      include: { technician: true, customer: true },
+      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
+      });
+
+      if (updated.customerId) {
+        await tx.customer.update({ where: { id: updated.customerId }, data: { activityDismissed: false } });
+        // Requirement #4: a completed maintenance is the strongest signal that
+        // the customer's next due date moved. The THROWING variant is used
+        // deliberately -- a failure here must roll the completion back, which is
+        // the whole point of C9. Still the one authoritative domain service; the
+        // formula is never duplicated here.
+        await recalculateCustomerMaintenanceDue(tx, updated.customerId);
+      }
+
+      return updated;
     });
-    if (appt.customerId) {
-      await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
-    }
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
     const techName = isAdmin ? `Administration` : (appt.technician?.name || 'Technician');
@@ -812,6 +883,12 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     // Only the owning technician -- was previously routed to the whole TECHNICIAN role,
     // meaning every other technician received it too.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
+    // The unassigned pool is visible to EVERY technician, so when a job
+    // leaves that pool the other technicians' queues must refresh too.
+    // Previously all technicians shared one User id, so the per-technician
+    // room above happened to reach all of them; with real identities it no
+    // longer does, and a stale queue means a tap that 404s.
+    if (before.technicianId === null) emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
     // Privacy Patch #2: the acting Technician's own REST response keeps their
     // full just-submitted completion data (amount/image) -- only the nested
     // customer's installation-financial fields are stripped, same as every
@@ -847,7 +924,7 @@ router.patch('/:id/confirm-operation', requireRole('SCHEDULING'), async (req: Au
     const appt = await prisma.appointment.update({
       where: { id: req.params.id },
       data: { maintenanceConfirmed: true, version: { increment: 1 } },
-      include: { technician: true, customer: true },
+      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
     });
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
@@ -867,15 +944,42 @@ router.patch('/:id/confirm-operation', requireRole('SCHEDULING'), async (req: Au
   } catch (e) { next(e); }
 });
 
-// Technician postpones work on an appointment
+// Technician postpones work on an appointment.
+//
+// v4 Requirement #6 / decision D2: postponement is a RESCHEDULE, not a terminal
+// state. The technician agrees a new date with the customer, the appointment
+// moves to that date and becomes actionable again, and the postponement itself
+// survives permanently as history (PostponementRecord), including the date it
+// moved FROM.
+//
+// Legacy shape is still accepted: employees on Desktop v3.6.5 post
+// { reason, newDate? }. Making newDate unconditionally required would 400 a live
+// client mid-shift, so it stays optional.
+//
+// BEHAVIOUR CHANGE FOR v3.6.5, STATED PLAINLY: that client's postpone dialog
+// already has an optional "New Date" field. A technician on v3.6.5 who fills it
+// in previously got terminal POSTPONED with scheduledDate untouched; they now
+// get the full reschedule. That is intended -- decision D2 is explicit that an
+// appointment must not be stranded in POSTPONED once a replacement date has been
+// agreed, and the technician supplying a date IS that agreement. Only the
+// leave-it-blank path is byte-for-byte unchanged. This is a real change to a live
+// client's behaviour and is called out rather than glossed as "no impact".
 router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthRequest, res, next) => {
   try {
-    const { reason, newDate, version } = z.object({
-      reason: z.string().min(1).max(1000),
-      newDate: z.string().optional(),
+    const { reason, note, newDate, version } = z.object({
+      // v4 makes the free-text optional (the new UI asks for a date, and a note
+      // only if the technician wants one); v3.6.5 always sends `reason` and its
+      // own UI requires it, so both shapes are accepted here.
+      reason: z.string().max(1000).optional(),
+      note: z.string().max(1000).optional(),
+      newDate: z.string().refine(v => !isNaN(Date.parse(v)), { message: 'Invalid new date' }).optional(),
       version: z.number().int().optional(),
     }).parse(req.body);
     const isAdmin = req.user!.role === 'ADMIN';
+    // One stored value from either field name; empty rather than null because
+    // PostponementRecord.reason is a NOT NULL column on existing rows.
+    const effectiveReason = (note ?? reason ?? '').trim();
+    const isReschedule = !!newDate;
 
     const before = await prisma.appointment.findFirst({
       where: {
@@ -891,13 +995,63 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       return res.status(409).json({ success: false, message: 'Job cannot be postponed in its current state' });
     }
 
+    // A reschedule must move the appointment FORWARD. Without a server-side
+    // bound, a past date (from a direct API call, or a v3.6.5 client whose date
+    // input has no `min`) would move the job into the past and return it to
+    // WAITING -- where it immediately reads as overdue in every dashboard bucket,
+    // with a PostponementRecord claiming it was "rescheduled" backwards. The
+    // client-side `min` is a convenience; this is the actual rule.
+    // Start-of-today, so agreeing a later slot on the same day stays valid.
+    if (isReschedule) {
+      // UTC on BOTH sides. The client sends a date-only string from
+      // <input type="date">, which parses as UTC midnight, while setHours() would
+      // floor to server-LOCAL midnight -- so on any host west of UTC the
+      // technician's own "today" (which the input's own `min` offers) would be
+      // rejected as past. Same UTC-only convention as daysUntilDue().
+      const now = new Date();
+      const startOfTodayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const target = new Date(newDate!);
+      const targetDayUTC = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+      if (targetDayUTC < startOfTodayUTC) {
+        return res.status(400).json({ success: false, message: 'The new date cannot be in the past' });
+      }
+    }
+
     const appt = await prisma.appointment.update({
       where: { id: req.params.id },
       data: {
-        workStatus: 'POSTPONED', version: { increment: 1 },
-        postponements: { create: { reason, newDate: newDate ? new Date(newDate) : null, requestedById: req.user!.userId } },
+        // Reschedule path (v4): the appointment MOVES to the agreed date and
+        // returns to WAITING so it is actionable again on that date. Leaving it
+        // in POSTPONED after the technician has already agreed a replacement
+        // date would strand it -- it would vanish from the technician work
+        // queue and from every operational dashboard bucket, both of which
+        // filter on WAITING/IN_PROGRESS, even though real work is still due.
+        //
+        // RESCHEDULED is an existing, previously-unused value of the
+        // AppointmentStatus enum, so recording "this was moved" costs no enum
+        // migration -- the riskiest kind of change against this project's
+        // migration history.
+        ...(isReschedule
+          ? { scheduledDate: new Date(newDate!), workStatus: 'WAITING', status: 'RESCHEDULED' as const }
+          : { workStatus: 'POSTPONED' }),
+        version: { increment: 1 },
+        postponements: {
+          create: {
+            reason: effectiveReason,
+            newDate: newDate ? new Date(newDate) : null,
+            // The date this appointment is moving FROM, captured before the
+            // update overwrites it. Without this the "from" half of
+            // "postponed from X to Y" is unrecoverable the instant the write
+            // lands, because scheduledDate now holds Y.
+            previousDate: isReschedule ? before.scheduledDate : null,
+            // Attribution comes from the authenticated JWT, never from the
+            // request body (decision D4). A client cannot name a different
+            // technician here because there is no field to name one in.
+            requestedById: req.user!.userId,
+          },
+        },
       },
-      include: { technician: true, customer: true },
+      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
     });
     if (appt.customerId) {
       await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
@@ -905,10 +1059,20 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
     const actorName = isAdmin ? 'Administration' : (appt.technician?.name || 'Technician');
+    // The audit label states both dates for a reschedule, so Administration and
+    // Scheduling can read "moved from X to Y" straight out of System Activity
+    // without opening the appointment.
+    const movedEn = isReschedule
+      ? ` (rescheduled from ${new Date(before.scheduledDate).toLocaleDateString('en-GB')} to ${new Date(newDate!).toLocaleDateString('en-GB')})`
+      : '';
+    const movedAr = isReschedule
+      ? ` (أُعيدت جدولته من ${new Date(before.scheduledDate).toLocaleDateString('en-GB')} إلى ${new Date(newDate!).toLocaleDateString('en-GB')})`
+      : '';
+    const reasonSuffix = effectiveReason ? `: ${effectiveReason}` : '';
     await writeAudit({
       action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
-      label: `Maintenance for '${custName}' postponed by ${actorName}: ${reason}`,
-      labelAr: `تم تأجيل صيانة '${custNameAr}' بواسطة ${actorName}: ${reason}`,
+      label: `Maintenance for '${custName}' postponed by ${actorName}${movedEn}${reasonSuffix}`,
+      labelAr: `تم تأجيل صيانة '${custNameAr}' بواسطة ${actorName}${movedAr}${reasonSuffix}`,
       before: apptFields(before), after: apptFields(appt),
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_POSTPONED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
@@ -922,9 +1086,139 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_POSTPONED, schedSafePostponed);
     // Only the owning technician -- other technicians have no reason to see this job.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
+    // The unassigned pool is visible to EVERY technician, so when a job
+    // leaves that pool the other technicians' queues must refresh too.
+    // Previously all technicians shared one User id, so the per-technician
+    // room above happened to reach all of them; with real identities it no
+    // longer does, and a stale queue means a tap that 404s.
+    if (before.technicianId === null) emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
     // Privacy Patch #2: strip only the nested customer's installation-financial
     // fields for the acting Technician's own REST response -- same narrow fix
     // as every other Technician-facing appointment response in this file.
+    const responseData = (!isAdmin && appt.customer)
+      ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) }
+      : appt;
+    res.json({ success: true, data: responseData });
+  } catch (e) { next(e); }
+});
+
+// v4 Requirement #7: "Customer Did Not Answer".
+//
+// SEMANTICS (the documented decision this route implements):
+// This is a durable operational EVENT, and the appointment stays actionable --
+// option B of the two the audit put forward. It is deliberately NOT a terminal
+// workStatus, because the technician work queue filters
+// `workStatus IN (WAITING, IN_PROGRESS)` and dashboardCategorization.service.ts
+// defines its whole `active` bucket the same way. A CUSTOMER_NO_ANSWER
+// workStatus would therefore have deleted the appointment from the technician's
+// own queue and from every Administration/Scheduling operational bucket at
+// precisely the moment it most needs following up -- the exact opposite of the
+// requirement's intent.
+//
+// So instead: the attempt is recorded permanently in CustomerNoAnswerRecord
+// (one row per attempt, so repeated failed contacts all survive), and the
+// appointment returns to WAITING so the technician or Administration can try
+// again on the same date. Because the event lives in its own table rather than
+// in a mutable column, it survives every later change to the appointment --
+// including a subsequent completion or reschedule -- which is what makes it
+// usable later for Phase 2 alerts, Phase 3 Technician Tasks aggregation, and
+// reporting.
+//
+// It never reschedules automatically: no new date is invented on the customer's
+// behalf.
+router.patch('/:id/no-answer', requireRole('TECHNICIAN', 'ADMIN'), async (req: AuthRequest, res, next) => {
+  try {
+    const { note, version } = z.object({
+      note: z.string().max(1000).optional(),
+      version: z.number().int().optional(),
+    }).parse(req.body);
+    const isAdmin = req.user!.role === 'ADMIN';
+
+    // Identical object-level authorization to /start, /complete and /postpone:
+    // a technician can only reach their own assignment or the unassigned pool,
+    // and anything else is an indistinguishable 404. There is deliberately no
+    // technicianId in the request body, so a technician has no way to record
+    // this event against another technician's job.
+    const before = await prisma.appointment.findFirst({
+      where: {
+        id: req.params.id,
+        isUrgent: false,
+        ...(isAdmin ? {} : { OR: [{ technicianId: req.user!.userId }, { technicianId: null }] }),
+      },
+      include: { customer: true },
+    });
+    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
+    if (version !== undefined && before.version !== version) return conflict(res, before.version, version);
+    if (before.workStatus !== 'WAITING' && before.workStatus !== 'IN_PROGRESS') {
+      return res.status(409).json({ success: false, message: 'This job is not in a state where a contact attempt can be recorded' });
+    }
+
+    const appt = await prisma.appointment.update({
+      where: { id: req.params.id },
+      data: {
+        // Back to WAITING (from IN_PROGRESS, or unchanged if already WAITING) so
+        // the job remains in the queue and can be attempted again. scheduledDate
+        // is deliberately untouched -- a failed contact is not a reschedule.
+        workStatus: 'WAITING',
+        version: { increment: 1 },
+        noAnswerRecords: {
+          create: {
+            note: note?.trim() || null,
+            // Attribution from the authenticated JWT only.
+            recordedById: req.user!.userId,
+          },
+        },
+      },
+      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
+    });
+
+    if (appt.customerId) {
+      await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
+    }
+
+    const custName = appt.customer?.name || 'Urgent Visit';
+    const custNameAr = appt.customer?.name || 'زيارة عاجلة';
+    const actorName = isAdmin ? 'Administration' : (appt.technician?.name || 'Technician');
+    const noteSuffix = note?.trim() ? `: ${note.trim()}` : '';
+    await writeAudit({
+      action: 'UPDATE', entityType: 'appointment', entityId: appt.id, userId: req.user!.userId,
+      label: `Customer '${custName}' did not answer — reported by ${actorName}${noteSuffix}`,
+      labelAr: `لم يرد العميل '${custNameAr}' — سجّله ${actorName}${noteSuffix}`,
+      before: apptFields(before), after: apptFields(appt),
+    });
+    await emitEvent({
+      type: EVENT_TYPES.APPOINTMENT_CUSTOMER_NO_ANSWER, entityType: 'appointment', entityId: appt.id,
+      userId: req.user!.userId, payload: apptFields(appt),
+    });
+
+    // Same audience and same redaction as /postpone: Administration and
+    // Scheduling need to follow this up, and the owning technician's own device
+    // needs its view refreshed. Scheduling's copy goes through the standard
+    // sanitizer so no completion financials can ride along, and the technician's
+    // copy additionally has the nested customer's installation financials
+    // stripped -- identical to every other technician-facing payload in this file.
+    const schedSafe = stripCompletionAmount(appt);
+    const techSafe: any = { ...appt, completionAmount: undefined, completionPaymentMethod: undefined };
+    if (techSafe.customer) techSafe.customer = stripInstallationFinancialsFromCustomer(techSafe.customer);
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, schedSafe);
+    if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, techSafe);
+    // The unassigned pool is visible to EVERY technician, so when a job
+    // leaves that pool the other technicians' queues must refresh too.
+    // Previously all technicians shared one User id, so the per-technician
+    // room above happened to reach all of them; with real identities it no
+    // longer does, and a stale queue means a tap that 404s.
+    if (before.technicianId === null) emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, techSafe);
+    // This action moves the job from IN_PROGRESS back to WAITING, so every
+    // Administration/Scheduling screen already listening for appointment state
+    // changes must refresh. Nothing subscribes to the new no-answer event yet --
+    // Phase 2 adds those surfaces -- and without this the dashboards would keep
+    // showing IN_PROGRESS until an unrelated event happened to fire. Reusing the
+    // existing, already-redacted status event rather than adding UI here keeps
+    // Phase 1 frozen while still leaving no screen showing stale state.
+    emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
+    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
+
     const responseData = (!isAdmin && appt.customer)
       ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) }
       : appt;
@@ -939,7 +1233,14 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
       include: { customer: true },
     });
     if (!appt) return res.status(404).json({ success: false, message: 'Not found' });
-    await prisma.appointment.delete({ where: { id: req.params.id } });
+    // Deleting a COMPLETED appointment removes the very completion the customer's
+    // due date was derived from, so the two must commit together for the same
+    // reason completion does -- otherwise the due date would keep pointing at a
+    // completion that no longer exists.
+    await prisma.$transaction(async (tx) => {
+      await tx.appointment.delete({ where: { id: req.params.id } });
+      if (appt.customerId) await recalculateCustomerMaintenanceDue(tx, appt.customerId);
+    });
     const custName = appt.customer?.name || 'Urgent Visit';
     const custNameAr = appt.customer?.name || 'زيارة عاجلة';
     await writeAudit({

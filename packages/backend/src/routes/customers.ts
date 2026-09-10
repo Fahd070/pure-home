@@ -10,7 +10,8 @@ import { emitEvent, EVENT_TYPES } from '../services/event.service';
 import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransactionConflict, sendTransactionConflict } from '../services/bulkDelete.service';
 import { stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
-import { computeNextMaintenanceDate } from '../services/maintenanceSchedule.service';
+import { computeNextMaintenanceDate, describeMaintenanceDue, DUE_SOON_DAYS } from '../services/maintenanceSchedule.service';
+import { recalculateCustomerMaintenanceDue, touchesMaintenanceBaseline } from '../services/maintenanceDue.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 
 const router = Router();
@@ -42,6 +43,45 @@ const addressSchema = z.object({
   postalCode: z.string().max(20).optional(), buildingNo: z.string().max(20).optional(),
   floorNo: z.string().max(20).optional(), apartmentNo: z.string().max(20).optional(),
 });
+// v4 Requirement #8. Only branchName is required -- a branch with no name cannot
+// be told apart from another in a list, whereas a branch whose supervisor is not
+// yet known is perfectly ordinary. supervisorMobile deliberately reuses the same
+// blank-is-valid / malformed-is-not treatment as secondaryPhone above: validated
+// in the route rather than by a Zod regex, because "empty or 05XXXXXXXX" is not
+// expressible as one regex without also accepting the empty string as a number.
+const branchSchema = z.object({
+  branchName: z.string().trim().min(1, 'Branch name is required').max(200),
+  supervisorName: z.string().max(200).optional(),
+  supervisorMobile: z.string().max(20).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+/**
+ * Validates and normalizes a submitted branch list into Prisma create input.
+ *
+ * Returns { error } for a user-facing message. Blank optional fields collapse to
+ * null rather than empty strings, matching how secondaryPhone and the
+ * previousService trio are already handled in this file.
+ */
+function normalizeBranches(
+  branches: Array<{ branchName: string; supervisorName?: string; supervisorMobile?: string; notes?: string }>
+): { value: Array<{ branchName: string; supervisorName: string | null; supervisorMobile: string | null; notes: string | null }> } | { error: string } {
+  const out = [];
+  for (const b of branches) {
+    const mobile = (b.supervisorMobile || '').trim();
+    if (mobile && !PHONE_RE.test(mobile)) {
+      return { error: `رقم جوال مشرف الفرع "${b.branchName}" غير صالح` };
+    }
+    out.push({
+      branchName: b.branchName.trim(),
+      supervisorName: (b.supervisorName || '').trim() || null,
+      supervisorMobile: mobile || null,
+      notes: (b.notes || '').trim() || null,
+    });
+  }
+  return { value: out };
+}
+
 const customerSchema = z.object({
   name: z.string().min(1).max(200), phone: z.string().regex(PHONE_RE),
   // Optional second contact number. Kept as a loose max-length string here
@@ -78,6 +118,13 @@ const customerSchema = z.object({
   previousServiceDate: z.string().max(40).optional(),
   previousServiceNote: z.string().max(2000).optional(),
   address: addressSchema,
+  // v4 Requirement #8: optional branch detail records under this ONE customer.
+  //
+  // Omitting the key entirely means "don't touch branches" on update (matching
+  // this file's partial-update convention); sending [] means "this customer has
+  // no branches", which is how the UI's "does this customer have multiple
+  // branches?" question is answered as No after previously being Yes.
+  branches: z.array(branchSchema).max(50).optional(),
 });
 // PUT-only: adds the optimistic-concurrency `version` field on top of the partial
 // create schema. Kept separate from customerSchema so POST /api/customers is
@@ -220,8 +267,33 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
         : null;
       let alertLevel = 'ok';
       if (overdue.length > 0) alertLevel = 'overdue';
-      else if (daysUntil !== null && daysUntil <= 10) alertLevel = 'soon';
-      return { ...c, lastMaintenance: completed[0]?.scheduledDate || null, nextMaintenance, daysUntil, alertLevel, overdueCount: overdue.length };
+      else if (daysUntil !== null && daysUntil <= DUE_SOON_DAYS) alertLevel = 'soon';
+      // v4: the authoritative classification, derived from the SAME stored due
+      // date the dashboard and sorting will use. Added alongside the legacy
+      // `alertLevel`/`daysUntil` rather than replacing them, so Desktop v3.6.5
+      // keeps rendering fields it understands; Phase 3's UI reads these instead.
+      //
+      // NOTE, stated accurately: the legacy fields are NOT value-identical to
+      // v3.6.5. Requirement #4 added installationDate as a due-date baseline, so
+      // a customer with an installation date but no completed maintenance and no
+      // recorded previous service previously had daysUntil: null / alertLevel
+      // 'ok', and now gets a real date and can read as 'soon'. That is the whole
+      // point of the requirement -- those customers were invisible before -- but
+      // it does reach v3.6.5 screens, so it is documented rather than claimed
+      // away.
+      //
+      // Note the two can legitimately differ: `alertLevel` says "has an overdue
+      // APPOINTMENT", while maintenancePriority says "the customer's own
+      // maintenance is overdue" -- which is the question Requirements #4/#5
+      // actually ask, and the one that works for a customer with no appointment
+      // booked at all.
+      const due = describeMaintenanceDue(c.nextMaintenanceDueAt, now);
+      return {
+        ...c,
+        lastMaintenance: completed[0]?.scheduledDate || null,
+        nextMaintenance, daysUntil, alertLevel, overdueCount: overdue.length,
+        ...due,
+      };
     });
 
     res.json({ success: true, data: enriched, meta: { total, page: parseInt(page), limit: safeLimit } });
@@ -236,6 +308,9 @@ router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
         : { id: req.params.id },
       include: {
         address: true,
+        // v4 Requirement #8: the customer detail view shows the branch records.
+        // Ordered by creation so the list is stable between loads.
+        branches: { orderBy: { createdAt: 'asc' } },
         appointments: {
           include: {
             technician: { select: { id: true, name: true } },
@@ -254,7 +329,15 @@ router.get('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
     // see maintenanceSchedule.service.ts. The "Maintenance History" modal (Scheduling)
     // reads this field instead of deriving its own next-maintenance date from the raw
     // appointments list.
-    const out = { ...stripped, nextMaintenance: computeNextMaintenanceDate(customer as any, (customer as any).appointments || []) };
+    const out = {
+      ...stripped,
+      nextMaintenance: computeNextMaintenanceDate(customer as any, (customer as any).appointments || []),
+      // v4: same authoritative classification as the list route, from the same
+      // stored value -- so a customer's colour on the list and on their own
+      // detail page can never disagree.
+      ...describeMaintenanceDue((customer as any).nextMaintenanceDueAt),
+      branchCount: (customer as any).branches?.length ?? 0,
+    };
     res.json({ success: true, data: out });
   } catch (e) { next(e); }
 });
@@ -299,12 +382,21 @@ router.get('/:id/latest-maintenance-note', requireRole('ADMIN', 'SCHEDULING'), a
 router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerSchema.parse(req.body);
-    const { address, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
+    const { address, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, branches, ...rest } = body as any;
     const secondaryPhoneResult = normalizeSecondaryPhone(secondaryPhone, body.phone);
     if ('error' in secondaryPhoneResult) return res.status(400).json({ success: false, message: secondaryPhoneResult.error });
     const previousServiceResult = resolvePreviousService(previousServiceType, previousServiceDate, previousServiceNote, NO_EXISTING_PREVIOUS_SERVICE);
     if ('error' in previousServiceResult) return res.status(400).json({ success: false, message: previousServiceResult.error });
-    const customer = await prisma.customer.create({
+    const branchesResult = branches !== undefined ? normalizeBranches(branches) : undefined;
+    if (branchesResult && 'error' in branchesResult) return res.status(400).json({ success: false, message: branchesResult.error });
+
+    // The customer row and its derived due date commit together. A committed
+    // customer whose maintenance baseline (installation date / previous service)
+    // is already known but whose stored due date is null would be silently
+    // invisible to every due list -- the exact defect Requirement #4 exists to
+    // remove.
+    const customer = await prisma.$transaction(async (tx) => {
+      const createdCustomer = await tx.customer.create({
       data: {
         ...rest,
         secondaryPhone: secondaryPhoneResult.value,
@@ -313,8 +405,24 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
         installationNote: installationNote || undefined,
         createdById: req.user!.userId,
         address: { create: address },
+        // Nested create, so the customer and its branches commit together. One
+        // Customer row regardless of branch count -- branches are detail records,
+        // never additional customers.
+        ...(branchesResult && 'value' in branchesResult && branchesResult.value.length
+          ? { branches: { create: branchesResult.value } }
+          : {}),
       },
-      include: { address: true },
+      include: { address: true, branches: true },
+      });
+      await recalculateCustomerMaintenanceDue(tx, createdCustomer.id);
+      // Re-read INSIDE the transaction: createdCustomer was captured before the
+      // recalculation wrote nextMaintenanceDueAt, so returning it would answer
+      // the request (and the customer:created socket payload) with a null due
+      // date that contradicts the row just committed.
+      return tx.customer.findUniqueOrThrow({
+        where: { id: createdCustomer.id },
+        include: { address: true, branches: true },
+      });
     });
     await writeAudit({
       action: 'CREATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
@@ -333,7 +441,7 @@ router.post('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, re
 router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
     const body = customerUpdateSchema.parse(req.body);
-    const { address, version, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, ...rest } = body as any;
+    const { address, version, installationDate, installationNote, secondaryPhone, previousServiceType, previousServiceDate, previousServiceNote, branches, ...rest } = body as any;
 
     // Object-level authorization: a Scheduling caller must not be able to write to a
     // customer that GET /api/customers[/:id] would already hide from them (an
@@ -368,8 +476,23 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
       if ('error' in result) return res.status(400).json({ success: false, message: result.error });
       previousServiceUpdate = result;
     }
+    // Same omitted-vs-provided distinction again: the key being absent means
+    // "leave branches alone", while an explicit [] means "this customer has none".
+    let branchesUpdate: Array<{ branchName: string; supervisorName: string | null; supervisorMobile: string | null; notes: string | null }> | undefined;
+    if (branches !== undefined) {
+      const result = normalizeBranches(branches);
+      if ('error' in result) return res.status(400).json({ success: false, message: result.error });
+      branchesUpdate = result.value;
+    }
 
-    const customer = await prisma.customer.update({
+    // When this edit touches a maintenance baseline field, the edit and the
+    // recalculated due date commit together. Committing the new
+    // cycle/frequency/installation date while leaving the OLD due date stored is
+    // worse than a null: it is a confidently wrong date that every due list,
+    // overdue check and sort order would then trust.
+    const needsRecalc = touchesMaintenanceBaseline(body);
+    const customer = await prisma.$transaction(async (tx) => {
+      const updatedCustomer = await tx.customer.update({
       where: { id: req.params.id },
       data: {
         ...rest,
@@ -379,8 +502,30 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
         ...(installationNote !== undefined ? { installationNote: installationNote || null } : {}),
         version: { increment: 1 },
         ...(address ? { address: { update: address } } : {}),
+        // Replace-on-update: the submitted list is the complete new set of
+        // branches. Chosen over per-branch add/edit/delete endpoints because the
+        // UI edits them as one section of one form, and because deleteMany +
+        // create inside this single update is atomic -- a partial failure cannot
+        // leave a customer with half their branches replaced. Branch ids are not
+        // client-supplied, so this also removes any possibility of a caller
+        // reassigning another customer's branch to themselves.
+        ...(branchesUpdate
+          ? { branches: { deleteMany: {}, ...(branchesUpdate.length ? { create: branchesUpdate } : {}) } }
+          : {}),
       },
-      include: { address: true },
+      include: { address: true, branches: true },
+      });
+      // Only when the edit actually touched a field the due date derives from.
+      // A phone-number or notes change cannot move a maintenance date, and
+      // recalculating on every unrelated save would be needless work.
+      if (!needsRecalc) return updatedCustomer;
+      await recalculateCustomerMaintenanceDue(tx, updatedCustomer.id);
+      // Same reason as create: without this re-read the response and socket
+      // payload would carry the OLD due date while the database holds the new one.
+      return tx.customer.findUniqueOrThrow({
+        where: { id: updatedCustomer.id },
+        include: { address: true, branches: true },
+      });
     });
     await writeAudit({
       action: 'UPDATE', entityType: 'customer', entityId: customer.id, userId: req.user!.userId,
@@ -400,6 +545,9 @@ router.patch('/:id/toggle-active', requireRole('ADMIN'), async (req: AuthRequest
   try {
     const existing = await prisma.customer.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ success: false, message: 'Not found' });
+    // toggle-active deliberately does NOT recalculate: activating or
+    // deactivating a customer changes no maintenance baseline field, so their due
+    // date is unaffected.
     const customer = await prisma.customer.update({
       where: { id: req.params.id },
       data: { isActive: !existing.isActive, version: { increment: 1 } },

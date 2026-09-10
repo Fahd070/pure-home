@@ -1,3 +1,31 @@
+// SAFE PROJECTION FOR THE `User` RELATION.
+//
+// Prisma's `include: { technician: true }` loads EVERY scalar column of the
+// related user row -- which now means `accessCodeHash` (the bcrypt hash of a
+// technician's 4-digit access code), `password`, and `sessionVersion`, none of
+// which any client has any reason to see.
+//
+// The access-code hash is the dangerous one: a 4-digit code is only 10,000
+// combinations, so a leaked bcrypt hash can be exhausted offline in seconds,
+// entirely bypassing the online rate limiter. Recovering a colleague's code
+// means authenticating AS them, which would silently misattribute every
+// completion, postponement and audit entry -- destroying the exact
+// accountability the per-technician identity work exists to create.
+//
+// `include: true` is a DENYLIST by omission: it starts leaking the moment a
+// column is added to the model. This allowlist cannot. Use it for EVERY
+// technician/user relation that reaches a response or a socket payload.
+export const TECHNICIAN_PUBLIC_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  isActive: true,
+} as const;
+
+/** The include fragment to use in place of `technician: true`. */
+export const TECHNICIAN_PUBLIC_INCLUDE = { select: TECHNICIAN_PUBLIC_SELECT } as const;
+
 // Modification #6: completionAmount/completionPaymentMethod are private to ADMIN
 // and TECHNICIAN only -- SCHEDULING must never receive them, from any response
 // shape or socket room. Centralized here because the fields appear, unfiltered by

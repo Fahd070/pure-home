@@ -12,7 +12,11 @@ import { firstNameOf, FIRST_NAME_RE } from '../../unified-app/src/technician/pag
 
 const taskDetailSrc = fs.readFileSync(path.resolve(__dirname, '../../unified-app/src/technician/pages/TaskDetail.tsx'), 'utf-8');
 
-describe('i18n: exact required labels', () => {
+// These keys are intentionally RETAINED in i18n even though the field is gone:
+// Administration's completion-details view still displays historical
+// completionTechnicianName values submitted by Desktop v3.6.5 clients, and those
+// need a label. The wording is pinned so that display does not silently change.
+describe('i18n: retained labels for historical technician-name values', () => {
   it('tasks.technicianName matches the required Arabic/English wording', () => {
     expect(i18n.getFixedT('ar')('tasks.technicianName')).toBe('اسم الفني');
     expect(i18n.getFixedT('en')('tasks.technicianName')).toBe('Technician Name');
@@ -61,36 +65,41 @@ describe('FIRST_NAME_RE: validation format (production logic)', () => {
   it('rejects an empty string', () => { expect(FIRST_NAME_RE.test('')).toBe(false); });
 });
 
-describe('Technician completion modal: Technician Name field', () => {
-  it('adds technicianName to the completion form state, defaulting to empty', () => {
-    expect(taskDetailSrc).toMatch(/technicianName:\s*""/);
+describe('Technician completion modal: identity comes from the session (v4 D4)', () => {
+  // SUPERSEDED BY v4 DECISION D4. These cases previously asserted that the
+  // completion modal RENDERED a required "Technician Name" input, pre-filled it
+  // from the signed-in user, and sent it to the server.
+  //
+  // v4 gives every technician their own authenticated account, so the app no
+  // longer asks a technician to type their own name -- asking would let the
+  // typed value disagree with the JWT the action is actually attributed to.
+  // The assertions are inverted rather than removed, because the absence of the
+  // field is now the property worth protecting against regression.
+
+  it('no longer keeps technicianName in the completion form state', () => {
+    expect(taskDetailSrc).not.toMatch(/technicianName:\s*""/);
+    expect(taskDetailSrc).not.toMatch(/completeForm\.technicianName/);
   });
 
-  it('renders a required Technician Name input with the correct label', () => {
-    expect(taskDetailSrc).toMatch(/t\("tasks\.technicianName"\)/);
-    expect(taskDetailSrc).toMatch(/type="text"\s+required\s+value=\{completeForm\.technicianName\}/);
+  it('no longer renders a Technician Name input', () => {
+    expect(taskDetailSrc).not.toMatch(/t\("tasks\.technicianName"\)/);
+    expect(taskDetailSrc).not.toMatch(/id="tech-name"/);
   });
 
-  it('pre-fills technicianName from the authenticated Technician on modal open', () => {
+  it('shows the authenticated technician back to them instead of asking for a name', () => {
     expect(taskDetailSrc).toMatch(/import \{ useAuthStore \} from "\.\.\/store\/authStore"/);
     expect(taskDetailSrc).toMatch(/const \{ user \} = useAuthStore\(\);/);
-    expect(taskDetailSrc).toMatch(/technicianName:\s*firstNameOf\(user\?\.name\)/);
+    expect(taskDetailSrc).toMatch(/t\("tasks\.completingAs"\)/);
+    expect(taskDetailSrc).toMatch(/\{user\?\.name\}/);
   });
 
-  it('isCompleteValid requires a valid technicianName before the task can be completed', () => {
-    expect(taskDetailSrc).toMatch(/technicianNameValid\s*=\s*!!trimmedTechnicianName\s*&&\s*FIRST_NAME_RE\.test\(trimmedTechnicianName\)/);
-    // Bank Transfer subtype fix (Part D) appends paymentMethodValid after
-    // technicianNameValid in isCompleteValid -- technicianName is still required,
-    // just no longer the final conjunct.
-    expect(taskDetailSrc).toMatch(/isCompleteValid\s*=[\s\S]*?&&\s*technicianNameValid\s*&&\s*paymentMethodValid;/);
+  it('completion validity no longer depends on a typed name', () => {
+    expect(taskDetailSrc).not.toMatch(/technicianNameValid/);
+    expect(taskDetailSrc).toMatch(/isCompleteValid\s*=[\s\S]*?&&\s*paymentMethodValid;/);
   });
 
-  it('shows a localized inline error only once the field is non-empty and invalid (not required-nagging on first open)', () => {
-    expect(taskDetailSrc).toMatch(/technicianNameError\s*=\s*trimmedTechnicianName\s*&&\s*!technicianNameValid\s*\?\s*t\("tasks\.technicianNameFirstOnly"\)/);
-  });
-
-  it('sends the trimmed technicianName to the complete endpoint', () => {
-    expect(taskDetailSrc).toMatch(/technicianName:\s*completeForm\.technicianName\.trim\(\),/);
+  it('never sends a technician name to the complete endpoint', () => {
+    expect(taskDetailSrc).not.toMatch(/technicianName:\s*completeForm/);
   });
 
   it('resetting the modal clears technicianName back to empty (no stale value across appointments)', () => {

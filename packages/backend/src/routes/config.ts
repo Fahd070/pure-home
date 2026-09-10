@@ -25,6 +25,9 @@ async function upsertCode(dept: Dept, newCode: string, userId: string): Promise<
 
 router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, next) => {
   try {
+    // Deliberately unchanged from v3.6.5's shape. The v4 UI reads the technician
+    // roster and migration state from /api/employees/* instead, so adding them
+    // here too would be a second, unread copy paid for on every call.
     const [admin, scheduling, technician] = await Promise.all([
       resolveAccessCode('admin'),
       resolveAccessCode('scheduling'),
@@ -35,6 +38,11 @@ router.get('/access-codes', requireRole('ADMIN'), async (req: AuthRequest, res, 
       data: {
         admin: admin ?? null,
         scheduling: scheduling ?? null,
+        // The legacy shared technician code. Still returned because employees on
+        // Desktop v3.6.5 run an Access Codes page that reads this field, and
+        // removing it would break that screen for them mid-cycle. It stops being
+        // *usable* for login once Administration completes the explicit cutover
+        // (see routes/auth.ts).
         technician: technician ?? null,
       },
     });

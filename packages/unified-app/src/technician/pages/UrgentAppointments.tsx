@@ -11,7 +11,7 @@ import { useAuthStore } from "../store/authStore";
 // Reuses Modification #13's exact first-name rule/extraction (Part B of this
 // batch) rather than duplicating a second validator -- same file family
 // (technician/pages), same production logic.
-import { FIRST_NAME_RE, firstNameOf } from "./TaskDetail";
+
 import { fetchAllPages } from "../../utils/fetchAllPages";
 import { Button } from "../../ui/Button";
 import { Input, Textarea, Field, Label } from "../../ui/Field";
@@ -38,7 +38,6 @@ const EMPTY_RECORD = {
   paymentGroup: "CASH" as PaymentGroup,
   transferType: "" as TransferType,
   amount: "",
-  technicianName: "",
 };
 
 const FORM_ID = "urgent-visit-record-form";
@@ -107,12 +106,7 @@ export default function TechUrgentAppointments() {
   // its subtype -- both enforced again server-side (never trust the client).
   const paymentValid = isVisitOnly || resolvePaymentMethod() !== null;
   const amountValid = isVisitOnly || (!!record.amount.trim() && !isNaN(parseFloat(record.amount)) && parseFloat(record.amount) >= 0);
-  const trimmedTechnicianName = record.technicianName.trim();
-  const technicianNameValid = !!trimmedTechnicianName && FIRST_NAME_RE.test(trimmedTechnicianName);
-  const technicianNameError = trimmedTechnicianName && !technicianNameValid
-    ? t("tasks.technicianNameFirstOnly")
-    : null;
-  const isRecordValid = paymentValid && amountValid && technicianNameValid;
+  const isRecordValid = paymentValid && amountValid;
 
   function selectServiceType(st: ServiceType) {
     setRecord(r => {
@@ -158,7 +152,6 @@ export default function TechUrgentAppointments() {
       serviceType: record.serviceType,
       ...(paymentMethod ? { paymentMethod } : {}),
       amount: isVisitOnly ? 0 : parseFloat(record.amount),
-      technicianName: trimmedTechnicianName,
     });
   }
 
@@ -247,7 +240,7 @@ export default function TechUrgentAppointments() {
                         variant="primary"
                         onClick={() => {
                           setSubmitModal({ appt: a });
-                          setRecord({ ...EMPTY_RECORD, technicianName: firstNameOf(user?.name) });
+                          setRecord({ ...EMPTY_RECORD });
                         }}
                       >
                         {t("urgentAppts.submitRecord")}
@@ -308,15 +301,15 @@ export default function TechUrgentAppointments() {
               </div>
             </div>
 
-            <Field label={t("tasks.technicianName")} htmlFor="urgent-tech-name" required error={technicianNameError}>
-              <Input
-                id="urgent-tech-name" type="text" required
-                value={record.technicianName}
-                onChange={e => setRecord(r => ({ ...r, technicianName: e.target.value }))}
-                placeholder={isAr ? "مثال: أحمد" : "e.g. Ahmed"}
-                invalid={!!technicianNameError}
-              />
-            </Field>
+            {/* v4 decision D4: the urgent-visit form no longer asks the
+                technician to type their own name either. The submitter is
+                already recorded authoritatively as submittedById from the
+                authenticated session. */}
+            <div className="flex items-center gap-2 text-xs text-fg-secondary bg-surface-subtle border border-line-subtle rounded px-2.5 py-2">
+              <Icon name="technicians" className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
+              <span>{t("tasks.completingAs")}</span>
+              <span className="font-medium text-fg truncate">{user?.name}</span>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label={t("urgentAppts.customerDetails")} htmlFor="urgent-cust-details">

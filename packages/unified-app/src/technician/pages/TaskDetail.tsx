@@ -63,7 +63,9 @@ async function compressImage(file: File): Promise<string> {
 // Bank Transfer subtype fix (Part D, same behavior as the urgent visit form):
 // paymentGroup is the top-level Cash/Bank Transfer choice; transferType only
 // matters (and is only shown) when paymentGroup is Bank Transfer.
-const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentGroup: "CASH" as PaymentGroup, transferType: "" as TransferType, nextMaintenanceNote: "", actualCompletionDate: "", technicianName: "" };
+// v4 decision D4: no technicianName. The technician is identified by their own
+// authenticated session, so the app no longer asks them to type their own name.
+const EMPTY_COMPLETE = { serviceDetails: "", amount: "", paymentGroup: "CASH" as PaymentGroup, transferType: "" as TransferType, nextMaintenanceNote: "", actualCompletionDate: "" };
 
 // Modification #8: today's date in the local YYYY-MM-DD form a native date
 // input expects, used both to default the field and to cap it via `max` so a
@@ -100,6 +102,8 @@ export default function TaskDetail() {
   const { user } = useAuthStore();
   const [showComplete, setShowComplete] = useState(false);
   const [showPostpone, setShowPostpone] = useState(false);
+  const [showNoAnswer, setShowNoAnswer] = useState(false);
+  const [noAnswerNote, setNoAnswerNote] = useState("");
   const [completeForm, setCompleteForm] = useState({ ...EMPTY_COMPLETE });
   const [postponeReason, setPostponeReason] = useState("");
   const [postponeDate, setPostponeDate] = useState("");
@@ -127,7 +131,6 @@ export default function TaskDetail() {
       completionAmount: parseFloat(completeForm.amount),
       completionPaymentMethod: resolvePaymentMethod(),
       actualCompletionDate: completeForm.actualCompletionDate,
-      technicianName: completeForm.technicianName.trim(),
       ...(completionImage ? { completionImage } : {}),
       ...(completeForm.nextMaintenanceNote.trim() ? { nextMaintenanceNote: completeForm.nextMaintenanceNote } : {}),
     }),
@@ -135,8 +138,26 @@ export default function TaskDetail() {
     onError: (err: any) => toast.error(err?.response?.data?.message || t("common.error")),
   });
 
+  // Requirement #7: a durable contact-attempt record. Deliberately sends only an
+  // optional note -- there is no technician field, because the server takes the
+  // actor from the authenticated session.
+  const noAnswer = useMutation({
+    mutationFn: () => api.patch(`/appointments/${id}/no-answer`, { note: noAnswerNote.trim() || undefined }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["work-queue"] });
+      qc.invalidateQueries({ queryKey: ["appointment", id] });
+      toast.success(t("tasks.noAnswerRecorded"));
+      setShowNoAnswer(false);
+      setNoAnswerNote("");
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
   const postpone = useMutation({
-    mutationFn: () => api.patch(`/appointments/${id}/postpone`, { reason: postponeReason, newDate: postponeDate || undefined }),
+    // v4 Requirement #6: the new agreed date is REQUIRED and the note is
+    // optional -- the inverse of the old form, which required a reason and made
+    // the date optional.
+    mutationFn: () => api.patch(`/appointments/${id}/postpone`, { note: postponeReason || undefined, newDate: postponeDate }),
     onSuccess: () => { toast.success(t("common.success")); navigate("/technician/queue"); }
   });
 
@@ -147,12 +168,6 @@ export default function TaskDetail() {
   const customer = appt.customer;
   const addr = customer?.address;
   const workStatus = appt.workStatus;
-
-  const trimmedTechnicianName = completeForm.technicianName.trim();
-  const technicianNameValid = !!trimmedTechnicianName && FIRST_NAME_RE.test(trimmedTechnicianName);
-  const technicianNameError = trimmedTechnicianName && !technicianNameValid
-    ? t("tasks.technicianNameFirstOnly")
-    : null;
 
   // Bank Transfer subtype fix (Part D): resolves the final 3-way value the
   // backend accepts. Cash never needs a subtype; Bank Transfer requires one
@@ -165,7 +180,7 @@ export default function TaskDetail() {
     return null;
   }
 
-  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate && technicianNameValid && paymentMethodValid;
+  const isCompleteValid = completeForm.serviceDetails.trim() && completeForm.amount && parseFloat(completeForm.amount) >= 0 && !!completeForm.actualCompletionDate && paymentMethodValid;
 
   const PAYMENT_LABELS: Record<string, string> = {
     CASH: isAr ? "نقداً" : "Cash",
@@ -317,7 +332,14 @@ export default function TaskDetail() {
               <>
                 <Button
                   variant="secondary"
-                  onClick={() => setShowPostpone(true)}
+                  onClick={() => { setNoAnswerNote(""); setShowNoAnswer(true); }}
+                >
+                  <Icon name="urgent" className="w-3.5 h-3.5" />
+                  {t("tasks.noAnswer")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => { setPostponeReason(""); setPostponeDate(""); setShowPostpone(true); }}
                 >
                   <Icon name="clock" className="w-3.5 h-3.5" />
                   {t("tasks.postpone")}
@@ -325,7 +347,7 @@ export default function TaskDetail() {
                 <Button
                   variant="primary"
                   onClick={() => {
-                    setCompleteForm(f => ({ ...f, actualCompletionDate: todayDateInputValue(), technicianName: firstNameOf(user?.name) }));
+                    setCompleteForm(f => ({ ...f, actualCompletionDate: todayDateInputValue() }));
                     setShowComplete(true);
                   }}
                 >
@@ -368,15 +390,15 @@ export default function TaskDetail() {
             {isAr ? "جميع الحقول إلزامية لإتمام المهمة" : "All fields are required to complete the task"}
           </Callout>
 
-          <Field label={t("tasks.technicianName")} htmlFor="tech-name" required error={technicianNameError}>
-            <Input
-              id="tech-name" type="text" required
-              value={completeForm.technicianName}
-              onChange={e => setCompleteForm(f => ({ ...f, technicianName: e.target.value }))}
-              placeholder={isAr ? "مثال: أحمد" : "e.g. Ahmed"}
-              invalid={!!technicianNameError}
-            />
-          </Field>
+          {/* v4 decision D4: the "Technician Name" field is gone. The signed-in
+              technician IS the identity, so it is shown back to them as
+              confirmation rather than asked for as input -- one less thing to
+              type, and one less way for the record to disagree with the JWT. */}
+          <div className="flex items-center gap-2 text-xs text-fg-secondary bg-surface-subtle border border-line-subtle rounded px-2.5 py-2">
+            <Icon name="technicians" className="w-3.5 h-3.5 text-fg-muted flex-shrink-0" />
+            <span>{t("tasks.completingAs")}</span>
+            <span className="font-medium text-fg truncate">{user?.name}</span>
+          </div>
 
           <Field label={t("tasks.serviceDetails")} htmlFor="service-details" required>
             <Textarea
@@ -500,9 +522,9 @@ export default function TaskDetail() {
             <Button variant="secondary" onClick={() => setShowPostpone(false)}>{t("common.cancel")}</Button>
             <Button
               variant="primary"
-              disabled={!postponeReason.trim()}
+              disabled={!postponeDate}
               loading={postpone.isPending}
-              onClick={() => postponeReason.trim() && postpone.mutate()}
+              onClick={() => postponeDate && postpone.mutate()}
             >
               {t("common.save")}
             </Button>
@@ -510,19 +532,52 @@ export default function TaskDetail() {
         }
       >
         <div className="space-y-3">
-          <Field label={t("tasks.reason")} htmlFor="postpone-reason" required>
+          {/* Requirement #6: the technician agrees a replacement date with the
+              customer, so the DATE is what is required here. The note is
+              optional, and the technician's name is never asked for. */}
+          <Field label={t("tasks.newDate")} htmlFor="postpone-date" required>
+            <Input
+              id="postpone-date" type="date" lang="en-GB" dir="ltr"
+              min={todayDateInputValue()}
+              value={postponeDate}
+              onChange={e => setPostponeDate(e.target.value)}
+            />
+          </Field>
+          {!postponeDate && (
+            <p className="text-2xs text-fg-muted">{t("tasks.newDateRequired")}</p>
+          )}
+          <Field label={t("tasks.noteOptional")} htmlFor="postpone-reason">
             <Textarea
               id="postpone-reason" rows={3}
               value={postponeReason}
               onChange={e => setPostponeReason(e.target.value)}
-              placeholder={t("tasks.reason")}
             />
           </Field>
-          <Field label={t("tasks.newDate")} htmlFor="postpone-date">
-            <Input
-              id="postpone-date" type="date" lang="en-GB" dir="ltr"
-              value={postponeDate}
-              onChange={e => setPostponeDate(e.target.value)}
+        </div>
+      </Modal>
+
+      {/* Requirement #7: the third technician action. */}
+      <Modal
+        open={showNoAnswer}
+        onClose={() => setShowNoAnswer(false)}
+        title={t("tasks.confirmNoAnswer")}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowNoAnswer(false)}>{t("common.cancel")}</Button>
+            <Button variant="primary" loading={noAnswer.isPending} onClick={() => noAnswer.mutate()}>
+              {t("common.save")}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Callout tone="info">{t("tasks.noAnswerHint")}</Callout>
+          <Field label={t("tasks.noteOptional")} htmlFor="no-answer-note">
+            <Textarea
+              id="no-answer-note" rows={3}
+              value={noAnswerNote}
+              onChange={e => setNoAnswerNote(e.target.value)}
             />
           </Field>
         </div>

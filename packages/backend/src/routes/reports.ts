@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
-import { computeNextMaintenanceDate } from '../services/maintenanceSchedule.service';
+import { computeNextMaintenanceDate, DUE_SOON_DAYS } from '../services/maintenanceSchedule.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
+import { TECHNICIAN_PUBLIC_INCLUDE } from '../services/completionPrivacy.service';
 
 const router = Router();
 router.use(authenticate);
@@ -43,7 +44,7 @@ function enrichWithSchedule(customers: any[], now: Date, apptsByCustomer: Map<st
       : null;
     let alertLevel = 'ok';
     if (overdue.length > 0) alertLevel = 'overdue';
-    else if (daysUntil !== null && daysUntil <= 10) alertLevel = 'soon';
+    else if (daysUntil !== null && daysUntil <= DUE_SOON_DAYS) alertLevel = 'soon';
 
     const maintenanceStatus = computeMaintenanceStatus(appts, now);
 
@@ -188,7 +189,7 @@ router.get('/sales', requireRole('ADMIN'), async (req: AuthRequest, res, next) =
         workStatus: 'COMPLETED',
         completionAmount: { not: null },
       },
-      include: { customer: true, technician: true },
+      include: { customer: true, technician: TECHNICIAN_PUBLIC_INCLUDE },
       orderBy: { scheduledDate: 'asc' },
     });
 
@@ -197,7 +198,7 @@ router.get('/sales', requireRole('ADMIN'), async (req: AuthRequest, res, next) =
         createdAt: { gte: fromDate, lte: toDate },
         amount: { not: null },
       },
-      include: { appointment: true, submittedBy: true },
+      include: { appointment: true, submittedBy: TECHNICIAN_PUBLIC_INCLUDE },
       orderBy: { createdAt: 'asc' },
     });
 
