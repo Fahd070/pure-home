@@ -4,11 +4,20 @@ name: Production Validation
 # docs/CI-DEPLOYMENT-GATE.md), so it must run on every PR targeting main and every
 # push to main -- a path-filtered required check that sometimes doesn't run at all
 # leaves affected PRs permanently stuck as "waiting for status" in GitHub's UI.
+#
+# Also runs against v4/integration, the temporary v4 development integration
+# branch (main stays the Production-connected branch -- v4/integration is not).
+# Both branches get the identical validation job below; this workflow never
+# deploys anything to Production regardless of which branch triggered it.
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - v4/integration
   push:
-    branches: [main]
+    branches:
+      - main
+      - v4/integration
 
 jobs:
   validate:

@@ -2,19 +2,32 @@
 
 This repository's GitHub Actions workflow (`.github/workflows/production-validation.yml`,
 job/check name **"Production Validation"**) automatically validates every pull request
-targeting `main` and every push to `main`: reproducible install, Prisma schema
-validate/generate, `prisma migrate deploy` against a disposable Postgres service,
-backend typecheck + build, the full permanent backend regression suite, and the web
-app's production build.
+and every push targeting **either** `main` **or** `v4/integration`: reproducible
+install, Prisma schema validate/generate, `prisma migrate deploy` against a disposable
+Postgres service, backend typecheck + build, the full permanent backend regression
+suite, and the web app's production build. No path filters are used on either branch —
+the same full job runs regardless of which files changed.
 
-**That workflow, by itself, does not stop a bad commit from being deployed.** GitHub
-Actions and Render/Vercel's Git integrations are three independent systems. Render and
-Vercel both deploy from `main` the moment they see a new commit there, regardless of
-whether a GitHub Actions run against that commit is still running, or even failed. This
-repository has no file-based way to change that — it is configured entirely in the
-GitHub and Render/Vercel dashboards. The two steps below are what actually close that
-gap; **neither has been performed by this change** — they require access to those
-dashboards.
+`main` and `v4/integration` are not equivalent branches, only equivalently validated:
+
+- **`main`** — the Production-connected branch. Render and Vercel deploy from it (see
+  below). This is the branch the rest of this document's gating discussion is about.
+- **`v4/integration`** — a temporary, non-production v4 development integration
+  branch, created to hold Phase 1–4 of the v4.0.0 development cycle without exposing
+  Production to a partially completed release. Nothing deploys from it. It receives
+  the identical validation job purely so that Phase 2/3/4 feature PRs targeting it get
+  real CI feedback instead of none; it is a development safety net, not a Production
+  gate, and this workflow never deploys Production regardless of which of the two
+  branches triggered the run.
+
+**That workflow, by itself, does not stop a bad commit on `main` from being deployed.**
+GitHub Actions and Render/Vercel's Git integrations are three independent systems.
+Render and Vercel both deploy from `main` the moment they see a new commit there,
+regardless of whether a GitHub Actions run against that commit is still running, or
+even failed. This repository has no file-based way to change that — it is configured
+entirely in the GitHub and Render/Vercel dashboards. The two steps below are what
+actually close that gap for `main`; **neither has been performed by this change** —
+they require access to those dashboards.
 
 ## 1. GitHub branch protection (the real gate — do this first)
 
@@ -60,11 +73,62 @@ If you want to check whether your current Render/Vercel plan offers anything str
 directly in each dashboard — Render → service → Settings → Build & Deploy; Vercel →
 project → Settings → Git — rather than assumed here.
 
+## 3. `v4/integration` branch protection (current actual state)
+
+As of this writing, `v4/integration` has **no GitHub branch protection rule and is not
+covered by any ruleset** — it accepts direct pushes and does not require a passing
+`Production Validation` run before anything lands on it. This is stated as fact, not
+recommendation: do not assume otherwise, and do not treat this document as claiming
+protection that has not actually been configured in the GitHub dashboard.
+
+Before Phase 2 feature work begins in earnest, the minimum recommended protection for
+`v4/integration` mirrors `main`'s pattern:
+
+- **Require a pull request before merging** — so direct pushes to `v4/integration`
+  stop being possible (the CI-bootstrap commit that introduced this trigger change was
+  a one-time, explicitly authorized exception to that pattern, not the normal flow).
+- **Require status checks to pass before merging**, selecting **`Production
+  Validation`** — the same check name `main` already requires, since both branches run
+  the identical job.
+- Optionally, "Require branches to be up to date before merging".
+
+Adding this protection is a repository-settings change and is **not** performed by
+this document or by the workflow-trigger change described above — it needs the same
+kind of dashboard action as `main`'s protection in section 1.
+
+## 4. v4 development workflow
+
+With the trigger change above in place, day-to-day v4 feature development follows:
+
+```
+feature branch
+  → PR targeting v4/integration
+  → Production Validation runs automatically
+  → review
+  → merge into v4/integration
+```
+
+`v4/integration` is never deployed to, so a merge there has no Production impact by
+itself. When the full v4 cycle (all phases) is complete and integrated:
+
+```
+v4/integration
+  → PR targeting main
+  → Production Validation runs automatically
+  → controlled migration / deployment / release process (separate from this document)
+```
+
+That final `v4/integration → main` step is where the existing `main`-specific
+branch-protection and deployment discussion above (sections 1–2) applies in full —
+merging into `main` is what actually risks reaching Production, and everything this
+document says about `main`'s gate being incomplete without the dashboard steps in
+section 1 still holds at that point.
+
 ## Summary
 
 | Layer | Status |
 |---|---|
-| Automated validation (install, Prisma, typecheck, build, tests, web build) | ✅ Implemented — runs on every PR to `main` and every push to `main` |
+| Automated validation (install, Prisma, typecheck, build, tests, web build) | ✅ Implemented — runs on every PR to `main`/`v4/integration` and every push to `main`/`v4/integration` |
 | PR merges to `main` actually blocked on that validation | ❌ Requires the GitHub branch-protection steps above (not yet configured) |
 | Direct pushes to `main` blocked | ❌ Requires "Require a pull request before merging" in the same rule |
 | Render/Vercel deploy blocked on CI success specifically | ❌ Not supported via repository configuration; mitigated only by protecting `main` (step 1) |
