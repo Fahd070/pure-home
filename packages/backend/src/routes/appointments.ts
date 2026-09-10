@@ -9,9 +9,88 @@ import { emitEvent, EVENT_TYPES } from '../services/event.service';
 import { stripCompletionAmount, stripCompletionAmountFromList, stripInstallationFinancialsFromCustomer, TECHNICIAN_PUBLIC_INCLUDE } from '../services/completionPrivacy.service';
 import { resolveOrCreateUrgentCustomer, validateUrgentCustomerIdentity, InvalidCustomerIdentityError } from '../services/customerResolve.service';
 import { recalculateCustomerMaintenanceDue } from '../services/maintenanceDue.service';
+import {
+  createNotifications, emitCreatedNotifications, resolveActiveRoleRecipients,
+} from '../services/notification.service';
+import type { NotificationDb } from '../services/notification.service';
+import { NOTIFICATION_SEVERITY, NOTIFICATION_TYPES } from '../constants';
 
 const router = Router();
 router.use(authenticate);
+
+/**
+ * PHASE 2 -- shared notification helpers for the three critical appointment events.
+ *
+ * Dates in notification text use the SAME en-GB day/month/year form the audit
+ * labels in this file already use, so a date reads identically wherever an
+ * operator sees it -- and are formatted in UTC.
+ *
+ * UTC is not incidental. `scheduledDate` and `newDate` originate from a
+ * date-only <input type="date"> string, which parses as UTC MIDNIGHT. Formatting
+ * that in server-local time on any host west of UTC renders the PREVIOUS day, so
+ * a visit rescheduled to the 15th would be announced as the 14th in both the
+ * Arabic and English notification bodies while the appointment really is on the
+ * 15th. This is the same UTC-on-both-sides convention the past-date guard in the
+ * postpone handler already documents.
+ */
+const notifDate = (d: Date | string) =>
+  new Date(d).toLocaleDateString('en-GB', { timeZone: 'UTC' });
+
+/**
+ * The same day/month/year form, for a REAL INSTANT rather than a date-only value.
+ *
+ * `notifDate` above is deliberately UTC because its inputs parse as UTC midnight.
+ * A stored timestamp such as `createdAt` is the opposite case: it is an actual
+ * moment, and formatting it in UTC would report the previous calendar day for
+ * anything recorded between midnight and 03:00 local time in this deployment
+ * (UTC+3). Instants therefore use the server's own timezone, matching the audit
+ * labels elsewhere in this file.
+ */
+const notifInstantDate = (d: Date | string) => new Date(d).toLocaleDateString('en-GB');
+
+/**
+ * The acting employee's own name, read from the authenticated user id.
+ *
+ * Decision D4: attribution is the authenticated identity, never a client-sent
+ * name. Note this is deliberately NOT `appointment.technician.name` -- that is
+ * the ASSIGNED technician, and a technician may legitimately act on an
+ * unassigned job from the shared pool, in which case the assignee is null and
+ * the two are not the same person.
+ */
+async function resolveActorName(db: NotificationDb, userId: string): Promise<string> {
+  const u = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+  return u?.name || 'Unknown';
+}
+
+/**
+ * THE single authority on who may be told about a postpone / did-not-answer
+ * event -- used by BOTH the durable notification recipients and the Socket.IO
+ * delivery below, so the two can never drift apart.
+ *
+ * SECURITY: `visibleToScheduling` is a real authorization gate for the
+ * SCHEDULING role, not a display preference -- GET /appointments, GET
+ * /appointments/:id, PUT /:id and the export routes all scope Scheduling to
+ * `visibleToScheduling: true`, so a hidden appointment is a plain 404 for them.
+ *
+ * Both delivery channels are disclosures: the notification body names the
+ * customer and the dates, and the realtime payload carries the appointment and
+ * its nested customer outright. A realtime event must never reveal what the
+ * recipient cannot fetch through the corresponding authorized REST route, so an
+ * event on an appointment hidden from Scheduling is not sent to the Scheduling
+ * room at all -- not even a redacted copy. There is nothing for Scheduling to
+ * invalidate, because the row never appears in any Scheduling view.
+ *
+ * Administration sees everything, so it is always included.
+ */
+function appointmentEventRoles(appt: { visibleToScheduling: boolean }): string[] {
+  return appt.visibleToScheduling ? ['ADMIN', 'SCHEDULING'] : ['ADMIN'];
+}
+
+/** True when this appointment's events may reach the SCHEDULING room. */
+function schedulingMayReceive(appt: { visibleToScheduling: boolean }): boolean {
+  return appointmentEventRoles(appt).includes('SCHEDULING');
+}
+
 
 const apptSchema = z.object({
   customerId: z.string().optional(),
@@ -71,7 +150,10 @@ function apptFields(a: any) {
 // approval (Modification #5 -- visibleToTechnician).
 function broadcastAppointmentCreated(appt: any, isUrgent: boolean, visibleToScheduling: boolean) {
   emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_CREATED, appt);
-  if (visibleToScheduling) {
+  // Equivalent to the `visibleToScheduling` argument -- `appt` was just created
+  // from it -- but routed through the same authority as every other Scheduling
+  // appointment broadcast in this file, so there is exactly one rule to audit.
+  if (schedulingMayReceive(appt)) {
     // Privacy Patch #2: defense in depth -- completionAmount/completionImage/
     // urgentVisitRecord financials are always null on a freshly-created
     // appointment, but routing through the same helper every other
@@ -338,6 +420,10 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
     // that triggered it (or vice versa) -- no orphan records on partial failure.
     let urgentCustomerCreated = false;
     let urgentCustomerForEvents: { id: string; name: string; phone: string } | null = null;
+    // Phase 2 Event A. Populated inside the transaction below and emitted only
+    // after it commits -- never before, so a rolled-back appointment can not
+    // produce a live alert for an appointment that does not exist.
+    let urgentNotificationIds: string[] = [];
     const appt = await prisma.$transaction(async (tx) => {
       let effectiveCustomerId: string | null = body.customerId || null;
 
@@ -355,7 +441,7 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
         urgentCustomerForEvents = resolved.customer;
       }
 
-      return tx.appointment.create({
+      const created = await tx.appointment.create({
         data: {
           customerId: effectiveCustomerId,
           type: body.type as any,
@@ -384,6 +470,65 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
         },
         include: { customer: { include: { address: true } }, technician: TECHNICIAN_PUBLIC_INCLUDE },
       });
+
+      /**
+       * PHASE 2 EVENT A: urgent appointment assigned to a technician.
+       *
+       * Fires only when this urgent appointment is created WITH an assignee.
+       *
+       * To be precise about what assignment does and does not mean here: EVERY
+       * urgent appointment is visible to EVERY technician (see the TECHNICIAN
+       * branch of GET /), so naming an assignee does not narrow who can see the
+       * work -- it names who owns it, and it gates who may submit its visit
+       * record (routes/urgent-visits.ts). An unassigned urgent appointment
+       * belongs to nobody in particular, so there is no one person it "needs the
+       * attention of"; raising a private CRITICAL alert for the entire roster
+       * instead is exactly what the role-isolation rule forbids.
+       *
+       * The recipient is re-derived from the database inside this transaction,
+       * never taken on trust from the request: the assignee must still be an
+       * ACTIVE user with the TECHNICIAN role. A client naming an admin id, an
+       * inactive technician, or a nonexistent user produces no notification --
+       * and, because this runs in the same transaction as the appointment
+       * insert, a notification can never be committed for an appointment that
+       * was not.
+       */
+      if (isUrgent && created.technicianId) {
+        const assignee = await tx.user.findFirst({
+          where: { id: created.technicianId, role: 'TECHNICIAN', isActive: true },
+          select: { id: true },
+        });
+        if (assignee) {
+          const custName = created.customer?.name || null;
+          const when = notifDate(created.scheduledDate);
+          urgentNotificationIds = await createNotifications(tx, [assignee.id], {
+            // title/body stay plain Arabic: Desktop v3.6.5 renders them as-is.
+            title: 'زيارة عاجلة مسندة إليك',
+            // Minimum useful operational information only: that it is urgent,
+            // the customer name the technician is authorized to see on the
+            // appointment itself, and when. No financials, no access codes, no
+            // internal Administration notes.
+            body: custName ? `العميل ${custName} — بتاريخ ${when}` : `زيارة عاجلة — بتاريخ ${when}`,
+            titleEn: 'Urgent visit assigned to you',
+            bodyEn: custName ? `Customer ${custName} — on ${when}` : `Urgent visit — on ${when}`,
+            type: NOTIFICATION_TYPES.URGENT_APPOINTMENT_ASSIGNED,
+            severity: NOTIFICATION_SEVERITY.CRITICAL,
+            entityType: 'appointment',
+            entityId: created.id,
+            // Keyed on the assignment event, which for an urgent appointment
+            // happens exactly once -- at creation, the only place a technician
+            // can be assigned. Stated honestly: because the appointment id is
+            // freshly generated by this very insert, this key is defensive
+            // rather than load-bearing today -- it cannot collide on a normal
+            // create. It is what keeps the guarantee true if this code is ever
+            // re-entered for an appointment that already exists (a retry above
+            // the route, or a future reassignment path).
+            dedupeKey: `urgent-assign:${created.id}`,
+          });
+        }
+      }
+
+      return created;
     });
     if (appt.customerId) {
       await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
@@ -418,6 +563,8 @@ router.post('/', requireRole('ADMIN','SCHEDULING'), async (req: AuthRequest, res
     });
     await emitEvent({ type: EVENT_TYPES.APPOINTMENT_CREATED, entityType: 'appointment', entityId: appt.id, userId: req.user!.userId, payload: apptFields(appt) });
     broadcastAppointmentCreated(appt, isUrgent, visibleToScheduling);
+    // Phase 2 Event A: realtime delivery, strictly AFTER the commit above.
+    await emitCreatedNotifications(urgentNotificationIds);
     res.status(201).json({ success: true, data: appt });
   } catch (e) { next(e); }
 });
@@ -475,7 +622,13 @@ router.put('/:id', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, 
     // Modification #6: completionAmount must never reach the SCHEDULING room --
     // an already-completed appointment can still be rescheduled/edited here.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, stripCompletionAmount(updated));
+    // An ADMIN reaches this route for ANY appointment, including one hidden from
+    // Scheduling -- so the realtime payload needs the same visibility gate the
+    // Scheduling REST lookup above already applies. Redacting completionAmount is
+    // not enough: the payload still carries the appointment and its customer.
+    if (schedulingMayReceive(updated)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, stripCompletionAmount(updated));
+    }
     const out = req.user!.role === 'SCHEDULING' ? stripCompletionAmount(updated) : updated;
     res.json({ success: true, data: out });
   } catch (e) { next(e); }
@@ -493,10 +646,16 @@ router.patch('/:id/approve-visibility', requireRole('ADMIN'), async (req: AuthRe
     // Modification #6: strip completionAmount before it reaches the SCHEDULING room.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, updated);
     const schedSafe = stripCompletionAmount(updated);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, schedSafe);
-    if (updated.isUrgent && updated.customer) {
-      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, updated.customer);
+    // Invariantly true here -- this route's whole purpose is setting
+    // visibleToScheduling = true, so the gate cannot refuse. It is applied anyway
+    // so every Scheduling appointment broadcast in this file reads from the one
+    // authority, and a later edit cannot silently drift out from under it.
+    if (schedulingMayReceive(updated)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_CREATED, schedSafe);
+      if (updated.isUrgent && updated.customer) {
+        emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.CUSTOMER_CREATED, updated.customer);
+      }
     }
     res.json({ success: true, data: updated });
   } catch (e) { next(e); }
@@ -555,7 +714,11 @@ router.patch('/:id/export-to-technicians', requireRole('SCHEDULING'), async (req
     // already carry a completed amount from a previous cycle.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
     const schedSafeAppt = stripCompletionAmount(appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    // Invariantly true: this route is SCHEDULING-only and its lookup is already
+    // scoped to visibleToScheduling = true. Gated anyway, for the reason above.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    }
     res.json({ success: true, data: schedSafeAppt });
   } catch (e) { next(e); }
 });
@@ -589,7 +752,13 @@ router.patch('/:id/approve-export', requireRole('ADMIN'), async (req: AuthReques
     });
     // Modification #6: strip completionAmount before it reaches the SCHEDULING room.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, stripCompletionAmount(appt));
+    // ADMIN-only route with an unscoped lookup, and it changes only
+    // visibleToTechnician/adminApproved -- never visibleToScheduling. An
+    // appointment Admin has hidden from Scheduling can therefore reach here, so
+    // this emit needs the gate like every other Scheduling broadcast.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, stripCompletionAmount(appt));
+    }
     // Reveal to Technicians now that Admin has approved -- same routing convention
     // as broadcastAppointmentCreated: the assigned technician if one exists,
     // otherwise the shared/unassigned pool (whole TECHNICIAN room). This is the
@@ -648,7 +817,12 @@ router.patch('/:id/status', requireRole('ADMIN','SCHEDULING'), async (req: AuthR
     // appointment that already has a completed amount from a previous cycle.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
     const schedSafeStatus = stripCompletionAmount(appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeStatus);
+    // The lookup above is scoped for a SCHEDULING caller but UNSCOPED for an
+    // ADMIN one, so an Admin changing the status of a hidden appointment would
+    // otherwise broadcast it to the whole Scheduling room.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeStatus);
+    }
     const outStatus = req.user!.role === 'SCHEDULING' ? schedSafeStatus : appt;
     res.json({ success: true, data: outStatus });
   } catch (e) { next(e); }
@@ -879,7 +1053,12 @@ router.patch('/:id/complete', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     if (sanitized.customer) sanitized.customer = stripInstallationFinancialsFromCustomer(sanitized.customer);
     const schedSafeCompleted = stripCompletionAmount(appt);
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_COMPLETED, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_COMPLETED, schedSafeCompleted);
+    // Recipient gating only -- completion attribution, the authenticated
+    // technician identity, the atomic completion + nextMaintenanceDueAt
+    // recalculation and the after-commit emission point are all untouched.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_COMPLETED, schedSafeCompleted);
+    }
     // Only the owning technician -- was previously routed to the whole TECHNICIAN role,
     // meaning every other technician received it too.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_COMPLETED, sanitized);
@@ -939,7 +1118,11 @@ router.patch('/:id/confirm-operation', requireRole('SCHEDULING'), async (req: Au
     // and defense in depth (Modification #6 privacy rule).
     const schedSafeAppt = stripCompletionAmount(appt);
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    // Invariantly true: SCHEDULING-only route whose lookup is already scoped to
+    // visibleToScheduling = true. Gated anyway, for uniformity.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafeAppt);
+    }
     res.json({ success: true, data: schedSafeAppt });
   } catch (e) { next(e); }
 });
@@ -1017,41 +1200,103 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
       }
     }
 
-    const appt = await prisma.appointment.update({
-      where: { id: req.params.id },
-      data: {
-        // Reschedule path (v4): the appointment MOVES to the agreed date and
-        // returns to WAITING so it is actionable again on that date. Leaving it
-        // in POSTPONED after the technician has already agreed a replacement
-        // date would strand it -- it would vanish from the technician work
-        // queue and from every operational dashboard bucket, both of which
-        // filter on WAITING/IN_PROGRESS, even though real work is still due.
-        //
-        // RESCHEDULED is an existing, previously-unused value of the
-        // AppointmentStatus enum, so recording "this was moved" costs no enum
-        // migration -- the riskiest kind of change against this project's
-        // migration history.
-        ...(isReschedule
-          ? { scheduledDate: new Date(newDate!), workStatus: 'WAITING', status: 'RESCHEDULED' as const }
-          : { workStatus: 'POSTPONED' }),
-        version: { increment: 1 },
-        postponements: {
-          create: {
-            reason: effectiveReason,
-            newDate: newDate ? new Date(newDate) : null,
-            // The date this appointment is moving FROM, captured before the
-            // update overwrites it. Without this the "from" half of
-            // "postponed from X to Y" is unrecoverable the instant the write
-            // lands, because scheduledDate now holds Y.
-            previousDate: isReschedule ? before.scheduledDate : null,
-            // Attribution comes from the authenticated JWT, never from the
-            // request body (decision D4). A client cannot name a different
-            // technician here because there is no field to name one in.
-            requestedById: req.user!.userId,
-          },
+    /**
+     * PHASE 2 EVENT B: Administration and Scheduling are told that this job moved.
+     *
+     * The appointment update and the durable PostponementRecord were already one
+     * atomic unit (a nested `create` inside `appointment.update` runs in Prisma's
+     * own implicit transaction). That is now an EXPLICIT interactive transaction
+     * for two reasons: the notification rows must commit with the event that
+     * caused them, and the postponement row's id -- which is the deduplication
+     * identity for this event -- is only obtainable by creating it directly.
+     */
+    /**
+     * Recipients and the actor's name are resolved BEFORE the transaction opens.
+     *
+     * They are read-only lookups that nothing in the transaction writes, and
+     * `visibleToScheduling` is not changed by this route -- so computing them
+     * here is equivalent, and it keeps three network round trips out of an
+     * interactive transaction that runs under Prisma's default 5s timeout. A
+     * postpone must not start failing with P2028 because a recipient lookup was
+     * slow against a remote database.
+     *
+     * The notification ROWS are still created inside the transaction below, so
+     * the durability guarantee -- domain event and its notifications commit
+     * together or not at all -- is unchanged.
+     */
+    const postponeRecipients = (await resolveActiveRoleRecipients(prisma, appointmentEventRoles(before)))
+      .filter((id) => id !== req.user!.userId);
+    const postponeActor = await resolveActorName(prisma, req.user!.userId);
+
+    let postponeNotificationIds: string[] = [];
+    const appt = await prisma.$transaction(async (tx) => {
+      const updated = await tx.appointment.update({
+        where: { id: req.params.id },
+        data: {
+          // Reschedule path (v4): the appointment MOVES to the agreed date and
+          // returns to WAITING so it is actionable again on that date. Leaving it
+          // in POSTPONED after the technician has already agreed a replacement
+          // date would strand it -- it would vanish from the technician work
+          // queue and from every operational dashboard bucket, both of which
+          // filter on WAITING/IN_PROGRESS, even though real work is still due.
+          //
+          // RESCHEDULED is an existing, previously-unused value of the
+          // AppointmentStatus enum, so recording "this was moved" costs no enum
+          // migration -- the riskiest kind of change against this project's
+          // migration history.
+          ...(isReschedule
+            ? { scheduledDate: new Date(newDate!), workStatus: 'WAITING', status: 'RESCHEDULED' as const }
+            : { workStatus: 'POSTPONED' }),
+          version: { increment: 1 },
         },
-      },
-      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
+        include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
+      });
+
+      const record = await tx.postponementRecord.create({
+        data: {
+          appointmentId: updated.id,
+          reason: effectiveReason,
+          newDate: newDate ? new Date(newDate) : null,
+          // The date this appointment is moving FROM, captured before the
+          // update overwrites it. Without this the "from" half of
+          // "postponed from X to Y" is unrecoverable the instant the write
+          // lands, because scheduledDate now holds Y.
+          previousDate: isReschedule ? before.scheduledDate : null,
+          // Attribution comes from the authenticated JWT, never from the
+          // request body (decision D4). A client cannot name a different
+          // technician here because there is no field to name one in.
+          requestedById: req.user!.userId,
+        },
+      });
+
+      // Recipients were derived server-side from role + active state above.
+      // The actor is excluded: a CRITICAL alert means "this needs your
+      // attention", which is never true of the action you just performed
+      // yourself (this route also accepts ADMIN).
+      const recipients = postponeRecipients;
+      const who = postponeActor;
+      const custAr = before.customer?.name || 'زيارة عاجلة';
+      const custEn = before.customer?.name || 'Urgent Visit';
+      const fromDate = notifDate(before.scheduledDate);
+      const movedAr = isReschedule ? ` من ${fromDate} إلى ${notifDate(newDate!)}` : ` (بتاريخ ${fromDate}) دون تاريخ جديد`;
+      const movedEnB = isReschedule ? ` from ${fromDate} to ${notifDate(newDate!)}` : ` (scheduled ${fromDate}) with no new date`;
+      postponeNotificationIds = await createNotifications(tx, recipients, {
+        title: 'تم تأجيل موعد',
+        body: `قام ${who} بتأجيل موعد العميل ${custAr}${movedAr}.`,
+        titleEn: 'Appointment postponed',
+        bodyEn: `${who} postponed the appointment for ${custEn}${movedEnB}.`,
+        type: NOTIFICATION_TYPES.APPOINTMENT_POSTPONED,
+        severity: NOTIFICATION_SEVERITY.CRITICAL,
+        entityType: 'appointment',
+        entityId: updated.id,
+        // Keyed on the POSTPONEMENT RECORD, not the appointment: a second
+        // legitimate postponement of the same appointment is a second event and
+        // must produce a second notification. Only a duplicate delivery of this
+        // same postponement is suppressed.
+        dedupeKey: `postpone:${record.id}`,
+      });
+
+      return updated;
     });
     if (appt.customerId) {
       await prisma.customer.update({ where: { id: appt.customerId }, data: { activityDismissed: false } });
@@ -1083,7 +1328,13 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     if (postponedSanitized.customer) postponedSanitized.customer = stripInstallationFinancialsFromCustomer(postponedSanitized.customer);
     const schedSafePostponed = stripCompletionAmount(appt);
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_POSTPONED, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_POSTPONED, schedSafePostponed);
+    // Same visibility rule as this event's durable notification recipients, from
+    // the same helper: an appointment hidden from Scheduling is not broadcast to
+    // the Scheduling room, because that payload carries the appointment and its
+    // customer -- data Scheduling gets a 404 for over REST.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_POSTPONED, schedSafePostponed);
+    }
     // Only the owning technician -- other technicians have no reason to see this job.
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
     // The unassigned pool is visible to EVERY technician, so when a job
@@ -1092,6 +1343,8 @@ router.patch('/:id/postpone', requireRole('TECHNICIAN', 'ADMIN'), async (req: Au
     // room above happened to reach all of them; with real identities it no
     // longer does, and a stale queue means a tap that 404s.
     if (before.technicianId === null) emitToRole(SOCKET_ROOMS.TECHNICIAN, SOCKET_EVENTS.APPOINTMENT_POSTPONED, postponedSanitized);
+    // Phase 2 Event B: private per-recipient delivery, strictly after commit.
+    await emitCreatedNotifications(postponeNotificationIds);
     // Privacy Patch #2: strip only the nested customer's installation-financial
     // fields for the acting Technician's own REST response -- same narrow fix
     // as every other Technician-facing appointment response in this file.
@@ -1153,23 +1406,68 @@ router.patch('/:id/no-answer', requireRole('TECHNICIAN', 'ADMIN'), async (req: A
       return res.status(409).json({ success: false, message: 'This job is not in a state where a contact attempt can be recorded' });
     }
 
-    const appt = await prisma.appointment.update({
-      where: { id: req.params.id },
-      data: {
-        // Back to WAITING (from IN_PROGRESS, or unchanged if already WAITING) so
-        // the job remains in the queue and can be attempted again. scheduledDate
-        // is deliberately untouched -- a failed contact is not a reschedule.
-        workStatus: 'WAITING',
-        version: { increment: 1 },
-        noAnswerRecords: {
-          create: {
-            note: note?.trim() || null,
-            // Attribution from the authenticated JWT only.
-            recordedById: req.user!.userId,
-          },
+    /**
+     * PHASE 2 EVENT C: Administration and Scheduling are told the customer could
+     * not be reached. Same structure as the postponement above -- an explicit
+     * transaction so the attempt record, the appointment state and the durable
+     * notifications commit together, and so the attempt record's id is available
+     * as this event's deduplication identity.
+     */
+    // Resolved before the transaction, for the same reason as the postpone
+    // handler above -- read-only lookups do not belong inside it.
+    const noAnswerRecipients = (await resolveActiveRoleRecipients(prisma, appointmentEventRoles(before)))
+      .filter((id) => id !== req.user!.userId);
+    const noAnswerActor = await resolveActorName(prisma, req.user!.userId);
+
+    let noAnswerNotificationIds: string[] = [];
+    const appt = await prisma.$transaction(async (tx) => {
+      const updated = await tx.appointment.update({
+        where: { id: req.params.id },
+        data: {
+          // Back to WAITING (from IN_PROGRESS, or unchanged if already WAITING) so
+          // the job remains in the queue and can be attempted again. scheduledDate
+          // is deliberately untouched -- a failed contact is not a reschedule.
+          workStatus: 'WAITING',
+          version: { increment: 1 },
         },
-      },
-      include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
+        include: { technician: TECHNICIAN_PUBLIC_INCLUDE, customer: true },
+      });
+
+      const record = await tx.customerNoAnswerRecord.create({
+        data: {
+          appointmentId: updated.id,
+          note: note?.trim() || null,
+          // Attribution from the authenticated JWT only.
+          recordedById: req.user!.userId,
+        },
+      });
+
+      const recipients = noAnswerRecipients;
+      const who = noAnswerActor;
+      const custAr = updated.customer?.name || 'زيارة عاجلة';
+      const custEn = updated.customer?.name || 'Urgent Visit';
+      const when = notifInstantDate(record.createdAt);
+      // The technician's own note is included because Administration and
+      // Scheduling are already authorized to read it on the appointment itself
+      // (it is returned by GET /appointments/:id for both roles). Nothing is
+      // added here that the recipient could not already see.
+      const noteAr = record.note ? ` — ${record.note}` : '';
+      noAnswerNotificationIds = await createNotifications(tx, recipients, {
+        title: 'العميل لم يرد',
+        body: `سجّل ${who} عدم رد العميل ${custAr} بتاريخ ${when}${noteAr}.`,
+        titleEn: 'Customer did not answer',
+        bodyEn: `${who} recorded that ${custEn} did not answer on ${when}${noteAr}.`,
+        type: NOTIFICATION_TYPES.APPOINTMENT_NO_ANSWER,
+        severity: NOTIFICATION_SEVERITY.CRITICAL,
+        entityType: 'appointment',
+        entityId: updated.id,
+        // Keyed on the ATTEMPT record: repeated legitimate contact attempts on
+        // the same appointment are separate events and each produces its own
+        // notification.
+        dedupeKey: `no-answer:${record.id}`,
+      });
+
+      return updated;
     });
 
     if (appt.customerId) {
@@ -1201,7 +1499,10 @@ router.patch('/:id/no-answer', requireRole('TECHNICIAN', 'ADMIN'), async (req: A
     const techSafe: any = { ...appt, completionAmount: undefined, completionPaymentMethod: undefined };
     if (techSafe.customer) techSafe.customer = stripInstallationFinancialsFromCustomer(techSafe.customer);
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, schedSafe);
+    // See the postpone handler: hidden from Scheduling means no Scheduling event.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, schedSafe);
+    }
     if (appt.technicianId) emitToTechnician(appt.technicianId, SOCKET_EVENTS.APPOINTMENT_NO_ANSWER, techSafe);
     // The unassigned pool is visible to EVERY technician, so when a job
     // leaves that pool the other technicians' queues must refresh too.
@@ -1217,7 +1518,14 @@ router.patch('/:id/no-answer', requireRole('TECHNICIAN', 'ADMIN'), async (req: A
     // existing, already-redacted status event rather than adding UI here keeps
     // Phase 1 frozen while still leaving no screen showing stale state.
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.APPOINTMENT_STATUS, appt);
-    emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
+    // The status-refresh emit carries the same appointment payload, so it is
+    // gated identically -- redacting financials is not the same as withholding
+    // an appointment the recipient may not see at all.
+    if (schedulingMayReceive(appt)) {
+      emitToRole(SOCKET_ROOMS.SCHEDULING, SOCKET_EVENTS.APPOINTMENT_STATUS, schedSafe);
+    }
+    // Phase 2 Event C: private per-recipient delivery, strictly after commit.
+    await emitCreatedNotifications(noAnswerNotificationIds);
 
     const responseData = (!isAdmin && appt.customer)
       ? { ...appt, customer: stripInstallationFinancialsFromCustomer(appt.customer) }
@@ -1250,7 +1558,13 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res, next) 
       before: apptFields(appt),
     });
     // Non-sensitive (id only); all three roles' UIs subscribe to this event to refresh.
-    emitToRoles([SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.SCHEDULING, SOCKET_ROOMS.TECHNICIAN], SOCKET_EVENTS.APPOINTMENT_DELETED, { id: req.params.id });
+    // Scheduling is gated here too: an appointment id is entity-identifying, and
+    // for a hidden appointment Scheduling never held the row, so the invalidation
+    // has nothing to clean up and would only disclose that the id existed.
+    // Admin and Technician routing is unchanged.
+    const deletedRooms = [SOCKET_ROOMS.ADMIN, SOCKET_ROOMS.TECHNICIAN];
+    if (schedulingMayReceive(appt)) deletedRooms.push(SOCKET_ROOMS.SCHEDULING);
+    emitToRoles(deletedRooms, SOCKET_EVENTS.APPOINTMENT_DELETED, { id: req.params.id });
     res.json({ success: true });
   } catch (e) { next(e); }
 });

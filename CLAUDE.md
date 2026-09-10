@@ -9,6 +9,27 @@ Result of that verification — all 14 repository migrations recorded, finished,
 - Migrations 1–6: baselined (`applied_steps_count = 0` — their SQL was correctly never replayed)
 - Migrations 7–14: deployed by Prisma (`applied_steps_count = 1`)
 
+## UNDEPLOYED MIGRATIONS PENDING PRODUCTION VERIFICATION
+
+The verification recorded above covers migrations **1–14**. Since it was taken, the
+repository has gained two migrations that have **NOT** been deployed to production and
+whose production state has **NOT** been verified:
+
+| # | Migration | Status |
+|---|---|---|
+| 15 | `20260909120000_v4_core_domain_technician_identity` | in repo, **not deployed**, validated only on a disposable database |
+| 16 | `20260910180000_add_notification_english_localization` | in repo, **not deployed**, validated only on a disposable database |
+
+Migration 16 was authored in a session that had **no production credentials available**,
+so the mandatory read-only production check could not be run at all — it was neither
+passed nor failed. That is why no new "Last verified" date appears above: writing one
+would assert a check that never happened. Both migrations are purely additive and were
+validated by deploying the complete chain 1→16 against a fresh disposable PostgreSQL
+database (16 recorded, 16 finished, 0 rolled back), which is the only claim being made.
+
+**Before deploying either migration, run the read-only checker below and reconcile any
+disagreement first.** Do not treat the 2026-09-09 result as covering them.
+
 **This status is a snapshot, not a standing guarantee.** It is written down so a future session knows the starting point — never so it can skip verifying. Time passes, work happens outside recorded sessions, and a stale "all clear" is more dangerous than a stale warning because it invites action. The exact production state MUST be re-verified before any new migration is deployed. Do not assume the status above is still current.
 
 Verify with the repository's own read-only checker, which discovers the expected chain from `prisma/migrations/` rather than any hardcoded list:

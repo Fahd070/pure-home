@@ -7,10 +7,11 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
 import { NavRail, NavRailItem } from "../../ui/NavRail";
+import { useUnreadCounts } from "../../hooks/useNotifications";
 import type { IconName } from "../../ui/icons";
 
 const links: { to: string; label: string; icon: IconName; badgeKey?: string }[] = [
-  { to: "/scheduling/dashboard",     label: "nav.dashboard",     icon: "dashboard" },
+  { to: "/scheduling/dashboard",     label: "nav.dashboard",     icon: "dashboard", badgeKey: "apptAlerts" },
   { to: "/scheduling/customers",     label: "nav.customers",     icon: "customers", badgeKey: "customers" },
   { to: "/scheduling/customers/add", label: "customers.add",     icon: "add" },
   { to: "/scheduling/call-reports",  label: "nav.callReports",   icon: "callReports" },
@@ -47,25 +48,45 @@ export default function Sidebar() {
     return () => window.removeEventListener("clear-badge-customers-sched", clear);
   }, []);
 
-  const { data: notifData } = useQuery({ queryKey: ["notif-unread-sched"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
+  // Server-side COUNT via the shared hook -- see the technician/admin Sidebars.
+  const { data: counts } = useUnreadCounts(api, "sched");
   const { data: dmCount } = useQuery({ queryKey: ["dm-unread-sched"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
   const { data: activityData } = useQuery({ queryKey: ["activity-feed-sched"], queryFn: () => api.get("/messages").then(r => r.data.data || []), staleTime: 30000, initialData: [] });
   const lastSeenMessages = Number(localStorage.getItem("msg-last-seen-sched") || 0);
   const newMessages = (activityData as any[]).filter((log: any) => new Date(log.createdAt).getTime() > lastSeenMessages).length;
 
+  /**
+   * PHASE 2 badge mapping.
+   *
+   * `notifications` carries the TOTAL unread count -- that destination is
+   * literally the list of all of them. The appointment alerts (postponements and
+   * did-not-answer reports) are badged on the Dashboard instead, because that is
+   * where Scheduling reviews appointment activity: this department has no
+   * appointments route of its own, and Phase 2 does not invent one.
+   */
+  const apptAlerts =
+    (counts.byType.APPOINTMENT_POSTPONED || 0) + (counts.byType.APPOINTMENT_NO_ANSWER || 0);
+
   const badges: Record<string, number> = {
-    notifications: notifData as number,
+    notifications: counts.total,
+    apptAlerts,
     messaging: dmCount as number,
     messages: newMessages,
     customers: custBadge
   };
 
-  const items: NavRailItem[] = links.map((l) => ({
-    to: l.to,
-    label: l.label,
-    icon: l.icon,
-    badge: l.badgeKey ? badges[l.badgeKey] || 0 : 0,
-  }));
+  const items: NavRailItem[] = links.map((l) => {
+    const badge = l.badgeKey ? badges[l.badgeKey] || 0 : 0;
+    return {
+      to: l.to,
+      label: l.label,
+      icon: l.icon,
+      badge,
+      badgeLabel: badge
+        ? t(l.badgeKey === "apptAlerts" ? "alerts.unreadAppointments" : "alerts.unreadCount", { count: badge })
+        : undefined,
+    };
+  });
 
   return (
     <NavRail

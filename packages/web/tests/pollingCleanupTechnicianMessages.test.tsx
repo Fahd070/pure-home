@@ -64,7 +64,11 @@ describe('Technician Sidebar: no unauthorized GET /messages request', () => {
         // again, this test fails loudly instead of silently passing.
         return Promise.reject({ response: { status: 403, data: { success: false, message: 'Forbidden' } } });
       }
-      if (url === '/notifications') return Promise.resolve({ data: { success: true, data: [{ id: '1', isRead: false }] } });
+      // Phase 2: the unread badge now reads a server-side COUNT instead of
+      // downloading notification rows and measuring the array in the browser.
+      if (url === '/notifications/unread-count') {
+        return Promise.resolve({ data: { success: true, data: { total: 1, byType: {} } } });
+      }
       if (url === '/direct-messages/unread-count') return Promise.resolve({ data: { success: true, data: 2 } });
       if (url === '/appointments/urgent-unresolved-count') return Promise.resolve({ data: { success: true, data: 0 } });
       return Promise.resolve({ data: { success: true, data: [] } });
@@ -78,7 +82,7 @@ describe('Technician Sidebar: no unauthorized GET /messages request', () => {
     expect(messagesCalls.length).toBe(0);
 
     // Other authorized badges (notifications, DM unread) still fetch and render.
-    expect(apiGet.mock.calls.some((c) => c[0] === '/notifications')).toBe(true);
+    expect(apiGet.mock.calls.some((c) => c[0] === '/notifications/unread-count')).toBe(true);
     expect(apiGet.mock.calls.some((c) => c[0] === '/direct-messages/unread-count')).toBe(true);
     expect(el.textContent).toContain('1'); // unread notification badge
     expect(el.textContent).toContain('2'); // DM unread badge

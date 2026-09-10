@@ -371,8 +371,25 @@ model CustomerNoAnswerRecord {
 // be adding columns nothing reads.
 model Notification {
   id        String   @id @default(uuid())
+  // PLAIN DISPLAY TEXT, in the application's default language (Arabic).
+  //
+  // This is a load-bearing compatibility contract, not a convention: the shipped
+  // Desktop v3.6.5 client renders `title` and `body` DIRECTLY (see
+  // technician/pages/Notifications.tsx on main -- `{n.title}` and
+  // `{cleanBody(n.body)}`). Anything stored here is shown to that client
+  // verbatim, so these columns must never hold a serialized structure, a
+  // translation key, or any encoding a v3.6.5 client cannot read.
   title     String
   body      String
+  // English counterparts, added in Phase 2. NULLABLE and additive so that:
+  //   * v3.6.5 clients never see them and keep reading title/body unchanged,
+  //   * every pre-existing row stays valid with no backfill, and
+  //   * a row with no English text simply falls back to the default-language
+  //     columns rather than rendering empty.
+  // Historical rows are deliberately NOT rewritten to invent English content --
+  // an old Arabic notification legitimately stays Arabic.
+  titleEn   String?
+  bodyEn    String?
   type      String
   // Selects the presentation surface in Phase 2: INFO -> sidebar badge only,
   // CRITICAL -> also a top banner and a centre alert card. A plain validated

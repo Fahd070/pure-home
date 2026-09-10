@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
 import { NavRail, NavRailItem } from "../../ui/NavRail";
+import { useUnreadCounts } from "../../hooks/useNotifications";
 import type { IconName } from "../../ui/icons";
 
 type Entry =
@@ -17,7 +18,7 @@ const links: Entry[] = [
   { to: "/admin/dashboard",              label: "nav.dashboard",             icon: "dashboard" },
   { to: "/admin/customers",              label: "nav.customers",             icon: "customers",    badgeKey: "customers" },
   { to: "/admin/reports",                label: "nav.reports",               icon: "reports",      badgeKey: "reports" },
-  { to: "/admin/appointments",           label: "nav.appointments",          icon: "appointments" },
+  { to: "/admin/appointments",           label: "nav.appointments",          icon: "appointments", badgeKey: "apptAlerts" },
   { to: "/admin/appointment-acceptance", label: "nav.appointmentAcceptance", icon: "acceptance" },
   { to: "/admin/urgent-appointments",    label: "nav.urgentAppointments",    icon: "urgent",       badgeKey: "urgentAppts" },
   { to: "/admin/technicians",            label: "nav.technicians",           icon: "technicians" },
@@ -124,7 +125,9 @@ export default function Sidebar() {
     return () => window.removeEventListener("clear-badge-callreports-admin", clear);
   }, []);
 
-  const { data: notifData } = useQuery({ queryKey: ["notif-unread-admin"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
+  // Server-side COUNT via the shared hook, replacing a 30s poll that downloaded
+  // up to 50 notification rows purely to measure a filtered array's length.
+  const { data: counts } = useUnreadCounts(api, "admin");
   // Shares the ["activity-feed"] cache entry with admin/pages/Messages.tsx (the
   // System Activity page), which also reads GET /messages under the same key --
   // both MUST resolve to the identical response shape ({ data, meta }), or
@@ -143,8 +146,21 @@ export default function Sidebar() {
   const lastSeenMessages = Number(localStorage.getItem("msg-last-seen-admin") || 0);
   const newMessages = ((activityData?.data || []) as any[]).filter((log: any) => new Date(log.createdAt).getTime() > lastSeenMessages).length;
 
+  /**
+   * PHASE 2 badge mapping.
+   *
+   * `notifications` carries the TOTAL unread count, because that destination is
+   * literally the list of all of them. The appointment-alert destination below
+   * carries only the two types that belong to it, so the same number is not
+   * simply repeated on every nav item -- a badge has to mean something specific
+   * about the screen it sits on.
+   */
+  const apptAlerts =
+    (counts.byType.APPOINTMENT_POSTPONED || 0) + (counts.byType.APPOINTMENT_NO_ANSWER || 0);
+
   const badges: Record<string, number> = {
-    notifications: notifData as number,
+    notifications: counts.total,
+    apptAlerts,
     messaging: dmCount as number,
     messages: newMessages,
     customers: custBadge,
@@ -154,11 +170,16 @@ export default function Sidebar() {
     callReports: callReportsBadge,
   };
 
-  const items: NavRailItem[] = links.map((l) =>
-    "kind" in l
-      ? { kind: "external", href: l.href, label: l.label }
-      : { to: l.to, label: l.label, icon: l.icon, badge: l.badgeKey ? badges[l.badgeKey] || 0 : 0 }
-  );
+  const items: NavRailItem[] = links.map((l) => {
+    if ("kind" in l) return { kind: "external" as const, href: l.href, label: l.label };
+    const badge = l.badgeKey ? badges[l.badgeKey] || 0 : 0;
+    return {
+      to: l.to, label: l.label, icon: l.icon, badge,
+      badgeLabel: badge
+        ? t(l.badgeKey === "apptAlerts" ? "alerts.unreadAppointments" : "alerts.unreadCount", { count: badge })
+        : undefined,
+    };
+  });
 
   return (
     <NavRail

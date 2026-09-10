@@ -28,6 +28,12 @@ export interface NavRailLink {
   badge?: number;
   /** Draws the count in a tone other than danger, e.g. informational counts. */
   badgeTone?: "danger" | "accent" | "info";
+  /**
+   * Accessible name for the badge, already translated and already interpolated
+   * with the count (e.g. "3 unread notifications"). Supplied by the department
+   * Sidebar, which is the only place that knows what a given badge counts.
+   */
+  badgeLabel?: string;
 }
 
 export interface NavRailExternal {
@@ -139,7 +145,7 @@ export function NavRail({
                   />
                   <Icon name={item.icon} className={cx("w-4 h-4 flex-shrink-0", isActive ? "text-accent" : "text-nav-muted")} />
                   <span className="flex-1 truncate">{t(item.label)}</span>
-                  <CountBadge value={item.badge ?? 0} tone={item.badgeTone ?? "danger"} />
+                  <CountBadge value={item.badge ?? 0} tone={item.badgeTone ?? "danger"} label={item.badgeLabel} />
                 </>
               )}
             </NavLink>
