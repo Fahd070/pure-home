@@ -12,6 +12,7 @@ import { isValidMaintenanceFrequency } from "../../utils/maintenanceFrequency";
 import { Button } from "../../ui/Button";
 import { Input, Select, Textarea, Field } from "../../ui/Field";
 import { Icon } from "../../ui/icons";
+import { CustomerBranchesEditor, BranchDraft, branchErrors } from "../../components/CustomerBranchesEditor";
 
 const INSTALL_DATE_FIELD = "installation" + "Date";
 
@@ -33,6 +34,10 @@ export default function SchedAddCustomer() {
     installationNote: "", installationAmount: "", installationPaymentMethod: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // v4 Requirement #8: branch detail records for this ONE customer.
+  const [hasBranches, setHasBranches] = useState(false);
+  const [branches, setBranches] = useState<BranchDraft[]>([]);
+  const [branchErrs, setBranchErrs] = useState<Record<number, { branchName?: string; supervisorMobile?: string }>>({});
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -43,6 +48,15 @@ export default function SchedAddCustomer() {
       setVersion(customer.version);
       setInstallDate(toDateInputValue(customer[INSTALL_DATE_FIELD]));
       setForm({ name: customer.name, phone: customer.phone, secondaryPhone: customer.secondaryPhone || "", maintenanceCycle: customer.maintenanceCycle, maintenanceFrequency: customer.maintenanceFrequency, notes: customer.notes || "", city: customer.address?.city || "", district: customer.address?.district || "", street: customer.address?.street || "", postalCode: customer.address?.postalCode || "", buildingNo: customer.address?.buildingNo || "", floorNo: customer.address?.floorNo || "", apartmentNo: customer.address?.apartmentNo || "", previousServiceType: customer.previousServiceType || "", previousServiceDate: toDateInputValue(customer.previousServiceDate), previousServiceNote: customer.previousServiceNote || "", installationNote: customer.installationNote || "", installationAmount: customer.installationAmount != null ? String(customer.installationAmount) : "", installationPaymentMethod: customer.installationPaymentMethod || "" });
+      // Requirement #8: an existing customer's branches load into the same
+      // editor, so editing preserves them instead of silently wiping them on
+      // the next save.
+      const loaded = (customer.branches || []).map((b: any) => ({
+        branchName: b.branchName || "", supervisorName: b.supervisorName || "",
+        supervisorMobile: b.supervisorMobile || "", notes: b.notes || "",
+      }));
+      setBranches(loaded);
+      setHasBranches(loaded.length > 0);
     }).catch(() => toast.error(t("common.error"))).finally(() => setLoading(false));
   }, [id, t]);
 
@@ -70,8 +84,10 @@ export default function SchedAddCustomer() {
       const n = Number(form.installationAmount);
       if (!Number.isFinite(n) || n < 0) e.installationAmount = t("customers.installationAmountInvalid");
     }
+    const bErrs = hasBranches ? branchErrors(branches, t) : {};
+    setBranchErrs(bErrs);
     setErrors(e);
-    return Object.keys(e).length === 0;
+    return Object.keys(e).length === 0 && Object.keys(bErrs).length === 0;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -100,6 +116,12 @@ export default function SchedAddCustomer() {
         // Now collected on both create and edit (previously edit-only) --
         // same create-vs-edit convention as previousServiceDate above.
         [INSTALL_DATE_FIELD]: installDate ? (dateOnlyToApiDate(installDate) ?? undefined) : (isEditing ? "" : undefined),
+        // Explicitly [] when the customer has no branches, so answering "No"
+        // actually clears any previously-entered ones (the backend treats an
+        // omitted key as "leave alone" and an empty array as "clear").
+        branches: hasBranches
+          ? branches.map(b => ({ branchName: b.branchName.trim(), supervisorName: b.supervisorName.trim() || undefined, supervisorMobile: b.supervisorMobile.trim() || undefined, notes: b.notes.trim() || undefined }))
+          : [],
         address: {
           city, district, street,
           postalCode: isEditing ? postalCode : postalCode || undefined,
@@ -279,6 +301,15 @@ export default function SchedAddCustomer() {
               />
             </Field>
           </div>
+
+          {section(t("customers.branches"))}
+          <CustomerBranchesEditor
+            enabled={hasBranches}
+            branches={branches}
+            errors={branchErrs}
+            onToggle={setHasBranches}
+            onChange={setBranches}
+          />
         </div>
 
         {/* Actions stay pinned to the end of the form panel, so on a long form

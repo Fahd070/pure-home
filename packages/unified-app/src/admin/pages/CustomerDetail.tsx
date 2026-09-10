@@ -228,6 +228,31 @@ ${(c.appointments || []).length > 0 ? `
               </>
             ))}
 
+            {/* Requirement #8: branch detail records, shown under the ONE
+                customer they belong to. The count is stated up front because
+                "how many branches?" is the question the requirement asks. */}
+            {Array.isArray(c.branches) && c.branches.length > 0 && panel(
+              `${t("customers.branches")} (${c.branches.length})`,
+              <div className="space-y-2.5">
+                {c.branches.map((b: any, i: number) => (
+                  <div key={b.id || i} className="border border-line-subtle rounded bg-surface-subtle px-3 py-2">
+                    <p className="text-[0.8125rem] font-medium text-fg">{b.branchName}</p>
+                    {b.supervisorName && (
+                      <p className="text-2xs text-fg-secondary mt-0.5">
+                        {t("customers.branchSupervisor")}: {b.supervisorName}
+                      </p>
+                    )}
+                    {b.supervisorMobile && (
+                      <p className="text-2xs text-fg-secondary mt-0.5">
+                        {t("customers.branchSupervisorMobile")}: <span dir="ltr" className="tabular-nums">{b.supervisorMobile}</span>
+                      </p>
+                    )}
+                    {b.notes && <p className="text-2xs text-fg-muted mt-1 whitespace-pre-wrap">{b.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {c.notes && panel(t("common.notes"), <p className="whitespace-pre-wrap">{c.notes}</p>)}
           </div>
         </div>
