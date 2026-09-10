@@ -9,6 +9,7 @@ import { Button } from "../../ui/Button";
 import { EmptyState, Loading } from "../../ui/Feedback";
 import { Icon } from "../../ui/icons";
 import { cx } from "../../ui/cx";
+import { resolveNotificationText } from "../../utils/notificationText";
 
 function cleanBody(body: string): string {
   return body.replace(/\s*\[[\w:.\\-]+\]\s*$/, "").trim();
@@ -29,7 +30,7 @@ export default function Notifications() {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const socket = useSocket();
-  const { data, isLoading } = useQuery({ queryKey: ["notifications-page"], queryFn: () => api.get("/notifications").then(r => r.data.data) });
+  const { data, isLoading } = useQuery({ queryKey: ["notifications-admin"], queryFn: () => api.get("/notifications").then(r => r.data.data) });
   // Reused unchanged -- the existing manual "Mark all read" action (kept below
   // as a fallback for a failed auto-mark or a notification that arrives after
   // it). Also invalidates the sidebar's own unread-count query (notif-unread-admin)
@@ -37,21 +38,28 @@ export default function Notifications() {
   const markAll = useMutation({
     mutationFn: () => api.patch("/notifications/read-all"),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications-page"] });
+      qc.invalidateQueries({ queryKey: ["notifications-admin"] });
       qc.invalidateQueries({ queryKey: ["notif-unread-admin"] });
     },
   });
   const markOne = useMutation({
     mutationFn: (id: string) => api.patch("/notifications/" + id + "/read"),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications-page"] });
+      qc.invalidateQueries({ queryKey: ["notifications-admin"] });
       qc.invalidateQueries({ queryKey: ["notif-unread-admin"] });
     },
   });
   useEffect(() => {
     if (!socket) return;
-    socket.on("notification:new", () => qc.invalidateQueries({ queryKey: ["notifications-page"] }));
-    return () => { socket.off("notification:new"); };
+    // The handler is named and removed BY REFERENCE. `socket.off(event)` with no
+    // handler removes EVERY listener for that event, and this socket is a
+    // module-level singleton shared with the application shell -- so the blanket
+    // form also tore off CriticalAlerts' listener when this page unmounted,
+    // silently downgrading every critical alert and nav badge in the session to
+    // polling with no way to re-attach.
+    const onNew = () => qc.invalidateQueries({ queryKey: ["notifications-admin"] });
+    socket.on("notification:new", onNew);
+    return () => { socket.off("notification:new", onNew); };
   }, [socket, qc]);
   // Read-on-open fix: "entering the section" = this page mounting (the user
   // actually navigated here). Reuses the exact same PATCH /notifications/read-all
@@ -99,7 +107,7 @@ export default function Notifications() {
                 type="button"
                 onClick={() => !n.isRead && markOne.mutate(n.id)}
                 disabled={n.isRead}
-                aria-label={n.title}
+                aria-label={resolveNotificationText(n, "title", i18n.language)}
                 className={cx(
                   "relative w-full text-start ps-4 pe-3 py-3 flex items-start gap-3 transition-colors",
                   n.isRead ? "cursor-default" : "hover:bg-surface-hover active:bg-surface-active"
@@ -125,9 +133,9 @@ export default function Notifications() {
 
                 <div className="flex-1 min-w-0">
                   <p className={cx("text-[0.8125rem]", n.isRead ? "text-fg-secondary" : "font-semibold text-fg")}>
-                    {n.title}
+                    {resolveNotificationText(n, "title", i18n.language)}
                   </p>
-                  <p className="text-xs text-fg-secondary mt-0.5">{cleanBody(n.body)}</p>
+                  <p className="text-xs text-fg-secondary mt-0.5">{cleanBody(resolveNotificationText(n, "body", i18n.language))}</p>
                   <p className="text-2xs text-fg-muted mt-1 tabular-nums">{formatTime(n.createdAt, i18n.language)}</p>
                 </div>
 

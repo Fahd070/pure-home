@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
 import { NavRail, NavRailItem } from "../../ui/NavRail";
+import { useUnreadCounts } from "../../hooks/useNotifications";
 import type { IconName } from "../../ui/icons";
 
 const links: { to: string; label: string; icon: IconName; badgeKey?: string }[] = [
@@ -68,22 +69,34 @@ export default function Sidebar() {
     return () => window.removeEventListener("clear-badge-queue-tech", clear);
   }, []);
 
-  const { data: notifData } = useQuery({ queryKey: ["notif-unread-tech"], queryFn: () => api.get("/notifications").then(r => (r.data.data || []).filter((n:any) => !n.isRead).length), refetchInterval: 30000, initialData: 0 });
+  // Unread counts now come from the server's COUNT endpoint through the shared
+  // hook, instead of downloading up to 50 notification rows on a 30s timer only
+  // to measure the length of a filtered array in the browser.
+  const { data: counts } = useUnreadCounts(api, "tech");
   const { data: dmCount } = useQuery({ queryKey: ["dm-unread-tech"], queryFn: () => api.get("/direct-messages/unread-count").then(r => Number(r.data.data) || 0), refetchInterval: 30000, initialData: 0 });
 
   const badges: Record<string, number> = {
-    notifications: notifData as number,
+    notifications: counts.total,
     messaging: dmCount as number,
     queue: queueBadge,
     urgentAppts: urgentBadge as number,
   };
 
-  const items: NavRailItem[] = links.map((l) => ({
-    to: l.to,
-    label: l.label,
-    icon: l.icon,
-    badge: l.badgeKey ? badges[l.badgeKey] || 0 : 0,
-  }));
+  const items: NavRailItem[] = links.map((l) => {
+    const badge = l.badgeKey ? badges[l.badgeKey] || 0 : 0;
+    return {
+      to: l.to,
+      label: l.label,
+      icon: l.icon,
+      badge,
+      // The accessible name says what the number counts. "urgentAppts" is
+      // outstanding urgent WORK (Phase 1), not unread notifications, so it gets
+      // its own wording rather than the notification one.
+      badgeLabel: badge
+        ? t(l.badgeKey === "urgentAppts" ? "alerts.unreadUrgent" : "alerts.unreadCount", { count: badge })
+        : undefined,
+    };
+  });
 
   return (
     <NavRail

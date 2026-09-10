@@ -6,6 +6,7 @@ import { useSocket } from "../hooks/useSocket";
 import toast from "react-hot-toast";
 import HelpButton from "../../components/HelpButton";
 import { HELP } from "../../helpContent";
+import { useTechnicianEmployees } from "../hooks/useTechnicianEmployees";
 import { dateOnlyToApiDate, formatGregorianDate, formatGregorianTime } from "../../utils/dateTimeInput";
 import { isValidPrimaryPhone } from "../../utils/phone";
 import { fetchAllPages } from "../../utils/fetchAllPages";
@@ -25,6 +26,11 @@ type Tab = "list" | "records";
 const EMPTY_FORM = {
   date: "", customerName: "", customerPhone: "", city: "", district: "", street: "",
   postalCode: "", buildingNo: "", floorNo: "", apartmentNo: "", notes: "",
+  // Optional assignee. An urgent appointment left unassigned stays shared-pool
+  // work visible to every technician, exactly as before -- naming a technician
+  // is what makes it THEIRS, and what triggers their urgent alert (Phase 2
+  // Event A). The server re-validates the id against role and active state.
+  technicianId: "",
 };
 
 export default function UrgentAppointments() {
@@ -38,6 +44,9 @@ export default function UrgentAppointments() {
   // translated, and this one deletes related records with it.
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  // The same roster Employees and Access Codes read, through the same hook and
+  // the same cache entry -- so this list can never disagree with them.
+  const technicians = useTechnicianEmployees();
   const [visitDetail, setVisitDetail] = useState<any | null>(null);
 
   useEffect(() => {
@@ -133,6 +142,7 @@ export default function UrgentAppointments() {
       visibleToScheduling: false,
       customerName,
       customerPhone,
+      technicianId: form.technicianId || undefined,
     });
   }
 
@@ -232,6 +242,25 @@ export default function UrgentAppointments() {
                     value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
                   />
+                </Field>
+                {/* Optional assignee. Leaving it unset keeps the appointment in
+                    the shared urgent pool every technician can see -- the
+                    pre-existing behaviour. Choosing a technician assigns it to
+                    them and is what sends them the urgent alert. */}
+                <Field label={t("alerts.assignTechnician")} htmlFor="urgent-technician">
+                  <select
+                    id="urgent-technician"
+                    className="w-full h-9 rounded-md border border-line bg-surface px-2.5 text-[0.8125rem] text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                    value={form.technicianId}
+                    onChange={e => setForm(f => ({ ...f, technicianId: e.target.value }))}
+                  >
+                    <option value="">{t("alerts.unassigned")}</option>
+                    {(technicians.list.data || [])
+                      .filter(techRow => techRow.isActive)
+                      .map(techRow => (
+                        <option key={techRow.id} value={techRow.id}>{techRow.name}</option>
+                      ))}
+                  </select>
                 </Field>
               </div>
 

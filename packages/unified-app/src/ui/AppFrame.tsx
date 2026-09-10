@@ -13,7 +13,7 @@ import { PageTransition } from "./PageTransition";
  * never changed. It is now a quiet surface, so the eye lands on the data.
  */
 export function AppFrame({
-  dept, sidebar, title, actions, banners, children,
+  dept, sidebar, title, actions, banners, overlays, children,
 }: {
   /** Marks the subtree for department-specific selectors and debugging. */
   dept: string;
@@ -22,6 +22,18 @@ export function AppFrame({
   /** Help button and any page-level actions that belong in the command bar. */
   actions?: React.ReactNode;
   banners?: React.ReactNode;
+  /**
+   * Shell-level dialogs and alerts, rendered OUTSIDE the routed content.
+   *
+   * This slot exists specifically because `children` is wrapped in
+   * `PageTransition`, whose enter animation holds a non-none `transform` for
+   * its duration -- and a transformed ancestor becomes the containing block for
+   * `position: fixed` descendants. A centred dialog mounted alongside the route
+   * would therefore be positioned against the animating page wrapper instead of
+   * the viewport, and would visibly sit off-centre for the length of every route
+   * change. Anything full-screen and fixed belongs here, not in `children`.
+   */
+  overlays?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { pathname } = useLocation();
@@ -89,6 +101,8 @@ export function AppFrame({
           </PageTransition>
         </main>
       </div>
+
+      {overlays}
     </div>
   );
 }

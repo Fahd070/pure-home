@@ -51,9 +51,29 @@ export function Badge({
   );
 }
 
-/** Small numeric counter used on nav items and tabs. */
-export function CountBadge({ value, tone = "danger", className }: { value: number; tone?: Tone; className?: string }) {
+/**
+ * Small numeric counter used on nav items and tabs.
+ *
+ * Counting rules, which the navigation badges depend on:
+ *   0        -> nothing renders at all (no empty circle, no layout shift)
+ *   1..99    -> the exact number
+ *   100+     -> "99+", so a large count can never widen the nav item
+ *
+ * The pill is fixed-height with a minimum width, so going from "9" to "99+"
+ * grows it horizontally without moving the row it sits in. It is placed by the
+ * flex order of its parent rather than by a left/right offset, which is what
+ * makes it land on the correct side in both RTL and LTR with no mirroring code.
+ *
+ * `label` supplies the accessible name ("3 unread notifications"). Without it
+ * the badge is a bare numeral next to a link, and its meaning is carried only by
+ * being small and red -- which is exactly the colour-only signal that a
+ * screen-reader user, or anyone who cannot distinguish it, does not receive.
+ */
+export function CountBadge({
+  value, tone = "danger", className, label,
+}: { value: number; tone?: Tone; className?: string; label?: string }) {
   if (!value) return null;
+  const display = value > 99 ? "99+" : String(value);
   return (
     <span
       className={cx(
@@ -62,8 +82,18 @@ export function CountBadge({ value, tone = "danger", className }: { value: numbe
         DOTS[tone],
         className
       )}
+      // The visible glyph is clamped to "99+", so the accessible name carries
+      // the real number rather than repeating the abbreviation.
+      //
+      // `role="img"`, NOT `role="status"`: status makes this a polite live
+      // region, and several of these sit in one sidebar refreshing on a 30s poll
+      // plus every socket invalidation -- which would read unrelated counts aloud
+      // to a screen-reader user over and over. img gives the element its
+      // accessible name without announcing itself.
+      aria-label={label}
+      role={label ? "img" : undefined}
     >
-      {value > 99 ? "99+" : value}
+      <span aria-hidden={label ? "true" : undefined}>{display}</span>
     </span>
   );
 }
