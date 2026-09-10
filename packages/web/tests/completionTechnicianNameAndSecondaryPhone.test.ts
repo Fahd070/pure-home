@@ -24,9 +24,14 @@ describe('Part A: completionTechnicianName is persisted (schema + route)', () =>
   it('schema: Appointment.completionTechnicianName is a nullable String (existing completed rows stay valid)', () => {
     expect(schemaPrisma).toMatch(/completionTechnicianName\s+String\?/);
   });
-  it('1/2. the requirement + FIRST_NAME_RE validation for a non-admin completion are unchanged by this batch', () => {
-    expect(backendAppointmentsSrc).toMatch(/if \(!trimmedTechnicianName\) return res\.status\(400\)/);
-    expect(backendAppointmentsSrc).toMatch(/if \(!FIRST_NAME_RE\.test\(trimmedTechnicianName\)\) return res\.status\(400\)/);
+  // SUPERSEDED BY v4 DECISION D4: technicianName is no longer REQUIRED on a
+  // non-admin completion, because the technician is now identified by their own
+  // authenticated account. What must still hold -- and is asserted instead -- is
+  // that the field is still ACCEPTED and still FORMAT-VALIDATED when a client
+  // sends one, since employees on Desktop v3.6.5 always do.
+  it('1/2. technicianName is optional on completion, but still format-validated when present', () => {
+    expect(backendAppointmentsSrc).not.toMatch(/if \(!trimmedTechnicianName\) return res\.status\(400\)/);
+    expect(backendAppointmentsSrc).toMatch(/if \(trimmedTechnicianName && !FIRST_NAME_RE\.test\(trimmedTechnicianName\)\)/);
   });
   it('3. the update() data block now persists completionTechnicianName', () => {
     expect(backendAppointmentsSrc).toMatch(/completionTechnicianName: trimmedTechnicianName \|\| null,/);
