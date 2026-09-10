@@ -24,6 +24,7 @@ import AdminReports from "./admin/pages/Reports";
 import AdminUrgentAppointments from "./admin/pages/UrgentAppointments";
 import AdminExpenses from "./admin/pages/Expenses";
 import AccessCodes from "./admin/pages/AccessCodes";
+import Employees from "./admin/pages/Employees";
 import AdminSettings from "./admin/pages/Settings";
 import AdminCallReports from "./admin/pages/CallReports";
 
@@ -93,6 +94,7 @@ function AppShell() {
             <Route path="messaging" element={<AdminDirectMessages />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="call-reports" element={<AdminCallReports />} />
+            <Route path="employees" element={<Employees />} />
             <Route path="access-codes" element={<AccessCodes />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>

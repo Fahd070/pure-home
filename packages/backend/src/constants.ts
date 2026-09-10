@@ -9,6 +9,9 @@ export const SOCKET_EVENTS = {
   APPOINTMENT_STARTED: 'appointment:started',
   APPOINTMENT_COMPLETED: 'appointment:completed',
   APPOINTMENT_POSTPONED: 'appointment:postponed',
+  // v4 Requirement #7. The only genuinely NEW socket event in Phase 1 -- every
+  // other v4 signal reuses an existing, already-redacted emit.
+  APPOINTMENT_NO_ANSWER: 'appointment:no-answer',
   NOTIFICATION_NEW: 'notification:new',
   MESSAGE_NEW: 'message:new',
   AUDIT_NEW: 'audit:new',

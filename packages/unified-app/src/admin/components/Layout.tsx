@@ -25,6 +25,7 @@ const titles: Record<string, string> = {
   "/admin/messaging":            "nav.messaging",
   "/admin/reports":              "nav.reports",
   "/admin/call-reports":         "nav.callReports",
+  "/admin/employees":            "nav.employees",
   "/admin/access-codes":         "nav.accessCodes",
   "/admin/settings":             "nav.settings",
 };

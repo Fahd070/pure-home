@@ -40,21 +40,31 @@ export interface NavRailExternal {
 export type NavRailItem = NavRailLink | NavRailExternal;
 
 export function NavRail({
-  items, department, onLogout,
+  items, department, employeeName, onLogout,
 }: {
   items: NavRailItem[];
   /**
    * The workspace this shell is currently operating as -- Administration,
    * Scheduling & Maintenance, or Technicians.
    *
-   * The rail deliberately shows the DEPARTMENT and never the signed-in
-   * employee. These are shared department workstations, so a personal name in
-   * the chrome told the operator nothing useful about which workspace they
-   * were in, and put an individual's name on every screenshot and shoulder-
-   * surfed screen. The authenticated user is unchanged underneath: auth,
-   * permissions and audit logging still record the real person.
+   * Always shown. For Administration and Scheduling this is the ONLY identity in
+   * the chrome: those remain shared department workstations, where a personal
+   * name told the operator nothing useful and put an individual on every
+   * screenshot and shoulder-surfed screen. See `employeeName` for the one case
+   * where that reasoning no longer applies.
    */
   department?: string;
+  /**
+   * The signed-in employee's own name.
+   *
+   * Set for TECHNICIANS only, and only because the underlying fact changed in
+   * v4: a technician now signs in with their OWN code as their OWN account, so
+   * the name is not decoration -- it is how they confirm the session is
+   * attributing their work to the right person. Left undefined by Administration
+   * and Scheduling, which remain genuinely shared logins where the original
+   * reasoning above still holds.
+   */
+  employeeName?: string;
   onLogout: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -62,7 +72,8 @@ export function NavRail({
 
   return (
     <aside className="w-56 h-full flex-shrink-0 flex flex-col bg-nav border-e border-line">
-      {/* Brand + which workspace this is (never who is signed in) */}
+      {/* Brand, workspace, and -- only where the login is personal rather than
+          shared -- who is signed in. */}
       <div className="px-3 py-3 border-b border-line-subtle">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
@@ -74,6 +85,9 @@ export function NavRail({
           <div className="min-w-0">
             <p className="text-[0.8125rem] font-semibold text-nav-activefg leading-tight truncate">Pure Home</p>
             {department && <p className="text-2xs text-nav-muted truncate">{department}</p>}
+            {employeeName && (
+              <p className="text-2xs font-medium text-nav-activefg truncate" title={employeeName}>{employeeName}</p>
+            )}
           </div>
         </div>
       </div>

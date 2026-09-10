@@ -27,6 +27,7 @@ const links: Entry[] = [
   { to: "/admin/notifications",          label: "nav.notifications",         icon: "notifications", badgeKey: "notifications" },
   { kind: "external", href: "https://wa.me/966501698445", label: "nav.reportIssue" },
   { to: "/admin/messaging",              label: "nav.messaging",             icon: "messaging",    badgeKey: "messaging" },
+  { to: "/admin/employees",              label: "nav.employees",             icon: "technicians" },
   { to: "/admin/access-codes",           label: "nav.accessCodes",           icon: "accessCodes" },
   { to: "/admin/settings",               label: "nav.settings",              icon: "settings" },
 ];

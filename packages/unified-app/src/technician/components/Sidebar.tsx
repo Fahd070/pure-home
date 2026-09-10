@@ -20,7 +20,7 @@ const links: { to: string; label: string; icon: IconName; badgeKey?: string }[] 
 
 export default function Sidebar() {
   const { t } = useTranslation();
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
@@ -89,6 +89,10 @@ export default function Sidebar() {
     <NavRail
       items={items}
       department={t("dept.technicianFull")}
+      // Requirement #12: the technician's real, current name -- never
+      // "Technician 1". It comes from the authenticated session, so renaming the
+      // employee in Administration changes it here on their next sign-in.
+      employeeName={user?.name}
       onLogout={() => { logout(); navigate("/"); }}
     />
   );
