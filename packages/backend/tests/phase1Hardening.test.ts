@@ -206,32 +206,217 @@ describe('Phase 1 hardening', () => {
      * has no way to sign in at all. Same read-then-write shape as the S2
      * uniqueness race, and the same serializable fix.
      */
+    /**
+     * The interleaving that a plain (READ COMMITTED) technician INSERT allowed:
+     * the insert commits alongside a cutover that never saw it, the bridge closes
+     * permanently, and that technician has neither a personal code nor the shared
+     * one. See runSerializedAgainstCutover() for the fix.
+     *
+     * WHAT THIS ASSERTS, and why it is not a coin flip. Both operations really do
+     * race, so which one commits first is genuinely nondeterministic -- but under
+     * a correct serialization exactly one serial ORDER is realised, and the create
+     * response reports which one via `sharedLoginRetired` (the flag value the
+     * insert's own transaction read). That turns an unobservable ordering into an
+     * assertable one:
+     *
+     *   sharedLoginRetired === false -> the insert was ordered BEFORE the cutover,
+     *       so the cutover MUST have seen this code-less technician and MUST be
+     *       refused, and the shared bridge must still work.
+     *   sharedLoginRetired === true  -> the cutover was ordered FIRST, so it may
+     *       succeed and this technician legitimately exists code-less afterwards.
+     *       They cannot sign in until issued a code -- correct and recoverable,
+     *       unlike a bridge closed over someone the cutover never saw.
+     *
+     * The forbidden combination -- create says "not retired yet" while the cutover
+     * committed anyway -- is precisely the non-serializable outcome, and is what
+     * failed before the fix.
+     */
     it('cutover cannot race a technician being added without a code', async () => {
-      await parkFixtureTechnician2();
-      await addTechnician('Tech One', CODE_A);
+      const sharedId = (await prisma.user.findUnique({ where: { email: sharedTechnicianEmail() } }))!.id;
+      const ROUNDS = 10;
 
-      const [cut, late] = await Promise.all([
-        cutover(),
-        request(ts.baseUrl).post('/api/employees/technicians')
-          .set('Authorization', 'Bearer ' + adminToken)
-          .send({ name: 'Race Hire' }),
-      ]);
-      if (late.body?.data?.id) createdIds.push(late.body.data.id);
+      for (let round = 0; round < ROUNDS; round++) {
+        // Each round restarts from a clean pre-cutover state: this is one race
+        // repeated, not ten races against accumulated roster.
+        await purge();
+        createdIds.length = 0;
+        await prisma.systemConfig.deleteMany({ where: { key: SHARED_LOGIN_RETIRED_KEY } });
+        await prisma.user.updateMany({
+          where: { role: 'TECHNICIAN' },
+          data: { accessCodeHash: null, accessCodeSetAt: null, isActive: true, sessionVersion: 1 },
+        });
+        technicianCodeLimiterStore.resetAll?.();
+        authLimiterStore.resetAll?.();
+        await parkFixtureTechnician2();
+        // Asserted for the same reason as the reactivation round below: if this
+        // setup step failed, the cutover would be refused every round for an
+        // unrelated reason and the race would never actually be exercised.
+        expect((await addTechnician('Tech One', CODE_A)).status, `round ${round} setup`).toBe(201);
+        expect(
+          await prisma.user.count({ where: { role: 'TECHNICIAN', isActive: true, accessCodeHash: null, NOT: { id: sharedId } } }),
+          `round ${round} setup: no code-less active technician before the race`
+        ).toBe(0);
 
-      const retired = (await prisma.systemConfig.findUnique({ where: { key: SHARED_LOGIN_RETIRED_KEY } }))?.value === 'true';
-      if (retired) {
-        // If the bridge closed, nobody active may be left without a code.
-        const sharedId = (await prisma.user.findUnique({ where: { email: sharedTechnicianEmail() } }))!.id;
+        const [cut, late] = await Promise.all([
+          cutover(),
+          request(ts.baseUrl).post('/api/employees/technicians')
+            .set('Authorization', 'Bearer ' + adminToken)
+            .send({ name: 'Race Hire' }),
+        ]);
+        if (late.body?.data?.id) createdIds.push(late.body.data.id);
+
+        const where = { round, cut: cut.status, late: late.status };
+        const retired = (await prisma.systemConfig.findUnique({ where: { key: SHARED_LOGIN_RETIRED_KEY } }))?.value === 'true';
+        const strandedRows = await prisma.user.findMany({
+          where: { role: 'TECHNICIAN', isActive: true, accessCodeHash: null, NOT: { id: sharedId } },
+          select: { id: true, name: true },
+        });
+
+        // Either side may lose the race outright (503 BUSY after the bounded
+        // retries). That is a refusal, never a partial write.
+        expect([201, 503], JSON.stringify(where)).toContain(late.status);
+        expect([200, 409, 503], JSON.stringify(where)).toContain(cut.status);
+
+        if (late.status === 201) {
+          // Exactly one technician was created -- no duplicate from a retry that
+          // re-ran the insert after its transaction had actually committed.
+          expect(await prisma.user.count({ where: { name: 'Race Hire' } }), JSON.stringify(where)).toBe(1);
+          const row = late.body.data;
+          expect(row.hasAccessCode).toBe(false);
+          expect(row.isActive).toBe(true);
+          expect(row.name).toBe('Race Hire');
+          // The response must never carry credential material.
+          expect(row).not.toHaveProperty('accessCodeHash');
+          expect(row).not.toHaveProperty('password');
+          expect(row).not.toHaveProperty('sessionVersion');
+          expect(typeof row.sharedLoginRetired).toBe('boolean');
+
+          if (row.sharedLoginRetired === false) {
+            // OUTCOME 1 -- creation ordered first. The cutover cannot have
+            // committed from a snapshot that predates it.
+            expect(retired, `cutover committed although the insert was serialized before it (${JSON.stringify(where)})`).toBe(false);
+            expect(cut.status, JSON.stringify(where)).not.toBe(200);
+            expect((await login(TEST_ACCESS_CODES.technician)).status, JSON.stringify(where)).toBe(200);
+          } else {
+            // OUTCOME 2 -- cutover ordered first; retirement is durable and the
+            // new hire is code-less by construction, awaiting a personal code.
+            expect(retired, JSON.stringify(where)).toBe(true);
+            expect(strandedRows.map((r) => r.name), JSON.stringify(where)).toEqual(['Race Hire']);
+            expect((await login(TEST_ACCESS_CODES.technician)).status, JSON.stringify(where)).toBe(401);
+          }
+        } else {
+          // The insert was refused, so nothing can be stranded either way.
+          expect(await prisma.user.count({ where: { name: 'Race Hire' } }), JSON.stringify(where)).toBe(0);
+          expect(strandedRows, JSON.stringify(where)).toEqual([]);
+          if (!retired) expect((await login(TEST_ACCESS_CODES.technician)).status, JSON.stringify(where)).toBe(200);
+        }
+
+        // Regardless of ordering: retirement is never undone, and the historical
+        // shared account is never mutated by either operation.
+        const shared = await prisma.user.findUnique({ where: { id: sharedId } });
+        expect(shared!.isActive, JSON.stringify(where)).toBe(true);
+        expect(shared!.accessCodeHash, JSON.stringify(where)).toBeNull();
+        expect(shared!.email, JSON.stringify(where)).toBe(sharedTechnicianEmail());
+        // 'Tech One' keeps the code it was created with -- the race never
+        // corrupts an unrelated row.
+        const one = await prisma.user.findFirst({ where: { name: 'Tech One' } });
+        expect(one!.accessCodeHash, JSON.stringify(where)).not.toBeNull();
+      }
+    }, 180000);
+
+    /**
+     * The same race through the OTHER route that can produce an active
+     * technician without a personal code: reactivating a parked one.
+     */
+    it('cutover cannot race a code-less technician being reactivated', async () => {
+      const sharedId = (await prisma.user.findUnique({ where: { email: sharedTechnicianEmail() } }))!.id;
+
+      for (let round = 0; round < 10; round++) {
+        await purge();
+        createdIds.length = 0;
+        await prisma.systemConfig.deleteMany({ where: { key: SHARED_LOGIN_RETIRED_KEY } });
+        await prisma.user.updateMany({
+          where: { role: 'TECHNICIAN' },
+          data: { accessCodeHash: null, accessCodeSetAt: null, isActive: true, sessionVersion: 1 },
+        });
+        technicianCodeLimiterStore.resetAll?.();
+        authLimiterStore.resetAll?.();
+        await parkFixtureTechnician2();
+        await addTechnician('Tech One', CODE_A);
+        // A code-less technician who has been parked: reactivating them is the
+        // second way to break the cutover's "everyone active has a code" premise.
+        const parked = await addTechnician('Tech Parked');
+        // Both setup steps are asserted. If either silently failed, 'Tech Parked'
+        // would stay ACTIVE and code-less, the cutover would be refused on every
+        // round for that unrelated reason, and this test would pass without ever
+        // exercising the race it exists for.
+        expect(parked.status, `round ${round} setup: create parked technician`).toBe(201);
+        const parkedId = parked.body.data.id;
+        const parkRes = await request(ts.baseUrl).patch('/api/employees/technicians/' + parkedId)
+          .set('Authorization', 'Bearer ' + adminToken).send({ isActive: false });
+        expect(parkRes.status, `round ${round} setup: deactivate parked technician`).toBe(200);
+        expect(parkRes.body.data.isActive, `round ${round} setup`).toBe(false);
+        // Precondition for the race: the cutover would SUCCEED right now.
+        expect(
+          await prisma.user.count({ where: { role: 'TECHNICIAN', isActive: true, accessCodeHash: null, NOT: { id: sharedId } } }),
+          `round ${round} setup: no code-less active technician before the race`
+        ).toBe(0);
+
+        const [cut, back] = await Promise.all([
+          cutover(),
+          request(ts.baseUrl).patch('/api/employees/technicians/' + parkedId)
+            .set('Authorization', 'Bearer ' + adminToken).send({ isActive: true }),
+        ]);
+
+        const where = { round, cut: cut.status, back: back.status };
+        const retired = (await prisma.systemConfig.findUnique({ where: { key: SHARED_LOGIN_RETIRED_KEY } }))?.value === 'true';
         const stranded = await prisma.user.count({
           where: { role: 'TECHNICIAN', isActive: true, accessCodeHash: null, NOT: { id: sharedId } },
         });
-        expect(stranded, 'cutover committed while an active technician had no code').toBe(0);
-      } else {
-        // Otherwise the shared bridge must still be usable.
-        expect(cut.status).not.toBe(200);
-        expect((await login(TEST_ACCESS_CODES.technician)).status).toBe(200);
+
+        expect([200, 503], JSON.stringify(where)).toContain(back.status);
+        expect([200, 409, 503], JSON.stringify(where)).toContain(cut.status);
+
+        if (back.status === 200) {
+          // Same ordering witness as the creation race: the flag value the
+          // reactivation's own transaction read.
+          expect(typeof back.body.data.sharedLoginRetired).toBe('boolean');
+          expect(back.body.data.isActive).toBe(true);
+          expect(back.body.data.hasAccessCode).toBe(false);
+          expect(back.body.data).not.toHaveProperty('accessCodeHash');
+
+          if (back.body.data.sharedLoginRetired === false) {
+            // Reactivation ordered FIRST, so the cutover could only have been
+            // ordered after it -- where it MUST see an active technician with no
+            // code and refuse. A committed cutover here is the non-serializable
+            // outcome this test exists to forbid.
+            expect(retired, `cutover committed although the reactivation was serialized before it (${JSON.stringify(where)})`).toBe(false);
+            expect(cut.status, JSON.stringify(where)).not.toBe(200);
+            expect(stranded, JSON.stringify(where)).toBe(1);
+            expect((await login(TEST_ACCESS_CODES.technician)).status, JSON.stringify(where)).toBe(200);
+          } else {
+            // Cutover ordered first: retirement is durable, and this technician
+            // is code-less by their own history rather than by a lost update.
+            expect(retired, JSON.stringify(where)).toBe(true);
+            expect(stranded, JSON.stringify(where)).toBe(1);
+            expect((await login(TEST_ACCESS_CODES.technician)).status, JSON.stringify(where)).toBe(401);
+          }
+          // Either way the reactivation never invents a credential.
+          const row = await prisma.user.findUnique({ where: { id: parkedId } });
+          expect(row!.accessCodeHash, JSON.stringify(where)).toBeNull();
+          expect(row!.isActive, JSON.stringify(where)).toBe(true);
+        } else {
+          // The reactivation was refused outright: the technician stays parked,
+          // so nothing is stranded whichever way the cutover went.
+          expect(stranded, JSON.stringify(where)).toBe(0);
+          expect((await prisma.user.findUnique({ where: { id: parkedId } }))!.isActive, JSON.stringify(where)).toBe(false);
+        }
+
+        const shared = await prisma.user.findUnique({ where: { id: sharedId } });
+        expect(shared!.isActive, JSON.stringify(where)).toBe(true);
+        expect(shared!.accessCodeHash, JSON.stringify(where)).toBeNull();
       }
-    }, 30000);
+    }, 180000);
 
     it('an inactive technician without a code does not block cutover', async () => {
       await parkFixtureTechnician2();

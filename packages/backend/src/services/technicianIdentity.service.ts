@@ -357,9 +357,98 @@ export async function isSharedTechnicianAccount(userId: string): Promise<boolean
  * legacy account to exactly the management routes that must never reach it.
  * `NOT` cannot collide with a caller's `id`.
  */
-export async function individualTechnicianWhere(): Promise<{ role: 'TECHNICIAN'; NOT?: { id: string } }> {
-  const sharedId = await findSharedTechnicianAccountId();
+export async function individualTechnicianWhere(
+  client: PrismaLike = prisma
+): Promise<{ role: 'TECHNICIAN'; NOT?: { id: string } }> {
+  const sharedId = await findSharedTechnicianAccountId(client);
   return sharedId ? { role: 'TECHNICIAN', NOT: { id: sharedId } } : { role: 'TECHNICIAN' };
+}
+
+export type CutoverSerializedResult<T> =
+  | { ok: true; value: T; sharedLoginRetired: boolean }
+  | { ok: false; reason: 'CONTENTION' };
+
+/**
+ * Runs a roster mutation inside the SAME serializable conflict boundary as
+ * completeTechnicianCutover().
+ *
+ * WHY THIS EXISTS -- and why simply marking the mutation SERIALIZABLE is not
+ * enough. PostgreSQL's SSI aborts a transaction only when it can see a
+ * read-write dependency CYCLE between transactions that are both serializable.
+ * completeTechnicianCutover() reads the technician roster and writes the
+ * retirement flag. A technician INSERT that merely runs at SERIALIZABLE without
+ * reading anything the cutover writes contributes only one edge:
+ *
+ *     cutover --(read users, then insert)--> creation
+ *
+ * One edge is not a cycle, so both transactions commit happily and the cutover
+ * retires the shared bridge from a snapshot that never contained the technician
+ * who committed alongside it. That technician then has no personal code and no
+ * shared code -- permanently unable to sign in. That is precisely the lockout
+ * the explicit-cutover design (option A) exists to prevent, just relocated into
+ * a narrower window.
+ *
+ * The missing edge is supplied here by READING the retirement flag with the
+ * caller's transaction client before the mutation runs. The flag row is exactly
+ * what the cutover WRITES, so the graph closes:
+ *
+ *     cutover  --(reads users, creation inserts one)-->  creation
+ *     creation --(reads the flag, cutover writes it)-->  cutover
+ *
+ * PostgreSQL now has a cycle, aborts one side with 40001, and the bounded retry
+ * below re-runs it against the committed winner. Both surviving interleavings
+ * are correct:
+ *
+ *   A. the mutation commits first  -> the cutover retries, now SEES the codeless
+ *      technician, and is refused as not eligible.
+ *   B. the cutover commits first   -> the mutation retries and commits AFTER
+ *      retirement, and `sharedLoginRetired` comes back true so the caller can
+ *      tell the administrator this person cannot sign in until they are given a
+ *      personal code. The bridge stays retired either way.
+ *
+ * The read is not a formality and is not discarded: its value is the caller's
+ * witness of which side of the cutover it was serialized on.
+ *
+ * The flag row frequently does not exist yet (nothing writes it before the
+ * cutover). That is fine -- a btree index probe for a missing key still takes a
+ * predicate lock covering the gap, so the cutover's INSERT of that key conflicts
+ * exactly as an UPDATE of an existing row would.
+ *
+ * Deliberately not used: advisory locks, a lock table, Redis, or process-memory
+ * locks. The invariant is enforceable with the isolation level the codebase
+ * already relies on for S2, and nothing weaker than the database can enforce it
+ * across multiple backend instances anyway.
+ *
+ * `work` must use ONLY the `tx` client it is handed. Reaching for the outer
+ * `prisma` singleton from inside would run that statement in its own separate
+ * transaction, outside the boundary, and silently reintroduce the race.
+ */
+export async function runSerializedAgainstCutover<T>(
+  work: (tx: Prisma.TransactionClient, sharedLoginRetired: boolean) => Promise<T>,
+  timeoutMs = 15_000
+): Promise<CutoverSerializedResult<T>> {
+  for (let attempt = 1; attempt <= MAX_ASSIGN_ATTEMPTS; attempt++) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const flag = await tx.systemConfig.findUnique({ where: { key: SHARED_LOGIN_RETIRED_KEY } });
+          const sharedLoginRetired = flag?.value === 'true';
+          const value = await work(tx, sharedLoginRetired);
+          return { ok: true as const, value, sharedLoginRetired };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: timeoutMs, maxWait: 10_000 }
+      );
+    } catch (e: any) {
+      if (isSerializationFailure(e) && attempt < MAX_ASSIGN_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 25 * attempt + Math.random() * 25));
+        continue;
+      }
+      if (isSerializationFailure(e)) return { ok: false, reason: 'CONTENTION' };
+      throw e;
+    }
+  }
+
+  return { ok: false, reason: 'CONTENTION' };
 }
 
 export type CutoverEligibility =
@@ -391,7 +480,7 @@ export async function getCutoverEligibility(): Promise<CutoverEligibility> {
 
 export type CutoverResult =
   | { ok: true; alreadyRetired: boolean }
-  | { ok: false; reason: 'NO_INDIVIDUAL_TECHNICIANS' | 'TECHNICIANS_WITHOUT_CODE'; missingCount: number };
+  | { ok: false; reason: 'NO_INDIVIDUAL_TECHNICIANS' | 'TECHNICIANS_WITHOUT_CODE' | 'CONTENTION'; missingCount: number };
 
 /**
  * Completes the technician identity migration. THE ONLY way the retirement flag
@@ -420,6 +509,11 @@ export async function completeTechnicianCutover(): Promise<CutoverResult> {
     return { ok: false, reason: eligibility.reason, missingCount: eligibility.missingCount };
   }
 
+  // This is one half of a pair. The other half is runSerializedAgainstCutover()
+  // above, which every roster mutation that can create an ACTIVE technician
+  // WITHOUT a code runs inside; see the long comment there for why serializable
+  // isolation on this side alone is not sufficient.
+  //
   // The eligibility re-check and the write must be ONE serializable unit --
   // structurally the same read-then-write race as S2, and with the same kind of
   // consequence. At READ COMMITTED a technician created (or reactivated) without
@@ -465,13 +559,23 @@ export async function completeTechnicianCutover(): Promise<CutoverResult> {
         await new Promise((r) => setTimeout(r, 25 * attempt + Math.random() * 25));
         continue;
       }
+      // Contention exhausted: refuse rather than retire on a stale read. Cutover
+      // is irreversible, so "try again" is always the safer answer.
+      //
+      // Reported as its own CONTENTION reason, matching assignTechnicianAccessCode
+      // and runSerializedAgainstCutover, so the route can answer 503 "try again".
+      // It previously rethrew here, which surfaced as an opaque 500 -- and this
+      // path is no longer rare: now that every technician create/rename/
+      // reactivate is a serializable transaction that deliberately conflicts with
+      // this one, exhausting three aborts is a normal contention outcome rather
+      // than an internal error. Reporting it as a server fault would tell an
+      // administrator something is broken when the correct advice is to retry.
+      if (isSerializationFailure(e)) return { ok: false, reason: 'CONTENTION', missingCount: 0 };
       throw e;
     }
   }
 
-  // Contention exhausted: refuse rather than retire on a stale read. Cutover is
-  // irreversible, so "try again" is always the safer answer.
-  return { ok: false, reason: 'TECHNICIANS_WITHOUT_CODE', missingCount: 0 };
+  return { ok: false, reason: 'CONTENTION', missingCount: 0 };
 }
 
 /**

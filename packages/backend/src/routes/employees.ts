@@ -38,6 +38,7 @@ import {
   readSharedLoginRetirementFlag,
   getCutoverEligibility,
   completeTechnicianCutover,
+  runSerializedAgainstCutover,
 } from '../services/technicianIdentity.service';
 
 const router = Router();
@@ -156,21 +157,50 @@ router.post('/technicians', async (req: AuthRequest, res, next) => {
     // NOT a hash of the empty string or of the access code.
     const unusablePassword = await bcrypt.hash(randomUUID() + randomUUID(), 10);
 
-    const createdRow = await prisma.user.create({
-      data: {
-        name: body.name,
-        email,
-        password: unusablePassword,
-        // Hardcoded, never taken from the request: this endpoint cannot be used
-        // to create an ADMIN or SCHEDULING account.
-        role: 'TECHNICIAN',
-        isActive: true,
-        // The code is NOT set here. It is assigned below through the one
-        // concurrency-safe path, so initial assignment and later resets cannot
-        // diverge into a safe path and a race-prone one.
-      },
-      select: EMPLOYEE_SELECT,
-    });
+    // Serialized against completeTechnicianCutover(). The row is inserted ACTIVE
+    // and (at this instant) WITHOUT a code -- including on the with-code path,
+    // which assigns afterwards -- so a plain insert here could commit alongside a
+    // cutover that never saw it and strand this technician with no way to sign in
+    // at all. See runSerializedAgainstCutover() for why serializable isolation on
+    // the cutover side alone does not catch that.
+    //
+    // Both bcrypt hashes are computed ABOVE, outside the transaction: bcrypt is
+    // deliberately slow, and holding a serializable transaction open across it
+    // would widen the conflict window for no reason.
+    const outcome = await runSerializedAgainstCutover((tx) =>
+      tx.user.create({
+        data: {
+          name: body.name,
+          email,
+          password: unusablePassword,
+          // Hardcoded, never taken from the request: this endpoint cannot be used
+          // to create an ADMIN or SCHEDULING account.
+          role: 'TECHNICIAN',
+          isActive: true,
+          // The code is NOT set here. It is assigned below through the one
+          // concurrency-safe path, so initial assignment and later resets cannot
+          // diverge into a safe path and a race-prone one.
+        },
+        select: EMPLOYEE_SELECT,
+      })
+    );
+    if (!outcome.ok) {
+      // Refused rather than retried without the boundary. A technician row that
+      // escapes serialization is exactly the defect this exists to prevent.
+      return res.status(503).json({ success: false, error: 'BUSY', message: 'Could not create the technician right now. Please try again.' });
+    }
+    const createdRow = outcome.value;
+
+    // Whether the shared bridge was ALREADY retired as of this insert's own
+    // transaction -- nothing more. Deliberately not re-read after the access-code
+    // assignment below, because its job is to report which side of the cutover
+    // this row was serialized on, and that does not change afterwards.
+    //
+    // "Can this person sign in?" is `sharedLoginRetired === false || hasAccessCode`,
+    // which the caller computes from the two fields together; the flag alone does
+    // NOT mean locked out, since a hire created with a code post-cutover can sign
+    // in immediately.
+    const sharedLoginRetired = outcome.sharedLoginRetired;
 
     let created = createdRow;
     if (body.accessCode) {
@@ -205,7 +235,7 @@ router.post('/technicians', async (req: AuthRequest, res, next) => {
     });
 
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CONFIG_UPDATED, { type: 'technician-employees' });
-    res.status(201).json({ success: true, data: toEmployeeResponse(created) });
+    res.status(201).json({ success: true, data: { ...toEmployeeResponse(created), sharedLoginRetired } });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return res.status(400).json({ success: false, error: 'VALIDATION', message: e.errors[0]?.message || 'Validation failed' });
@@ -221,40 +251,66 @@ router.patch('/technicians/:id', async (req: AuthRequest, res, next) => {
       return res.status(400).json({ success: false, error: 'VALIDATION', message: 'Nothing to update' });
     }
 
-    // Scoped to role TECHNICIAN: this endpoint must not be usable to rename or
-    // deactivate an ADMIN/SCHEDULING account by guessing its id. A non-technician
-    // id is indistinguishable from a nonexistent one -- both plain 404.
-    // Scoped to INDIVIDUAL technicians: neither a non-technician account nor the
-    // legacy shared bridge can be renamed or deactivated through here. Both are
-    // an indistinguishable 404.
-    const before = await prisma.user.findFirst({
-      where: { ...(await individualTechnicianWhere()), id: req.params.id },
-      select: EMPLOYEE_SELECT,
-    });
-    if (!before) return res.status(404).json({ success: false, message: 'Not found' });
-
-    // v4 decision D9: deactivating must revoke the technician's CURRENT session,
-    // not merely block the next login -- otherwise "Deactivate" would leave an
-    // offboarded person completing and rescheduling appointments for the rest of
-    // their token's 8-hour life.
+    // REACTIVATION is the second way an active technician can exist without a
+    // personal code (reactivate someone whose code was never issued), so the
+    // read-then-write runs inside the same serializable boundary as creation --
+    // see runSerializedAgainstCutover(). The lookup is inside the transaction
+    // too, rather than read first and updated after: at READ COMMITTED the row's
+    // isActive could change between the two, which is the same class of
+    // TOCTOU this fix exists to close.
     //
-    // The bump is applied when isActive transitions to false, and ALSO on
-    // reactivation. Bumping on reactivation matters: without it, a token issued
-    // before deactivation would start working again the moment the account came
-    // back, silently resurrecting a session that was deliberately ended.
-    // Reactivation must require a fresh login.
-    const isActiveChanged = body.isActive !== undefined && body.isActive !== before.isActive;
+    // Renames go through the same path. They cannot strand anyone, but splitting
+    // them into a second unserialized branch would mean two ways to update a
+    // technician and a standing invitation to add the next isActive-touching
+    // field to the wrong one. The cost is a retry on the rare rename that
+    // overlaps the one-time cutover.
+    const outcome = await runSerializedAgainstCutover(async (tx) => {
+      // Scoped to role TECHNICIAN: this endpoint must not be usable to rename or
+      // deactivate an ADMIN/SCHEDULING account by guessing its id. A non-technician
+      // id is indistinguishable from a nonexistent one -- both plain 404.
+      // Scoped to INDIVIDUAL technicians: neither a non-technician account nor the
+      // legacy shared bridge can be renamed or deactivated through here. Both are
+      // an indistinguishable 404.
+      const before = await tx.user.findFirst({
+        where: { ...(await individualTechnicianWhere(tx)), id: req.params.id },
+        select: EMPLOYEE_SELECT,
+      });
+      if (!before) return { before: null, updated: null, isActiveChanged: false } as const;
 
-    const updated = await prisma.user.update({
-      where: { id: req.params.id },
-      data: {
-        ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
-        ...(isActiveChanged ? { sessionVersion: { increment: 1 } } : {}),
-      },
-      select: EMPLOYEE_SELECT,
+      // v4 decision D9: deactivating must revoke the technician's CURRENT session,
+      // not merely block the next login -- otherwise "Deactivate" would leave an
+      // offboarded person completing and rescheduling appointments for the rest of
+      // their token's 8-hour life.
+      //
+      // The bump is applied when isActive transitions to false, and ALSO on
+      // reactivation. Bumping on reactivation matters: without it, a token issued
+      // before deactivation would start working again the moment the account came
+      // back, silently resurrecting a session that was deliberately ended.
+      // Reactivation must require a fresh login.
+      const isActiveChanged = body.isActive !== undefined && body.isActive !== before.isActive;
+
+      const updated = await tx.user.update({
+        where: { id: before.id },
+        data: {
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
+          ...(isActiveChanged ? { sessionVersion: { increment: 1 } } : {}),
+        },
+        select: EMPLOYEE_SELECT,
+      });
+
+      return { before, updated, isActiveChanged } as const;
     });
 
+    if (!outcome.ok) {
+      return res.status(503).json({ success: false, error: 'BUSY', message: 'Could not update the technician right now. Please try again.' });
+    }
+    const { before, updated, isActiveChanged } = outcome.value;
+    if (!before || !updated) return res.status(404).json({ success: false, message: 'Not found' });
+
+    // Socket disconnection and the audit write happen AFTER the transaction has
+    // committed -- a database transaction must never be held open across network
+    // I/O, and a serializable one that may be retried must never emit twice.
     if (isActiveChanged) {
       // HTTP access is already revoked by the version bump above; this closes any
       // socket that is still open so a deactivated technician stops receiving
@@ -271,7 +327,12 @@ router.patch('/technicians/:id', async (req: AuthRequest, res, next) => {
     });
 
     emitToRole(SOCKET_ROOMS.ADMIN, SOCKET_EVENTS.CONFIG_UPDATED, { type: 'technician-employees' });
-    res.json({ success: true, data: toEmployeeResponse(updated) });
+    // Same field, same meaning, as on create: whether the shared bridge was
+    // already closed as of this update's own transaction. Read together with
+    // `hasAccessCode` it identifies the one genuinely lockout-producing case --
+    // reactivating a code-less technician after the cutover, who then has neither
+    // credential.
+    res.json({ success: true, data: { ...toEmployeeResponse(updated), sharedLoginRetired: outcome.sharedLoginRetired } });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return res.status(400).json({ success: false, error: 'VALIDATION', message: e.errors[0]?.message || 'Validation failed' });
@@ -375,6 +436,13 @@ router.post('/technician-cutover', async (req: AuthRequest, res, next) => {
     const result = await completeTechnicianCutover();
 
     if (!result.ok) {
+      if (result.reason === 'CONTENTION') {
+        // Not a precondition failure and not a fault: a concurrent roster change
+        // kept aborting the eligibility check. Nothing was written, and the
+        // cutover is safe to attempt again -- so say "busy", not "conflict" and
+        // certainly not 500.
+        return res.status(503).json({ success: false, error: 'BUSY', message: 'Could not complete the migration right now. Please try again.' });
+      }
       return res.status(409).json({
         success: false,
         error: result.reason,
