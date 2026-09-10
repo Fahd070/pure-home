@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import prisma from '../prisma';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { emitToUser } from '../socket';
+import { SOCKET_EVENTS, NOTIFICATION_SEVERITY } from '../constants';
 
 const router = Router();
 router.use(authenticate);
@@ -33,11 +35,30 @@ const ownScope = (req: AuthRequest) => ({ userId: req.user!.userId });
  */
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const { unread } = req.query as { unread?: string };
+    const { unread, severity } = req.query as { unread?: string; severity?: string };
+    /**
+     * PHASE 2, ADDITIVE: an optional `severity` filter.
+     *
+     * The centred critical-alert queue needs the user's unread CRITICAL
+     * notifications. Without this filter it would have to take the unfiltered
+     * page below and filter in the browser -- and that page is `take: 50`
+     * ordered newest-first, while the hourly reminder cron creates an INFO row
+     * per user per appointment. A user with more than 50 unread reminders would
+     * therefore never be shown a genuinely critical alert that happens to be
+     * older than them. Filtering server-side is what makes the queue correct.
+     *
+     * Unrecognised values are ignored rather than rejected, so this stays
+     * backward compatible with any caller that omits or misspells it.
+     */
+    const severityFilter =
+      severity === NOTIFICATION_SEVERITY.CRITICAL || severity === NOTIFICATION_SEVERITY.INFO
+        ? { severity }
+        : {};
     const notifications = await prisma.notification.findMany({
       where: {
         ...ownScope(req),
         ...(unread === 'true' ? { isRead: false } : {}),
+        ...severityFilter,
       },
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -67,6 +88,11 @@ router.get('/unread-count', async (req: AuthRequest, res, next) => {
     ]);
     const byType: Record<string, number> = {};
     for (const row of grouped) byType[row.type] = row._count._all;
+    // Response shape is UNCHANGED from Phase 1. A `bySeverity` breakdown was
+    // considered and deliberately left out: the critical-alert queue reads the
+    // rows themselves (GET /notifications?unread=true&severity=CRITICAL), so a
+    // severity count would have been a second grouped query on every badge poll
+    // that nothing reads.
     res.json({ success: true, data: { total, byType } });
   } catch (e) { next(e); }
 });
@@ -79,6 +105,10 @@ router.patch('/read-all', async (req: AuthRequest, res, next) => {
       where: { ...ownScope(req), isRead: false },
       data: { isRead: true },
     });
+    // Phase 2: tell this user's OTHER live clients that their unread set
+    // changed, so a badge on a second device clears without waiting for a poll.
+    // Into the caller's own room only -- read state is per user.
+    if (result.count > 0) emitToUser(req.user!.userId, SOCKET_EVENTS.NOTIFICATION_READ, { all: true });
     res.json({ success: true, data: { updated: result.count } });
   } catch (e) { next(e); }
 });
@@ -90,6 +120,9 @@ router.patch('/:id/read', async (req: AuthRequest, res, next) => {
     const existing = await prisma.notification.findFirst({ where: { id: req.params.id, ...ownScope(req) } });
     if (!existing) return res.status(404).json({ success: false, message: 'Not found' });
     const n = await prisma.notification.update({ where: { id: req.params.id }, data: { isRead: true } });
+    // Same purpose as read-all above: a critical alert acknowledged on one
+    // device should stop demanding attention on this user's other devices.
+    emitToUser(req.user!.userId, SOCKET_EVENTS.NOTIFICATION_READ, { id: n.id });
     res.json({ success: true, data: n });
   } catch (e) { next(e); }
 });
