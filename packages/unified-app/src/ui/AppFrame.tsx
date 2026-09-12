@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { cx } from "./cx";
 import { Icon } from "./icons";
 import { PageTransition } from "./PageTransition";
+import { RefreshButton } from "./RefreshButton";
 
 /**
  * The frame every department screen sits in: navigation rail, command bar,
@@ -87,7 +88,14 @@ export function AppFrame({
             {title}
           </h1>
 
-          {actions && <div className="flex items-center gap-1.5 flex-shrink-0">{actions}</div>}
+          {/* v4 Requirement #14: one global Refresh, in the shell rather than on
+              each page, so every department has it in the same place. It sits
+              before the page-supplied actions so its position does not shift
+              between screens that have extra actions and screens that do not. */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <RefreshButton />
+            {actions}
+          </div>
         </header>
 
         {banners}
