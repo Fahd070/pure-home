@@ -27,17 +27,28 @@ describe('Part A: Admin Technicians page layout (design only)', () => {
   it('3. technician data/actions retain completed and postponed summaries while removing pending', () => {
     expect(adminTechniciansSrc).toMatch(/queryKey: \["technicians-detail"\]/);
     expect(adminTechniciansSrc).toMatch(/api\.get\("\/technicians"\)/);
-    expect(adminTechniciansSrc).toMatch(/const completedCount = tech\.completedTasksList\?\.length \|\| 0;/);
-    expect(adminTechniciansSrc).toMatch(/const postponedCount = tech\.postponedTasksList\?\.length \|\| 0;/);
-    expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => completedCount > 0 \? setModal\(\{ tech, type: "completed" \}\) : undefined\}/);
-    expect(adminTechniciansSrc).toMatch(/onClick=\{\(\) => postponedCount > 0 \? setModal\(\{ tech, type: "postponed" \}\) : undefined\}/);
-    expect(adminTechniciansSrc).toMatch(/disabled=\{completedCount === 0\}/);
-    expect(adminTechniciansSrc).toMatch(/disabled=\{postponedCount === 0\}/);
-    expect(adminTechniciansSrc).toMatch(/\{tech\.completedTasks \|\| 0\}/);
-    expect(adminTechniciansSrc).toMatch(/\{tech\.postponedTasks \|\| 0\}/);
+    // v4 Requirement #11: the counters are the API's exact aggregate totals, not
+    // the length of a capped preview list (which silently stopped at 20), and the
+    // metric tile is shared rather than written out twice.
+    expect(adminTechniciansSrc).toMatch(/value=\{tech\.completedTasks \|\| 0\}/);
+    expect(adminTechniciansSrc).toMatch(/value=\{tech\.postponedTasks \|\| 0\}/);
+    expect(adminTechniciansSrc).toMatch(/setModal\(\{ tech, kind: "completed" \}\)/);
+    expect(adminTechniciansSrc).toMatch(/setModal\(\{ tech, kind: "postponed" \}\)/);
+    expect(adminTechniciansSrc).toMatch(/disabled=\{value === 0\}/);
     expect(adminTechniciansSrc).not.toMatch(/tech\.pendingTasks/);
     expect(adminTechniciansSrc).not.toMatch(/technicians\.pendingTasks/);
   });
+
+  it('3b. adds the Customer Did Not Answer metric with critical semantics and its own durable detail list', () => {
+    expect(adminTechniciansSrc).toMatch(/value=\{tech\.noAnswerCount \|\| 0\}/);
+    expect(adminTechniciansSrc).toMatch(/label=\{t\("technicians\.noAnswer"\)\}/);
+    expect(adminTechniciansSrc).toMatch(/tone="danger"/);
+    expect(adminTechniciansSrc).toMatch(/setModal\(\{ tech, kind: "no-answer" \}\)/);
+    // Details come from the durable records via the dedicated paginated route,
+    // never from whatever happened to be preloaded with the roster.
+    expect(adminTechniciansSrc).toMatch(/\/technicians\/\$\{tech\.id\}\/activity/);
+  });
+
   it('4/5. the new wrapper uses no direction-specific (LTR-only) styling -- mx-auto centers identically in Arabic RTL and English LTR', () => {
     const wrapperMatch = adminTechniciansSrc.match(/\{\/\* Technician cards grid[\s\S]*?<div className="max-w-5xl mx-auto">/)?.[0] || '';
     expect(wrapperMatch).not.toMatch(/dir="ltr"|text-left|ml-auto(?!\s*mr-auto)/);

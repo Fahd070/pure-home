@@ -57,7 +57,7 @@ describe('6. Admin Technicians completion details: legacy fallback to the techni
     expect(adminTechniciansSrc).toMatch(/import \{ firstNameOf \} from "\.\.\/\.\.\/technician\/pages\/TaskDetail";/);
   });
   it('the displayed value is the submitted name when present, otherwise the technician\'s first name -- never blank when the technician relation can identify them', () => {
-    expect(adminTechniciansSrc).toMatch(/\{taskDetail\.task\.completionTechnicianName \|\| firstNameOf\(taskDetail\.techName\)\}/);
+    expect(adminTechniciansSrc).toMatch(/\{detailTask\.completionTechnicianName \|\| firstNameOf\(taskDetail\.techName\)\}/);
   });
 });
 
