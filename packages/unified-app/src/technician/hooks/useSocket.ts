@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Socket } from "socket.io-client";
 import { useAppStore } from "../../store/appStore";
-import { getOrCreateSocket, SocketState } from "../../hooks/socketConnection";
+import { getOrCreateSocket, destroySocket, SocketState } from "../../hooks/socketConnection";
 
 const techSocketState: SocketState = { socket: null, token: null };
 
@@ -16,3 +16,5 @@ export function useSocket() {
   return ref.current;
 }
 export function getSocket() { return techSocketState.socket; }
+/** Logout teardown -- see hooks/socketConnection.ts. */
+export function disconnectSocket() { destroySocket(techSocketState); }

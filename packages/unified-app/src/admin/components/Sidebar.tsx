@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "../store/authStore";
+import { useLogout } from "../../hooks/useLogout";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
@@ -35,7 +36,7 @@ const links: Entry[] = [
 
 export default function Sidebar() {
   const { t } = useTranslation();
-  const { logout } = useAuthStore();
+  const logout = useLogout();
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
@@ -185,7 +186,7 @@ export default function Sidebar() {
     <NavRail
       items={items}
       department={t("dept.adminFull")}
-      onLogout={() => { logout(); navigate("/"); }}
+      onLogout={logout}
     />
   );
 }

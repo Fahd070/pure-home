@@ -53,3 +53,24 @@ export function getOrCreateSocket(state: SocketState, token: string, serverUrl: 
 
   return state.socket;
 }
+
+/**
+ * Tears the department's socket down on logout (v4 Requirement #13).
+ *
+ * Navigating away is not enough: these SocketState objects are module-level
+ * singletons, so without this the connection authenticated as the previous user
+ * survives logout, stays in that user's rooms, and keeps receiving their
+ * private realtime events. The socket is fully discarded rather than just
+ * disconnected -- `reconnection: true` means a merely-disconnected socket would
+ * try to come back with the old credentials, and clearing `token` guarantees
+ * the next login takes the create-a-new-socket path instead of the
+ * reuse-if-token-matches one.
+ */
+export function destroySocket(state: SocketState): void {
+  if (state.socket) {
+    state.socket.removeAllListeners();
+    state.socket.disconnect();
+  }
+  state.socket = null;
+  state.token = null;
+}

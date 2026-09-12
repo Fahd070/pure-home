@@ -48,21 +48,35 @@ import TechNotifications from "./technician/pages/Notifications";
 import TechDirectMessages from "./technician/pages/DirectMessages";
 import TechSettings from "./technician/pages/Settings";
 
+/**
+ * The three route guards.
+ *
+ * v4 Requirement #13: an unauthenticated visit to a protected route goes to the
+ * DEPARTMENT SELECTOR, not to that department's code entry. These used to send
+ * the user straight back to `/code-entry/<dept>`, which made logging out
+ * indistinguishable from locking the department you were already in -- and made
+ * the browser Back button reopen that same code-entry screen. Leaving the
+ * workspace now always returns to the point where a department is chosen.
+ *
+ * This covers session expiry too: the API clients clear the stored auth on a
+ * 401 (see each department's api/client.ts), so a token that dies mid-session
+ * lands on the selector by the same path as an explicit logout.
+ */
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { adminAuth } = useAppStore();
-  if (!adminAuth) return <Navigate to="/code-entry/admin" replace />;
+  if (!adminAuth) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 function SchedulingGuard({ children }: { children: React.ReactNode }) {
   const { schedulingAuth } = useAppStore();
-  if (!schedulingAuth) return <Navigate to="/code-entry/scheduling" replace />;
+  if (!schedulingAuth) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 function TechnicianGuard({ children }: { children: React.ReactNode }) {
   const { technicianAuth } = useAppStore();
-  if (!technicianAuth) return <Navigate to="/code-entry/technician" replace />;
+  if (!technicianAuth) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 

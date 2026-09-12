@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "../store/authStore";
+import { useLogout } from "../../hooks/useLogout";
 import { api } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 import { useNotificationSound } from "../../hooks/useNotificationSound";
@@ -21,7 +22,8 @@ const links: { to: string; label: string; icon: IconName; badgeKey?: string }[] 
 
 export default function Sidebar() {
   const { t } = useTranslation();
-  const { logout, user } = useAuthStore();
+  const { user } = useAuthStore();
+  const logout = useLogout();
   const navigate = useNavigate();
   const socket = useSocket();
   useNotificationSound(socket);
@@ -106,7 +108,7 @@ export default function Sidebar() {
       // "Technician 1". It comes from the authenticated session, so renaming the
       // employee in Administration changes it here on their next sign-in.
       employeeName={user?.name}
-      onLogout={() => { logout(); navigate("/"); }}
+      onLogout={logout}
     />
   );
 }
