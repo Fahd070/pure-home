@@ -14,6 +14,8 @@ import { Toolbar } from "../../ui/Surface";
 import { EmptyState, Loading } from "../../ui/Feedback";
 import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
 import { Modal } from "../../ui/Modal";
+import { Pagination } from "../../ui/Pagination";
+import { MaintenanceBadge, maintenanceRowClass } from "../../components/MaintenancePriority";
 import { Icon } from "../../ui/icons";
 
 function formatCycle(cycle: string, freq: number, t: any) {
@@ -24,26 +26,7 @@ function formatCycle(cycle: string, freq: number, t: any) {
   return cycle;
 }
 
-/**
- * Maintenance countdown. The three states used to be told apart by a coloured
- * emoji circle inside a coloured pill -- the same information encoded twice,
- * and the emoji rendered at a different size on every machine. One toned badge
- * with a dot carries it now, and the dot is not the only cue: the label itself
- * says overdue / due today / due in N.
- */
-function MaintenanceBadge({ c, t }: { c: any; t: any }) {
-  if (c.alertLevel === "overdue") {
-    return <Badge tone="danger" dot>{t("countdown.overdueBy", { days: c.overdueCount })}</Badge>;
-  }
-  if (c.alertLevel === "soon") {
-    const label = c.daysUntil === 0 ? t("countdown.dueToday") : c.daysUntil === 1 ? t("countdown.dueTomorrow") : t("countdown.dueIn", { days: c.daysUntil });
-    return <Badge tone="warning" dot>{label}</Badge>;
-  }
-  if (c.daysUntil !== null) {
-    return <Badge tone="success" dot>{t("countdown.dueIn", { days: c.daysUntil })}</Badge>;
-  }
-  return null;
-}
+const CUSTOMERS_PER_PAGE = 20;
 
 const STATUS_TONES: Record<string, Tone> = {
   SCHEDULED: "info",
@@ -307,6 +290,7 @@ export default function CustomerList() {
   const qc = useQueryClient();
   const socket = useSocket();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [scheduleModal, setScheduleModal] = useState<any>(null);
   const [historyModal, setHistoryModal] = useState<any>(null);
 
@@ -317,10 +301,15 @@ export default function CustomerList() {
   useEffect(() => {
     if (!socket) return;
     const refresh = () => qc.invalidateQueries({ queryKey: ["customers-sched"] });
+    // A completion recalculates the customer's next-maintenance date, which is
+    // what this list is now sorted and coloured by -- so it has to refresh on
+    // appointment events too, not only on customer ones.
+    socket.on("appointment:completed", refresh);
     socket.on("customer:created", refresh);
     socket.on("customer:updated", refresh);
     socket.on("customer:deleted", refresh);
     return () => {
+      socket.off("appointment:completed", refresh);
       socket.off("customer:created", refresh);
       socket.off("customer:updated", refresh);
       socket.off("customer:deleted", refresh);
@@ -328,11 +317,28 @@ export default function CustomerList() {
   }, [socket, qc]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["customers-sched", search],
-    queryFn: () => api.get("/customers", { params: { search, limit: 50, includeSchedule: true } }).then(r => r.data)
+    queryKey: ["customers-sched", search, page],
+    // v4 Requirement #9: this list previously asked for 50 rows and rendered no
+    // navigation at all, so a desk with more than 50 customers simply could not
+    // reach the 51st -- they were not hidden, they were unreachable. Now it is
+    // true server pagination, with the server applying the maintenance ordering
+    // before the slice so the most overdue customer is on page 1.
+    queryFn: () => api.get("/customers", {
+      params: { search, page, limit: CUSTOMERS_PER_PAGE, includeSchedule: true, sort: "maintenance" },
+    }).then(r => r.data),
+    placeholderData: prev => prev,
   });
 
   const customers: any[] = data?.data || [];
+  const total: number = data?.meta?.total ?? 0;
+  const totalPages: number = data?.meta?.totalPages ?? 1;
+
+  // A page that no longer exists (a customer was deleted elsewhere, or the
+  // search narrowed the result set) steps back to the last real page.
+  useEffect(() => {
+    if (!data?.meta) return;
+    if (page > totalPages) setPage(totalPages);
+  }, [data?.meta, page, totalPages]);
 
   return (
     <div className="space-y-4">
@@ -341,7 +347,7 @@ export default function CustomerList() {
           <Icon name="search" className="w-3.5 h-3.5 text-fg-muted absolute top-1/2 -translate-y-1/2 start-2.5 pointer-events-none" />
           <Input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder={t("common.search")}
             aria-label={t("common.search")}
             className="ps-8"
@@ -352,6 +358,17 @@ export default function CustomerList() {
           {t("customers.add")}
         </Button>
       </Toolbar>
+
+      {total > 0 && (
+        <Pagination
+          labelled
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          totalLabel={t("pagination.totalCustomers")}
+          onPage={setPage}
+        />
+      )}
 
       {isLoading ? (
         <Loading label={t("common.loading")} />
@@ -374,15 +391,19 @@ export default function CustomerList() {
             </THead>
             <TBody>
               {customers.map((c: any) => (
-                <TR key={c.id} onClick={() => navigate(`/scheduling/customers/${c.id}`)}>
+                <TR
+                  key={c.id}
+                  emphasis={maintenanceRowClass(c.maintenancePriority)}
+                  onClick={() => navigate(`/scheduling/customers/${c.id}`)}
+                >
                   <TD className="font-medium">{c.name}</TD>
                   <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
                   <TD className="text-fg-secondary text-2xs">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</TD>
                   <TD>
                     <div className="flex flex-col items-start gap-1">
-                      <MaintenanceBadge c={c} t={t} />
-                      {c.nextMaintenance && (
-                        <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</span>
+                      <MaintenanceBadge due={c} />
+                      {c.nextMaintenanceDueAt && (
+                        <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenanceDueAt)}</span>
                       )}
                     </div>
                   </TD>

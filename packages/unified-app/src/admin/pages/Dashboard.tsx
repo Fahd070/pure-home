@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import RowActionButton from "../../components/RowActionButton";
 import PreviousMaintenanceNoteBox from "../../components/PreviousMaintenanceNoteBox";
 import CallReportModal from "../components/CallReportModal";
+import { MaintenanceBadge, maintenanceRowClass } from "../../components/MaintenancePriority";
 import { toDateInputValue, dateOnlyToApiDate, formatGregorianDate } from "../../utils/dateTimeInput";
 import { Button } from "../../ui/Button";
 import { Input, Select, Textarea, Field } from "../../ui/Field";
@@ -291,16 +292,34 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
                     <TH>{t("common.name")}</TH>
                     <TH width="9rem">{t("common.phone")}</TH>
                     <TH width="9rem">{t("customers.maintenanceCycle")}</TH>
+                    <TH width="12rem">{t("reports.nextMaintenance")}</TH>
                     <TH>{t("customers.city")}</TH>
                     <TH width="6rem" />
                   </tr>
                 </THead>
                 <TBody>
                   {items.map((c: any) => (
-                    <TR key={c.id} onClick={() => navigate(`/admin/customers/${c.id}`)}>
+                    <TR
+                      key={c.id}
+                      emphasis={maintenanceRowClass(c.maintenancePriority)}
+                      onClick={() => navigate(`/admin/customers/${c.id}`)}
+                    >
                       <TD className="font-medium">{c.name}</TD>
                       <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
                       <TD className="text-fg-secondary text-2xs">{c.maintenanceCycle}</TD>
+                      <TD>
+                        {/* Only the maintenance drill-downs carry these fields; the
+                            plain customer list leaves the cell empty rather than
+                            inventing a priority it was not given. */}
+                        {c.maintenancePriority ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <MaintenanceBadge due={c} />
+                            {c.nextMaintenanceDueAt && (
+                              <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenanceDueAt)}</span>
+                            )}
+                          </div>
+                        ) : "—"}
+                      </TD>
                       <TD className="text-fg-secondary">{c.address?.city || "—"}</TD>
                       <TD>
                         <div className="flex items-center gap-0.5">
@@ -349,11 +368,21 @@ function DrillModal({ title, endpoint, onClose }: { title: string; endpoint: str
         />
       )}
 
+      {/* The drill-down's delete button destroys different things depending on
+          which tile opened it, and v4 Requirement #4 made that materially more
+          dangerous: the Overdue Maintenance tile used to list APPOINTMENTS and
+          now lists CUSTOMERS, so the same red icon in the same place went from
+          removing one visit to removing the customer and their whole history.
+          One generic "delete this record?" is not an adequate warning for that,
+          so the dialog now says which of the two it is. */}
       <ConfirmDialog
         open={!!confirmDelete}
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && deleteMutation.mutate(confirmDelete)}
-        title={t("dashboard.deleteConfirm")}
+        title={confirmDelete?.type === "customer" ? t("customers.deleteCustomer") : t("dashboard.deleteConfirm")}
+        message={confirmDelete?.type === "customer"
+          ? <span className="block text-2xs text-fg-muted">{t("customers.deleteWarning")}</span>
+          : undefined}
         confirmLabel={t("common.delete")}
         cancelLabel={t("common.cancel")}
         destructive
@@ -383,11 +412,14 @@ export default function Dashboard() {
     };
     socket.on("appointment:created", refresh); socket.on("appointment:deleted", refresh); socket.on("appointment:status", refresh);
     socket.on("appointment:completed", refresh); socket.on("appointment:postponed", refresh);
-    socket.on("customer:created", refresh); socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
+    // customer:updated matters here now that the counters are driven by the
+    // customer's own due date: editing a maintenance cycle moves a bucket with no
+    // appointment involved at all.
+    socket.on("customer:created", refresh); socket.on("customer:updated", refresh); socket.on("customer:deleted", refresh); socket.on("customers:bulk-deleted", refresh);
     return () => {
       socket.off("appointment:created", refresh); socket.off("appointment:deleted", refresh); socket.off("appointment:status", refresh);
       socket.off("appointment:completed", refresh); socket.off("appointment:postponed", refresh);
-      socket.off("customer:created", refresh); socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
+      socket.off("customer:created", refresh); socket.off("customer:updated", refresh); socket.off("customer:deleted", refresh); socket.off("customers:bulk-deleted", refresh);
     };
   }, [socket, qc]);
 
@@ -418,12 +450,17 @@ export default function Dashboard() {
   // board rather than being split into sections -- but they are ordered by how
   // loudly each one demands attention, so the eye lands on trouble first.
   const cards: StatCardDef[] = [
-    { label: t("dashboard.overdueMaintenance"),   key: "pendingApproval", endpoint: "overdue",               tone: "danger",   icon: "urgent" },
+  // v4 Requirement #4: these three counters are CUSTOMER counts over the stored
+  // next-maintenance due date, not appointment counts. A customer whose filter is
+  // due is due whether or not anyone has booked a visit yet -- under the previous
+  // appointment-derived counters those customers were the ones that never
+  // appeared anywhere, which is precisely backwards.
+    { label: t("dashboard.overdueMaintenance"),   key: "maintenanceOverdue", endpoint: "maintenance-overdue",   tone: "danger",   icon: "urgent" },
     { label: t("dashboard.urgentAppointments"),   key: "urgentCount",     endpoint: "urgent",                tone: "urgent",   icon: "urgent" },
     { label: t("dashboard.dueToday"),             key: "todayCount",      endpoint: "today",                 tone: "warning",  icon: "clock" },
     { label: t("dashboard.suspendedPostponed"),   key: "pending",         endpoint: "postponed",             tone: "pending",  icon: "clock" },
-    { label: t("dashboard.thisMonth"),            key: "thisMonth",       endpoint: "this-month",            tone: "info",     icon: "calendar" },
-    { label: t("dashboard.nextMonth"),            key: "nextMonth",       endpoint: "next-month",            tone: "progress", icon: "appointments" },
+    { label: t("dashboard.maintenanceThisMonth"), key: "maintenanceThisMonth", endpoint: "maintenance-this-month", tone: "info",     icon: "calendar" },
+    { label: t("dashboard.maintenanceNextMonth"), key: "maintenanceNextMonth", endpoint: "maintenance-next-month", tone: "progress", icon: "appointments" },
     { label: t("dashboard.completedMaintenance"), key: "completed",       endpoint: "completed-maintenance", tone: "success",  icon: "check" },
     { label: t("dashboard.customers"),            key: "total",           endpoint: "customers-list",        tone: "neutral",  icon: "customers" },
   ];

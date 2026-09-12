@@ -188,3 +188,66 @@ export function describeMaintenanceDue(dueDate: Date | null | undefined, now: Da
     daysOverdue: priority === 'OVERDUE' ? Math.abs(daysUntil) : null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Maintenance due buckets (v4 Requirement #4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The operational grouping the Admin/Scheduling dashboards show.
+ *
+ * Deliberately a SUPERSET of MaintenancePriority rather than a second opinion:
+ * priority answers "how urgent is this customer" (which drives row colour and
+ * list order), buckets answer "which month does this fall in" (which drives the
+ * dashboard counters). Both read the same stored `nextMaintenanceDueAt`, so a
+ * customer counted as OVERDUE on the dashboard is always the same customer the
+ * list paints red -- they cannot disagree, because neither recomputes the date.
+ *
+ * Note the deliberate overlap rule: OVERDUE wins over THIS_MONTH. A date earlier
+ * this month that has already passed is overdue, not "due this month" -- the
+ * buckets are mutually exclusive and every customer lands in exactly one.
+ */
+export type MaintenanceBucket = 'OVERDUE' | 'THIS_MONTH' | 'NEXT_MONTH' | 'FUTURE' | 'UNKNOWN';
+
+/**
+ * The three UTC calendar boundaries every bucket is expressed against.
+ *
+ * UTC-only, matching every other date-only calculation in this file. Using local
+ * getters here would put a Riyadh (UTC+03:00) viewer's "1 October" into
+ * September's bucket for the first three hours of the month, which is exactly
+ * the off-by-one class of bug the UTC convention exists to prevent.
+ *
+ * Returned as a unit so a caller can never pair `startOfToday` from one clock
+ * reading with `startOfNextMonth` from another -- the reason a single `now` is
+ * threaded through this whole module.
+ */
+export function maintenanceBucketBoundaries(now: Date = new Date()) {
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  return {
+    /** 00:00 UTC today. Anything strictly before this is overdue. */
+    startOfToday: new Date(Date.UTC(y, m, now.getUTCDate())),
+    /** 00:00 UTC on the 1st of next month. Date.UTC normalises December -> January. */
+    startOfNextMonth: new Date(Date.UTC(y, m + 1, 1)),
+    /** 00:00 UTC on the 1st of the month after next. */
+    startOfFollowingMonth: new Date(Date.UTC(y, m + 2, 1)),
+  };
+}
+
+/**
+ * Classifies one stored due date. The single implementation used by the
+ * dashboard counters, the drill-down lists and the tests.
+ */
+export function getMaintenanceBucket(dueDate: Date | null | undefined, now: Date = new Date()): MaintenanceBucket {
+  if (!dueDate) return 'UNKNOWN';
+  const { startOfToday, startOfNextMonth, startOfFollowingMonth } = maintenanceBucketBoundaries(now);
+  const due = new Date(dueDate);
+  // Compared on the UTC day, not the instant, so a due date stored with a
+  // non-midnight time (inherited from its baseline) is never read as overdue on
+  // the very day it is due.
+  const dueDay = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate()));
+  if (dueDay < startOfToday) return 'OVERDUE';
+  if (dueDay < startOfNextMonth) return 'THIS_MONTH';
+  if (dueDay < startOfFollowingMonth) return 'NEXT_MONTH';
+  return 'FUTURE';
+}

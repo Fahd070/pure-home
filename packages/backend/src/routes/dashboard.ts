@@ -7,8 +7,9 @@ import { writeAudit } from '../services/audit.service';
 import { stripCompletionAmount, stripCompletionAmountFromList, TECHNICIAN_PUBLIC_INCLUDE } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
-import { DashboardOperationalCategory, getDashboardCategoryWheres } from '../services/dashboardCategorization.service';
-import { recalculateCustomerMaintenanceDue } from '../services/maintenanceDue.service';
+import { DashboardOperationalCategory, getDashboardCategoryWheres, getMaintenanceBucketWheres } from '../services/dashboardCategorization.service';
+import { describeMaintenanceDue, MaintenanceBucket } from '../services/maintenanceSchedule.service';
+import { recalculateCustomerMaintenanceDue, MAINTENANCE_PRIORITY_ORDER_BY } from '../services/maintenanceDue.service';
 
 const router = Router();
 router.use(authenticate);
@@ -39,7 +40,17 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
     if (req.user?.role === 'SCHEDULING') urgentWhere.visibleToScheduling = true;
 
     const customerWhere = req.user!.role === 'SCHEDULING' ? applySchedulingCustomerVisibility({}) : {};
-    const [total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount] = await Promise.all([
+    // v4 Requirement #4: the maintenance counters below are CUSTOMER counts over
+    // the materialized due date, not appointment counts. They are scoped by the
+    // same Scheduling visibility gate the customer total already uses, so this
+    // cannot become a side channel for a customer Scheduling may not see.
+    const buckets = getMaintenanceBucketWheres(now);
+    const maintenanceWhere = (b: MaintenanceBucket) => ({ ...customerWhere, ...buckets[b] });
+
+    const [
+      total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount,
+      maintenanceOverdue, maintenanceThisMonth, maintenanceNextMonth, maintenanceFuture, maintenanceUnknown,
+    ] = await Promise.all([
       prisma.customer.count({ where: customerWhere }),
       prisma.appointment.count({ where: categories.completed }),
       prisma.appointment.count({ where: categories.thisMonth }),
@@ -48,9 +59,22 @@ router.get('/stats', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest
       prisma.appointment.count({ where: categories.overdue }),
       prisma.appointment.count({ where: categories.today }),
       prisma.appointment.count({ where: urgentWhere }),
+      prisma.customer.count({ where: maintenanceWhere('OVERDUE') }),
+      prisma.customer.count({ where: maintenanceWhere('THIS_MONTH') }),
+      prisma.customer.count({ where: maintenanceWhere('NEXT_MONTH') }),
+      prisma.customer.count({ where: maintenanceWhere('FUTURE') }),
+      prisma.customer.count({ where: maintenanceWhere('UNKNOWN') }),
     ]);
 
-    res.json({ success: true, data: { total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount } });
+    // The appointment-derived keys are kept verbatim. Desktop v3.6.5 reads
+    // thisMonth/nextMonth/pendingApproval from this same endpoint and is a
+    // production-installed client that will never receive this change; removing
+    // or repointing those keys would silently change what it displays. The new
+    // maintenance* keys are additive, and the Phase 3 dashboards read those.
+    res.json({ success: true, data: {
+      total, completed, thisMonth, nextMonth, pending, pendingApproval, todayCount, urgentCount,
+      maintenanceOverdue, maintenanceThisMonth, maintenanceNextMonth, maintenanceFuture, maintenanceUnknown,
+    } });
   } catch (e) { next(e); }
 });
 
@@ -150,6 +174,62 @@ registerOperationalCategoryRoute('/next-month', 'nextMonth');
 registerOperationalCategoryRoute('/postponed', 'postponed');
 registerOperationalCategoryRoute('/overdue', 'overdue');
 registerOperationalCategoryRoute('/today', 'today');
+
+/**
+ * v4 Requirement #4: the maintenance drill-downs.
+ *
+ * These return CUSTOMERS, not appointments -- a customer is due for maintenance
+ * whether or not a visit has been booked, and the whole reason the old
+ * appointment-derived buckets were wrong is that they could only ever show
+ * customers somebody had already scheduled.
+ *
+ * Ordering is the same MAINTENANCE_PRIORITY_ORDER_BY the customer lists use, so
+ * the most overdue customer is the first row here too.
+ */
+function registerMaintenanceBucketRoute(path: string, bucket: MaintenanceBucket) {
+  router.get(path, requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
+    try {
+      const { search = '', page = '1', limit = '20' } = req.query as any;
+      // Clamped at BOTH ends, like GET /customers. Without the lower bound a
+      // negative limit reaches Prisma as a backwards `take` -- a different,
+      // reversed set of rows than the offset implies -- while totalPages divides
+      // by a negative and reports 1 page regardless of how many rows match.
+      const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+      const safePage = Math.max(parseInt(page) || 1, 1);
+      const now = new Date();
+
+      let where: any = { ...getMaintenanceBucketWheres(now)[bucket] };
+      // Same object-level authorization as every other customer read: an
+      // admin-private urgent-only customer must not surface here either.
+      if (req.user!.role === 'SCHEDULING') where = applySchedulingCustomerVisibility(where);
+      if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }];
+
+      const total = await prisma.customer.count({ where });
+      const customers = await prisma.customer.findMany({
+        where,
+        include: { address: true },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        orderBy: MAINTENANCE_PRIORITY_ORDER_BY,
+      });
+      // The same derived trio the customer lists render, computed from the same
+      // stored date by the same function -- never a second opinion.
+      const data = customers.map((c: any) => ({ ...c, ...describeMaintenanceDue(c.nextMaintenanceDueAt, now) }));
+
+      res.json({
+        success: true,
+        data,
+        meta: { total, page: safePage, limit: safeLimit, totalPages: Math.max(1, Math.ceil(total / safeLimit)) },
+      });
+    } catch (e) { next(e); }
+  });
+}
+
+registerMaintenanceBucketRoute('/maintenance-overdue', 'OVERDUE');
+registerMaintenanceBucketRoute('/maintenance-this-month', 'THIS_MONTH');
+registerMaintenanceBucketRoute('/maintenance-next-month', 'NEXT_MONTH');
+registerMaintenanceBucketRoute('/maintenance-future', 'FUTURE');
+registerMaintenanceBucketRoute('/maintenance-unknown', 'UNKNOWN');
 
 router.get('/urgent', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {

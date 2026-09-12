@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { AppointmentStatus } from '@prisma/client';
 import prisma from '../prisma';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { emitToRole, emitToRoles, emitToTechnician } from '../socket';
@@ -14,6 +15,11 @@ import {
 } from '../services/notification.service';
 import type { NotificationDb } from '../services/notification.service';
 import { NOTIFICATION_SEVERITY, NOTIFICATION_TYPES } from '../constants';
+import { APPOINTMENT_REPORT_STATUSES, appointmentStatusFilter, parseReportStatuses } from '../services/reportStatus.service';
+
+// The AppointmentStatus enum's values, taken from the generated Prisma client so
+// this list cannot drift from the schema the way a hand-written copy would.
+const APPOINTMENT_STATUS_VALUES: string[] = Object.values(AppointmentStatus);
 
 const router = Router();
 router.use(authenticate);
@@ -199,7 +205,7 @@ const MAX_LIMIT = 100;
 
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const { status, workStatus: workStatusFilter, from, to, urgent, pendingSchedulingApproval, page: pageRaw, limit: limitRaw } = req.query as any;
+    const { status, workStatus: workStatusFilter, reportStatus, from, to, urgent, pendingSchedulingApproval, page: pageRaw, limit: limitRaw } = req.query as any;
 
     let page = 1;
     if (pageRaw !== undefined) {
@@ -219,7 +225,29 @@ router.get('/', async (req: AuthRequest, res, next) => {
     }
 
     const where: any = {};
-    if (status) where.status = status;
+    if (status) {
+      // Previously passed straight through to Prisma, so an unknown value raised
+      // a 500 from the enum coercion rather than telling the caller what was
+      // wrong. Validated here against the enum's own values.
+      if (!APPOINTMENT_STATUS_VALUES.includes(String(status))) {
+        return res.status(400).json({ success: false, message: `status must be one of: ${APPOINTMENT_STATUS_VALUES.join(', ')}` });
+      }
+      where.status = status;
+    }
+
+    // v4 Requirement #10B: the appointment report filters on the OPERATIONAL
+    // status a row actually displays as -- which spans `status` and `workStatus`
+    // -- and accepts several at once. Kept separate from the raw `status`
+    // parameter above so existing callers (Desktop v3.6.5 included) are
+    // untouched. Placed in AND rather than OR because the TECHNICIAN branch
+    // below owns `where.OR`; merging into it would widen that role's visibility.
+    const parsedReportStatus = parseReportStatuses(reportStatus, APPOINTMENT_REPORT_STATUSES);
+    if (!parsedReportStatus.ok) {
+      return res.status(400).json({ success: false, message: `Invalid reportStatus: ${parsedReportStatus.invalid.join(', ')}` });
+    }
+    if (parsedReportStatus.statuses) {
+      (where.AND ||= []).push(appointmentStatusFilter(parsedReportStatus.statuses));
+    }
     if (from || to) where.scheduledDate = {
       ...(from ? { gte: new Date(from) } : {}),
       ...(to ? { lte: new Date(to) } : {}),

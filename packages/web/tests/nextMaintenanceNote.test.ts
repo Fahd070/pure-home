@@ -78,12 +78,12 @@ describe('Scheduling/Maintenance can view the Next Maintenance Note', () => {
 });
 
 describe('Admin technician-detail modal shows the Next Maintenance Note', () => {
-  it('references taskDetail.task.nextMaintenanceNote', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.nextMaintenanceNote/);
+  it('references detailTask.nextMaintenanceNote', () => {
+    expect(adminTechniciansSrc).toMatch(/detailTask\.nextMaintenanceNote/);
   });
 
   it('still gates the Payment section on completionAmount/completionPaymentMethod (unchanged)', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.completionAmount != null \|\| taskDetail\.task\.completionPaymentMethod/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.completionAmount != null \|\| detailTask\.completionPaymentMethod/);
   });
 });
 

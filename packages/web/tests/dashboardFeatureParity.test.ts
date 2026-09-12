@@ -67,13 +67,24 @@ describe('Shared appointment drill-down display parity', () => {
   });
 
   it('both dashboards show the same 8 stat cards in the same order', () => {
-    // The eight cards are unchanged, but the order is now urgency-first --
-    // what needs acting on today leads, the forward-looking pipeline follows.
-    // Both departments still use the IDENTICAL order, which is what parity
-    // means here (Scheduling additionally groups them under two headings).
-    const cardOrderRe = /key:\s*"pendingApproval"[\s\S]*?key:\s*"urgentCount"[\s\S]*?key:\s*"todayCount"[\s\S]*?key:\s*"pending"[\s\S]*?key:\s*"thisMonth"[\s\S]*?key:\s*"nextMonth"[\s\S]*?key:\s*"completed"[\s\S]*?key:\s*"total"/;
+    // The eight cards and their urgency-first order are unchanged. What changed
+    // in v4 Requirement #4 is what three of them COUNT: the overdue/this-month/
+    // next-month tiles now read customer maintenance-due counts rather than
+    // appointment counts, so a customer with no appointment booked still appears.
+    // Both departments still use the IDENTICAL order, which is what parity means
+    // here (Scheduling additionally groups them under two headings).
+    const cardOrderRe = /key:\s*"maintenanceOverdue"[\s\S]*?key:\s*"urgentCount"[\s\S]*?key:\s*"todayCount"[\s\S]*?key:\s*"pending"[\s\S]*?key:\s*"maintenanceThisMonth"[\s\S]*?key:\s*"maintenanceNextMonth"[\s\S]*?key:\s*"completed"[\s\S]*?key:\s*"total"/;
     expect(adminSrc).toMatch(cardOrderRe);
     expect(schedSrc).toMatch(cardOrderRe);
+  });
+
+  it('warns specifically when the drill-down delete would destroy a customer, not an appointment', () => {
+    // v4 Requirement #4 repointed the Overdue Maintenance tile from an
+    // appointment list to a CUSTOMER list, so the same red trash icon in the same
+    // position went from removing one visit to removing the customer and their
+    // whole history. The confirmation has to say which.
+    expect(adminSrc).toMatch(/confirmDelete\?\.type === "customer" \? t\("customers\.deleteCustomer"\)/);
+    expect(adminSrc).toMatch(/t\("customers\.deleteWarning"\)/);
   });
 
   it('renames the permanent card to Customers and removes the Scheduled card and endpoint from both dashboards', () => {

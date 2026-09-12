@@ -37,44 +37,49 @@ describe('Part A: Admin Technicians backend select includes the two new fields',
   });
 });
 
+// NOTE: the detail modal binds its record as `detailTask` -- the appointment
+// fetched by id merged over the list row it was opened from (v4 Requirement #11's
+// perf fix: the activity list no longer ships a base64 photo per row). The fields
+// asserted below and their individual guards are unchanged; only the binding's
+// name is.
 describe('Part A: Admin Technicians detail modal shows full completion details', () => {
   it('1. shows the Technician name -- the submitted completion name when present, falling back to the technician relation\'s first name otherwise (completion-technician-name-display batch)', () => {
-    expect(adminTechniciansSrc).toMatch(/\{taskDetail\.task\.completionTechnicianName \|\| firstNameOf\(taskDetail\.techName\)\}/);
+    expect(adminTechniciansSrc).toMatch(/\{detailTask\.completionTechnicianName \|\| firstNameOf\(taskDetail\.techName\)\}/);
   });
   it('2. shows customer name and phone', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.customer\?\.name/);
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.customer\.phone/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.customer\?\.name/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.customer\.phone/);
   });
   it('3. shows service type', () => {
-    expect(adminTechniciansSrc).toMatch(/APPT_TYPE_LABELS\[taskDetail\.task\.type/);
+    expect(adminTechniciansSrc).toMatch(/APPT_TYPE_LABELS\[detailTask\.type/);
   });
   it('4. shows the scheduled date (date-picker-only simplification batch: business-date scheduling no longer carries a user-entered time)', () => {
-    expect(adminTechniciansSrc).toMatch(/formatGregorianDate\(taskDetail\.task\.scheduledDate\)/);
-    expect(adminTechniciansSrc).not.toMatch(/formatGregorianTime\(taskDetail\.task\.scheduledDate\)/);
+    expect(adminTechniciansSrc).toMatch(/formatGregorianDate\(detailTask\.scheduledDate\)/);
+    expect(adminTechniciansSrc).not.toMatch(/formatGregorianTime\(detailTask\.scheduledDate\)/);
   });
   it('5. shows actualCompletionDate via the Gregorian formatter, distinct from completedAt', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.actualCompletionDate &&/);
-    expect(adminTechniciansSrc).toMatch(/formatGregorianDate\(taskDetail\.task\.actualCompletionDate\)/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.actualCompletionDate &&/);
+    expect(adminTechniciansSrc).toMatch(/formatGregorianDate\(detailTask\.actualCompletionDate\)/);
   });
   it('6. shows serviceDetails', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.serviceDetails/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.serviceDetails/);
   });
   it('7. shows nextMaintenanceNote when present, using the exact required label', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.nextMaintenanceNote &&/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.nextMaintenanceNote &&/);
     expect(i18n.getFixedT('ar')('tasks.nextMaintenanceNote') === 'ملاحظة الصيانة القادمة').toBe(true);
   });
   it('8. shows completionAmount', () => {
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.completionAmount\.toFixed\(2\)/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.completionAmount\.toFixed\(2\)/);
   });
   it('9. shows completionPaymentMethod', () => {
-    expect(adminTechniciansSrc).toMatch(/PAYMENT_LABELS\[taskDetail\.task\.completionPaymentMethod\]/);
+    expect(adminTechniciansSrc).toMatch(/PAYMENT_LABELS\[detailTask\.completionPaymentMethod\]/);
   });
   it('10. shows Commercial/Personal Bank Transfer labels correctly', () => {
     expect(adminTechniciansSrc).toMatch(/BANK_TRANSFER_COMMERCIAL: isAr \? "تحويل بنكي \(تجاري\)" : "Bank Transfer \(Commercial\)"/);
     expect(adminTechniciansSrc).toMatch(/BANK_TRANSFER_PERSONAL: isAr \? "تحويل بنكي \(خاص\)" : "Bank Transfer \(Personal\)"/);
   });
   it('11. shows completionImage when present, with a safe <img> tag (no dangerouslySetInnerHTML)', () => {
-    expect(adminTechniciansSrc).toMatch(/src=\{taskDetail\.task\.completionImage\}/);
+    expect(adminTechniciansSrc).toMatch(/src=\{detailTask\.completionImage\}/);
     expect(adminTechniciansSrc).not.toMatch(/dangerouslySetInnerHTML/);
   });
   it('12. shows maintenanceConfirmed state with the exact required Arabic/English labels', () => {
@@ -82,15 +87,15 @@ describe('Part A: Admin Technicians detail modal shows full completion details',
     expect(adminTechniciansSrc).toMatch(/Operation Confirmed/);
     expect(adminTechniciansSrc).toMatch(/بانتظار تأكيد الصيانة/);
     expect(adminTechniciansSrc).toMatch(/Awaiting Maintenance Confirmation/);
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.maintenanceConfirmed/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.maintenanceConfirmed/);
   });
   it('13. optional fields (actualCompletionDate, nextMaintenanceNote, completionImage) are each individually guarded so a missing one does not break the view', () => {
-    expect(adminTechniciansSrc).toMatch(/\{taskDetail\.task\.actualCompletionDate && \(/);
-    expect(adminTechniciansSrc).toMatch(/\{taskDetail\.task\.nextMaintenanceNote && \(/);
-    expect(adminTechniciansSrc).toMatch(/taskDetail\.task\.completionImage \? \(/);
+    expect(adminTechniciansSrc).toMatch(/\{detailTask\.actualCompletionDate && \(/);
+    expect(adminTechniciansSrc).toMatch(/\{detailTask\.nextMaintenanceNote && \(/);
+    expect(adminTechniciansSrc).toMatch(/detailTask\.completionImage \? \(/);
   });
   it('14. Scheduling privacy: the Payment Information section is still guarded on completionAmount/completionPaymentMethod presence (undefined for Scheduling -> section hidden, unchanged)', () => {
-    expect(adminTechniciansSrc).toMatch(/\{\(taskDetail\.task\.completionAmount != null \|\| taskDetail\.task\.completionPaymentMethod\) && \(/);
+    expect(adminTechniciansSrc).toMatch(/\{\(detailTask\.completionAmount != null \|\| detailTask\.completionPaymentMethod\) && \(/);
   });
 });
 

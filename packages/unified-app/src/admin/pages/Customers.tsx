@@ -15,8 +15,12 @@ import { Toolbar } from "../../ui/Surface";
 import { EmptyState, Loading, Callout } from "../../ui/Feedback";
 import { TableShell, Table, THead, TH, TBody, TR, TD } from "../../ui/Table";
 import { Pagination } from "../../ui/Pagination";
+import { MaintenanceBadge, maintenanceRowClass } from "../../components/MaintenancePriority";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 import { Modal, ConfirmDialog } from "../../ui/Modal";
 import { Icon } from "../../ui/icons";
+
+const CUSTOMERS_PER_PAGE = 20;
 
 function formatCycle(cycle: string, freq: number, t: any) {
   const n = Number(freq) || 1;
@@ -24,24 +28,6 @@ function formatCycle(cycle: string, freq: number, t: any) {
   if (cycle === "WEEKLY") return `${t("customers.every")} ${n} ${n === 1 ? t("customers.week") : t("customers.weeks")}`;
   if (cycle === "MONTHLY") return `${t("customers.every")} ${n} ${n === 1 ? t("customers.month") : t("customers.months")}`;
   return cycle;
-}
-
-/**
- * Maintenance countdown -- see scheduling/pages/CustomerList.tsx for why the
- * coloured emoji circle inside a coloured pill was replaced by one toned badge.
- */
-function MaintenanceBadge({ c, t }: { c: any; t: any }) {
-  if (c.alertLevel === "overdue") {
-    return <Badge tone="danger" dot>{t("countdown.overdueBy", { days: c.overdueCount })}</Badge>;
-  }
-  if (c.alertLevel === "soon") {
-    const label = c.daysUntil === 0 ? t("countdown.dueToday") : c.daysUntil === 1 ? t("countdown.dueTomorrow") : t("countdown.dueIn", { days: c.daysUntil });
-    return <Badge tone="warning" dot>{label}</Badge>;
-  }
-  if (c.daysUntil !== null) {
-    return <Badge tone="success" dot>{t("countdown.dueIn", { days: c.daysUntil })}</Badge>;
-  }
-  return null;
 }
 
 async function exportCustomerPdf(c: any, isAr: boolean, t: any) {
@@ -93,6 +79,14 @@ ${c.notes ? `<div class="sec"><div class="sec-t">${isAr ? "ملاحظات" : "No
 export default function Customers() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
+  // Exported rows carry the same four states the rows on screen do, in words --
+  // a spreadsheet has no colour to read.
+  const priorityLabel = (p?: string) => ({
+    OVERDUE: t("reports.priorityOverdue"),
+    DUE_SOON: t("reports.priorityDueSoon"),
+    NORMAL: t("reports.priorityNormal"),
+    UNKNOWN: t("reports.priorityUnknown"),
+  } as Record<string, string>)[p || "UNKNOWN"] || t("reports.priorityUnknown");
   const navigate = useNavigate();
   const qc = useQueryClient();
   const socket = useSocket();
@@ -114,11 +108,16 @@ export default function Customers() {
       qc.invalidateQueries({ queryKey: ["customers"] });
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     };
+    // A completion recalculates the customer's next-maintenance date, which is
+    // what this list is now sorted and coloured by -- so it has to refresh on
+    // appointment events too, not only on customer ones.
+    socket.on("appointment:completed", refresh);
     socket.on("customer:created", refresh);
     socket.on("customer:updated", refresh);
     socket.on("customers:bulk-deleted", refresh);
     socket.on("customer:deleted", refresh);
     return () => {
+      socket.off("appointment:completed", refresh);
       socket.off("customer:created", refresh);
       socket.off("customer:updated", refresh);
       socket.off("customers:bulk-deleted", refresh);
@@ -128,7 +127,15 @@ export default function Customers() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["customers", search, page],
-    queryFn: () => api.get("/customers", { params: { search, page, limit: 20, includeSchedule: true } }).then(r => r.data)
+    // sort=maintenance is applied by the SERVER, before the page slice, so the
+    // most overdue customer is on page 1 even when they were registered last.
+    // Sorting the 20 rows already fetched would only reorder an arbitrary slice.
+    queryFn: () => api.get("/customers", {
+      params: { search, page, limit: CUSTOMERS_PER_PAGE, includeSchedule: true, sort: "maintenance" },
+    }).then(r => r.data),
+    // Keeps the previous page on screen while the next one loads instead of
+    // flashing the empty state, so paging does not make the table disappear.
+    placeholderData: prev => prev,
   });
 
   const toggle = useMutation({
@@ -151,8 +158,15 @@ export default function Customers() {
   async function exportAllToExcel() {
     setExportingXlsx(true);
     try {
-      const { data: resp } = await api.get("/customers", { params: { limit: 2000, includeSchedule: true } });
-      const all: any[] = resp.data || [];
+      // Previously requested limit=2000, which the server clamps to its documented
+      // maximum of 100 -- so an "export all customers" button silently produced a
+      // file containing the first 100. fetchAllPages walks the endpoint's own
+      // meta.totalPages at the documented page size instead, so the export is the
+      // whole authorized result set however large it grows. The current search is
+      // passed through: exporting a filtered list must export that list.
+      const all: any[] = await fetchAllPages(api, "/customers", {
+        search: search || undefined, includeSchedule: true, sort: "maintenance",
+      });
       const { downloadExcelWorkbook } = await import("../../utils/excelExport");
       const rows = all.map((c: any) => ({
         [isAr ? "الاسم" : "Name"]: c.name,
@@ -164,7 +178,8 @@ export default function Customers() {
         [isAr ? "تاريخ التركيب" : "Install Date"]: c.installationDate ? formatGregorianDate(c.installationDate) : "",
         [isAr ? "دورة الصيانة" : "Cycle"]: formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t),
         [isAr ? "آخر صيانة" : "Last Maint."]: c.lastMaintenance ? formatGregorianDate(c.lastMaintenance) : "",
-        [isAr ? "الصيانة القادمة" : "Next Maint."]: c.nextMaintenance ? formatGregorianDate(c.nextMaintenance) : "",
+        [isAr ? "الصيانة القادمة" : "Next Maint."]: c.nextMaintenanceDueAt ? formatGregorianDate(c.nextMaintenanceDueAt) : "",
+        [isAr ? "أولوية الصيانة" : "Maintenance Priority"]: priorityLabel(c.maintenancePriority),
         [isAr ? "الحالة" : "Status"]: c.isActive ? (isAr ? "نشط" : "Active") : (isAr ? "غير نشط" : "Inactive"),
         [isAr ? "ملاحظات" : "Notes"]: c.notes || "",
       }));
@@ -204,7 +219,18 @@ export default function Customers() {
 
   const customers: any[] = data?.data || [];
   const total: number = data?.meta?.total ?? 0;
-  const totalPages = Math.ceil(total / 20) || 1;
+  // From the server's own meta rather than re-derived from total/pageSize: the
+  // page size is the server's decision (it clamps), so deriving it here means
+  // computing the same number twice from different assumptions.
+  const totalPages: number = data?.meta?.totalPages ?? 1;
+
+  // If deleting the last row on the last page leaves this page beyond the end,
+  // step back to the nearest page that still exists rather than showing an
+  // empty table with no way to tell why.
+  useEffect(() => {
+    if (!data?.meta) return;
+    if (page > totalPages) setPage(totalPages);
+  }, [data?.meta, page, totalPages]);
 
   return (
     <div className="space-y-4">
@@ -243,6 +269,21 @@ export default function Customers() {
         )}
       </Toolbar>
 
+      {/* v4 Requirement #9: the stepper sits ABOVE the list. The customer list is
+          the one place in the app where reaching page 7 is the task, not a
+          footnote, and a control below a 20-row table is off-screen when you
+          need it. */}
+      {total > 0 && (
+        <Pagination
+          labelled
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          totalLabel={t("pagination.totalCustomers")}
+          onPage={setPage}
+        />
+      )}
+
       {isLoading ? (
         <Loading label={t("common.loading")} />
       ) : !customers.length ? (
@@ -266,7 +307,11 @@ export default function Customers() {
             </THead>
             <TBody>
               {customers.map((c: any) => (
-                <TR key={c.id} onClick={() => navigate(`/admin/customers/${c.id}`)}>
+                <TR
+                  key={c.id}
+                  emphasis={maintenanceRowClass(c.maintenancePriority)}
+                  onClick={() => navigate(`/admin/customers/${c.id}`)}
+                >
                   <TD className="font-medium">{c.name}</TD>
                   <TD className="text-fg-secondary"><span dir="ltr">{c.phone}</span></TD>
                   <TD className="text-fg-secondary text-2xs">{formatCycle(c.maintenanceCycle, c.maintenanceFrequency, t)}</TD>
@@ -278,9 +323,9 @@ export default function Customers() {
                   </TD>
                   <TD>
                     <div className="flex flex-col items-start gap-1">
-                      <MaintenanceBadge c={c} t={t} />
-                      {c.nextMaintenance && (
-                        <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenance)}</span>
+                      <MaintenanceBadge due={c} />
+                      {c.nextMaintenanceDueAt && (
+                        <span className="text-2xs text-fg-muted tabular-nums" dir="ltr">{formatGregorianDate(c.nextMaintenanceDueAt)}</span>
                       )}
                     </div>
                   </TD>
@@ -347,10 +392,6 @@ export default function Customers() {
             </TBody>
           </Table>
         </TableShell>
-      )}
-
-      {data?.meta && (
-        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       )}
 
       {historyModal && <HistoryModal customer={historyModal} onClose={() => setHistoryModal(null)} apiClient={api} />}
