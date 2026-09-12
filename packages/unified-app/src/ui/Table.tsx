@@ -71,15 +71,31 @@ export function TBody({ children, className }: { children: React.ReactNode; clas
 }
 
 export function TR({
-  children, className, onClick, selected,
-}: { children: React.ReactNode; className?: string; onClick?: () => void; selected?: boolean }) {
+  children, className, onClick, selected, emphasis,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+  selected?: boolean;
+  /**
+   * Full-row status treatment (v4 Requirement #5's overdue rows).
+   *
+   * It is a prop rather than a caller-supplied className because the default
+   * `hover:bg-surface-hover` would fight any background passed in from outside:
+   * two single-class rules setting the same property, where which one wins
+   * depends on stylesheet order rather than on intent, so an emphasised row
+   * would lose its colour under the cursor. Taking it here lets the hover class
+   * simply not be emitted.
+   */
+  emphasis?: string;
+}) {
   return (
     <tr
       onClick={onClick}
       aria-selected={selected || undefined}
       className={cx(
         "border-b border-line-subtle last:border-b-0 transition-colors",
-        selected ? "bg-accent-subtle" : "hover:bg-surface-hover",
+        selected ? "bg-accent-subtle" : emphasis ? emphasis : "hover:bg-surface-hover",
         onClick && "cursor-pointer",
         className
       )}

@@ -102,3 +102,35 @@ const MAINTENANCE_RELEVANT_CUSTOMER_FIELDS = [
 export function touchesMaintenanceBaseline(changed: Record<string, unknown>): boolean {
   return MAINTENANCE_RELEVANT_CUSTOMER_FIELDS.some((field) => field in changed);
 }
+
+/**
+ * The authoritative customer ordering for every maintenance-priority surface
+ * (v4 Requirement #5/#9). Applied in SQL, BEFORE the page slice -- sorting the
+ * rows a page already contains would reorder 20 arbitrary customers and still
+ * show the wrong ones, which is the defect this exists to fix.
+ *
+ * One ascending sort on the stored due date produces the whole required
+ * grouping on its own, because the groups are themselves defined by that date's
+ * position on the calendar:
+ *
+ *   overdue (earliest first, i.e. most overdue first)
+ *     -> approaching (soonest first)
+ *       -> normal (soonest first)
+ *         -> unknown (no date at all)
+ *
+ * so no CASE expression, no computed sort column and no raw SQL are needed --
+ * and there is no way for the order to disagree with the colour each row gets,
+ * since both read the same column. `nulls: 'last'` is what puts UNKNOWN at the
+ * end rather than letting PostgreSQL's default (NULLS LAST for ASC, which
+ * happens to agree) be an accident.
+ *
+ * `name` then `id` are deterministic tie-breakers. `id` matters more than it
+ * looks: without a total order, two customers sharing a due date and a name can
+ * swap places between two page requests and one of them is then never shown on
+ * any page.
+ */
+export const MAINTENANCE_PRIORITY_ORDER_BY: Prisma.CustomerOrderByWithRelationInput[] = [
+  { nextMaintenanceDueAt: { sort: 'asc', nulls: 'last' } },
+  { name: 'asc' },
+  { id: 'asc' },
+];

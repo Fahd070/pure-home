@@ -11,7 +11,7 @@ import { bulkDeleteAllSchema, StaleCountError, sendStaleCountConflict, isTransac
 import { stripCompletionAmountFromCustomers } from '../services/completionPrivacy.service';
 import { deleteCustomerWithOperationalCleanup } from '../services/customerDeletion.service';
 import { computeNextMaintenanceDate, describeMaintenanceDue, DUE_SOON_DAYS } from '../services/maintenanceSchedule.service';
-import { recalculateCustomerMaintenanceDue, touchesMaintenanceBaseline } from '../services/maintenanceDue.service';
+import { recalculateCustomerMaintenanceDue, touchesMaintenanceBaseline, MAINTENANCE_PRIORITY_ORDER_BY } from '../services/maintenanceDue.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 
 const router = Router();
@@ -201,10 +201,40 @@ function normalizeSecondaryPhone(raw: string | undefined, primaryPhone: string):
   return { value: trimmed };
 }
 
+// `totalPages` is what makes this endpoint usable by the shared fetchAllPages()
+// export helper and by a page stepper that can show "3 of 17" -- both previously
+// had to guess it from `total` and their own page size, which is the same number
+// derived twice and therefore a number that can be wrong twice.
+function buildMeta(total: number, page: number, limit: number) {
+  return { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
+
+// v4 Requirement #5/#9: opt-in ordering.
+//
+// The DEFAULT stays `createdAt desc`. Desktop v3.6.5 is a production-installed
+// client that reads this same endpoint, and silently reordering every customer
+// list it shows is not a change this phase is entitled to make. Phase 3's own
+// screens ask for the maintenance ordering explicitly, which is also what makes
+// the change reviewable: one query parameter, one behaviour.
+const CUSTOMER_SORTS = {
+  recent: [{ createdAt: 'desc' as const }, { id: 'asc' as const }],
+  maintenance: MAINTENANCE_PRIORITY_ORDER_BY,
+};
+type CustomerSort = keyof typeof CUSTOMER_SORTS;
+
 router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const { search = '', page = '1', limit = '20', active, includeSchedule } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 20, 100);
+    const { search = '', page = '1', limit = '20', active, includeSchedule, sort } = req.query as any;
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+    const safePage = Math.max(parseInt(page) || 1, 1);
+    // hasOwnProperty, not `in`: `in` walks the prototype chain, so `sort=toString`
+    // or `sort=__proto__` would pass an allowlist check that reads as if it could
+    // not, and hand Prisma a function or Object.prototype as its ordering.
+    const CUSTOMER_SORT_KEYS = Object.keys(CUSTOMER_SORTS);
+    if (sort !== undefined && !CUSTOMER_SORT_KEYS.includes(String(sort))) {
+      return res.status(400).json({ success: false, message: `sort must be one of: ${CUSTOMER_SORT_KEYS.join(', ')}` });
+    }
+    const orderBy = CUSTOMER_SORTS[(sort as CustomerSort) || 'recent'];
     let where: any = {};
     if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { phone: { contains: search } }, { secondaryPhone: { contains: search } }];
     if (active !== undefined) where.isActive = active === 'true';
@@ -213,13 +243,13 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
 
     let customers = await prisma.customer.findMany({
       where, include: { address: true },
-      skip: (parseInt(page)-1)*safeLimit, take: safeLimit, orderBy: { createdAt: 'desc' }
+      skip: (safePage - 1) * safeLimit, take: safeLimit, orderBy,
     });
     // Modification #6: completionAmount is private to ADMIN/TECHNICIAN.
     if (req.user!.role === 'SCHEDULING') customers = stripCompletionAmountFromCustomers(customers);
 
     if (includeSchedule !== 'true') {
-      return res.json({ success: true, data: customers, meta: { total, page: parseInt(page), limit: safeLimit } });
+      return res.json({ success: true, data: customers, meta: buildMeta(total, safePage, safeLimit) });
     }
 
     const now = new Date();
@@ -296,7 +326,7 @@ router.get('/', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res
       };
     });
 
-    res.json({ success: true, data: enriched, meta: { total, page: parseInt(page), limit: safeLimit } });
+    res.json({ success: true, data: enriched, meta: buildMeta(total, safePage, safeLimit) });
   } catch (e) { next(e); }
 });
 
