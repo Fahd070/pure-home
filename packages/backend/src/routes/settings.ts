@@ -11,22 +11,31 @@ import { emitEvent, EVENT_TYPES } from '../services/event.service';
 const router = Router();
 router.use(authenticate);
 
-const DEFAULT_SETTINGS = {
-  theme: 'light',
-  fontSize: 'medium',
-  interfaceScale: 'normal',
-  background: 'day',
-  highContrast: false,
-  improvedReadability: false,
-  notificationsEnabled: true,
-  soundEnabled: true,
-  soundVolume: 70,
-  primaryColor: '#1E6FFF',
-  secondaryColor: '#0F1B2D',
-  buttonColor: '#1E6FFF',
-  cardColor: '#FFFFFF',
-};
-
+/**
+ * v4 Requirement #15: a client must be able to tell "this user has never saved
+ * anything" apart from "this user deliberately chose the middle option" --
+ * WITHOUT changing the response shape the shipped Desktop v3.6.5 client reads.
+ *
+ * A `user_settings` row is created by exactly one code path -- PUT /settings
+ * below, which only runs when someone changes a setting on the Settings page.
+ * So "no row" is a reliable, schema-free signal that nothing was ever saved,
+ * and no migration is needed to express it.
+ *
+ * The signal is ADDITIVE. `interfaceScale` keeps its legacy synthesized value
+ * ('normal') when there is no row, because v3.6.5 reads that field directly and
+ * hands it to setAttribute(); making the field disappear would have left that
+ * client writing "undefined" into the attribute and relying on a CSS fallback
+ * to look right. Instead v4 learns the same fact from `hasSavedSettings`, which
+ * v3.6.5 simply ignores.
+ *
+ * `hasSavedSettings` means exactly one thing: A ROW EXISTS. It does NOT claim
+ * the user explicitly chose their interfaceScale -- a row created by saving
+ * only, say, the theme carries the column's database default ('normal'), and
+ * nothing stored can prove whether that was intended. The approved, deliberately
+ * conservative policy is to treat any stored value as authoritative rather than
+ * guess it was accidental, so a real Medium is never silently upgraded to Large.
+ * That ambiguity is accepted; it is not repaired by migration or backfill.
+ */
 function rowToSettings(row: any) {
   return {
     theme:                row?.theme                ?? 'light',
@@ -42,6 +51,7 @@ function rowToSettings(row: any) {
     secondaryColor:       row?.secondaryColor       ?? '#0F1B2D',
     buttonColor:          row?.buttonColor          ?? '#1E6FFF',
     cardColor:            row?.cardColor            ?? '#FFFFFF',
+    hasSavedSettings:     !!row,
   };
 }
 
@@ -50,7 +60,9 @@ router.get('/', async (req: AuthRequest, res, next) => {
     const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "user_settings" WHERE "userId" = ${req.user!.userId} LIMIT 1`;
     res.json({ success: true, data: rowToSettings(rows[0]) });
   } catch {
-    res.json({ success: true, data: DEFAULT_SETTINGS });
+    // Same "nothing saved" shape as a missing row: on a read failure the
+    // server does not know of any saved preference, so it must not assert one.
+    res.json({ success: true, data: rowToSettings(null) });
   }
 });
 
