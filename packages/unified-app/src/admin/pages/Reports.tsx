@@ -6,8 +6,14 @@ import toast from "react-hot-toast";
 import { escapeHtml as esc } from "../../utils/htmlEscape";
 import { formatGregorianDate, formatGregorianDateTime, formatGregorianMonthYear, localDateOnlyStr } from "../../utils/dateTimeInput";
 import { fetchAllPages } from "../../utils/fetchAllPages";
+import { CheckGroup, toggleIn } from "../../ui/CheckGroup";
+import {
+  APPOINTMENT_REPORT_STATUSES, CUSTOMER_REPORT_STATUSES,
+  appointmentStatusLabel, appointmentStatusLabels, customerStatusLabels, statusParam,
+  type AppointmentReportStatus, type CustomerReportStatus,
+} from "../../utils/reportStatus";
 import { Button } from "../../ui/Button";
-import { Input, Select, Field } from "../../ui/Field";
+import { Input, Select, Field, Label } from "../../ui/Field";
 import { Badge, Tone } from "../../ui/Badge";
 import { PageHeader } from "../../ui/Surface";
 import { EmptyState, Loading } from "../../ui/Feedback";
@@ -46,7 +52,10 @@ function buildPdfHtml(customers: any[], filters: any, isAr: boolean, t: any, tot
   const filterSummary = [
     filters.dateFrom ? (isAr ? `من ${filters.dateFrom}` : `From ${filters.dateFrom}`) : "",
     filters.dateTo   ? (isAr ? `إلى ${filters.dateTo}` : `To ${filters.dateTo}`) : "",
-    filters.status !== "ALL" ? t(`reports.status${filters.status.charAt(0) + filters.status.slice(1).toLowerCase()}`) : "",
+    // Every selected status is named, through the same translation map the
+    // filter control and the Excel export use -- so the PDF's header line can
+    // never claim a narrower filter than the one that produced its rows.
+    filters.statuses.length ? filters.statuses.map((sv: CustomerReportStatus) => customerStatusLabels(t)[sv]).join(isAr ? "، " : ", ") : "",
     filters.search   ? (isAr ? `بحث: ${filters.search}` : `Search: ${filters.search}`) : "",
   ].filter(Boolean).join(" | ") || (isAr ? "جميع العملاء" : "All Customers");
 
@@ -164,16 +173,24 @@ ${c.notes ? `<div class="section"><div class="sec-title">${isAr ? "ملاحظا�
 </body></html>`;
 }
 
-const SALES_WEEK_MS  = 7  * 24 * 3600 * 1000;
-const SALES_MONTH_MS = 30 * 24 * 3600 * 1000;
-function getSalesLast(key: string)  { return Number(localStorage.getItem(`wfm_sales_${key}`) || 0); }
-function setSalesLast(key: string)  { localStorage.setItem(`wfm_sales_${key}`, String(Date.now())); }
-function salesRemaining(key: string, period: "weekly" | "monthly", now: number): number {
-  const last = getSalesLast(key);
-  if (!last) return 0;
-  const lockMs = period === "weekly" ? SALES_WEEK_MS : SALES_MONTH_MS;
-  return Math.max(0, last + lockMs - now);
-}
+// v4 Requirement #10A: the browser-side cooldown that used to live here is gone.
+//
+// It stored a timestamp in localStorage after each download and refused to
+// generate the report again for a week (or a month), which meant an
+// administrator who needed a second copy -- or who had just closed the file by
+// mistake -- was locked out of their own data by their own browser, while anyone
+// on a different machine or a cleared profile was not locked out at all. It
+// protected nothing: the underlying endpoint is a plain read.
+//
+// It was also wired up wrong. The countdown was keyed on `period` while the
+// tiles were keyed on `${period}-${format}`, so downloading the weekly PDF
+// silently locked the weekly EXCEL as well -- two different reports sharing one
+// lock. Both the restriction and the defect are removed together rather than the
+// defect being fixed inside a mechanism that should not exist.
+//
+// GET /reports/sales is verified to carry no server-side throttle of its own, so
+// nothing real is being bypassed here. It is ADMIN-only and read-only, and the
+// app's generic rate limiter still applies.
 
 function prevWeekRange() {
   const now = new Date();
@@ -252,16 +269,21 @@ export default function Reports() {
   const { t, i18n } = useTranslation();
   const isAr = i18n.language === "ar";
   const [tab, setTab] = useState<null | "customers" | "appointments" | "sales">(null);
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", status: "ALL", search: "" });
+  // v4 Requirement #10C: several outcomes at once (the approved example is
+  // Completed + Postponed). An empty array keeps the previous "All Statuses"
+  // meaning rather than meaning "match nothing".
+  const [filters, setFilters] = useState<{ dateFrom: string; dateTo: string; statuses: CustomerReportStatus[]; search: string }>(
+    { dateFrom: "", dateTo: "", statuses: [], search: "" }
+  );
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [generating, setGenerating] = useState<"pdf" | "excel" | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
-  const [apptFilters, setApptFilters] = useState({ dateFrom: "", dateTo: "", status: "" });
+  const [apptFilters, setApptFilters] = useState<{ dateFrom: string; dateTo: string; statuses: AppointmentReportStatus[] }>(
+    { dateFrom: "", dateTo: "", statuses: [] }
+  );
   const [hasSearchedAppts, setHasSearchedAppts] = useState(false);
   const [generatingAppts, setGeneratingAppts] = useState<"pdf" | "excel" | null>(null);
   const [generatingSales, setGeneratingSales] = useState<string | null>(null);
-  const [ticker, setTicker] = useState(Date.now());
-  useEffect(() => { const id = setInterval(() => setTicker(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   useEffect(() => {
     window.dispatchEvent(new Event("clear-badge-reports-admin"));
@@ -272,22 +294,28 @@ export default function Reports() {
     return () => clearTimeout(tm);
   }, [filters.search]);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["reports-customers", filters.dateFrom, filters.dateTo, filters.status, debouncedSearch],
-    queryFn: () => api.get("/reports/customers", {
-      params: {
-        search: debouncedSearch || undefined,
-        dateFrom: filters.dateFrom || undefined,
-        dateTo: filters.dateTo || undefined,
-        status: filters.status === "ALL" ? undefined : filters.status,
-        limit: 200
-      }
-    }).then(r => r.data),
+  // Every matching customer, not the first page.
+  //
+  // This previously asked for limit=200 and then printed `meta.total` as the
+  // report's headline figure -- so a filter matching 900 customers produced a PDF
+  // headed "Total: 900" containing 200 rows, with a money total covering only
+  // those 200. Multi-status selection makes broad result sets considerably more
+  // likely, so the same fetchAllPages treatment the appointments report and the
+  // Customers-page export already use is applied here: the count in the header
+  // and the rows under it now come from the same set.
+  const { data: reportCustomers, isLoading } = useQuery({
+    queryKey: ["reports-customers", filters.dateFrom, filters.dateTo, filters.statuses.join(","), debouncedSearch],
+    queryFn: () => fetchAllPages(api, "/reports/customers", {
+      search: debouncedSearch || undefined,
+      dateFrom: filters.dateFrom || undefined,
+      dateTo: filters.dateTo || undefined,
+      status: statusParam(filters.statuses),
+    }),
     enabled: hasSearched,
   });
 
-  const customers: any[] = data?.data || [];
-  const total = data?.meta?.total || 0;
+  const customers: any[] = reportCustomers || [];
+  const total = customers.length;
 
   // Perf fix: GET /appointments is now paginated (default 20/page, max 100).
   // This export/report flow must reflect every matching appointment, not just
@@ -295,10 +323,15 @@ export default function Reports() {
   // silently exporting a truncated result.
   const { data: apptData, isLoading: apptLoading } = useQuery({
     queryKey: ["reports-appointments", apptFilters],
+    // reportStatus (not `status`) is the operational state a row actually
+    // displays as, which spans Appointment.status and Appointment.workStatus --
+    // see services/reportStatus.service.ts. It accepts several at once, and the
+    // SAME parameter drives the table, the PDF and the Excel export because all
+    // three read this one query result.
     queryFn: () => fetchAllPages(api, "/appointments", {
       from: apptFilters.dateFrom || undefined,
       to: apptFilters.dateTo || undefined,
-      status: apptFilters.status || undefined,
+      reportStatus: statusParam(apptFilters.statuses),
     }),
     enabled: hasSearchedAppts,
   });
@@ -332,7 +365,7 @@ export default function Reports() {
           <td>${esc(a.customer?.phone) || "—"}</td>
           <td dir="ltr">${formatGregorianDate(a.scheduledDate)}</td>
           <td>${a.type === "INSTALLATION" ? (isAr ? "تركيب" : "Installation") : (isAr ? "صيانة" : "Maintenance")}</td>
-          <td>${esc(a.status)}</td>
+          <td>${esc(appointmentStatusLabel(a, t))}</td>
           <td>${esc(apptSourceLabel(a.createdByRole))}</td>
           <td style="text-align:center;font-weight:600;font-family:monospace">${amt != null ? amt.toFixed(2) : "—"}</td>
         </tr>`;
@@ -399,7 +432,7 @@ tr:nth-child(even){background:#f9f9f9}
           [isAr ? "الجوال" : "Phone"]: a.customer?.phone || "—",
           [isAr ? "التاريخ" : "Date"]: formatGregorianDate(a.scheduledDate),
           [isAr ? "نوع الخدمة" : "Service Type"]: a.type,
-          [isAr ? "الحالة" : "Status"]: a.status,
+          [isAr ? "الحالة" : "Status"]: appointmentStatusLabel(a, t),
           [isAr ? "المبلغ (ريال)" : "Amount (SAR)"]: amt != null ? amt : "",
         };
       }
@@ -524,7 +557,6 @@ tr:nth-child(even){background:#f9f9f9}
       if (format === "pdf") {
         const html = buildSalesPdfHtml(rows, isAr, periodLabel, totalAmount);
         const filePath = await (window as any).electron.printToPDF(html, `sales-${period}-${Date.now()}.pdf`);
-        setSalesLast(period);
         toast.success(`${t("reports.savedTo")}: ${filePath}`);
       } else {
         const { downloadExcelWorkbook } = await import("../../utils/excelExport");
@@ -550,26 +582,12 @@ tr:nth-child(even){background:#f9f9f9}
         await downloadExcelWorkbook([
           { name: isAr ? "المبيعات" : "Sales", rows: excelRows, colWidths: [28, 14, 16, 14, 20, 16, 14] },
         ], `sales-${period}-${Date.now()}.xlsx`);
-        setSalesLast(period);
         toast.success(isAr ? "تم التنزيل" : "Downloaded");
       }
     } catch {
       toast.error(t("common.error"));
     } finally { setGeneratingSales(null); }
   }
-
-  const statusOptions = [
-    { value: "ALL",        label: t("reports.allStatuses") },
-    { value: "OVERDUE",    label: t("reports.statusOverdue") },
-    { value: "UPCOMING",   label: t("reports.statusUpcoming") },
-    { value: "COMPLETED",  label: t("reports.statusCompleted") },
-    { value: "POSTPONED",  label: t("reports.statusPostponed") },
-    { value: "SCHEDULED",  label: t("reports.statusScheduled") },
-    { value: "IN_PROGRESS",label: t("reports.statusInProgress") },
-    { value: "CANCELLED",  label: t("reports.statusCancelled") },
-    { value: "THIS_MONTH", label: t("reports.statusThisMonth") },
-    { value: "NEXT_MONTH", label: t("reports.statusNextMonth") },
-  ];
 
   function maintenanceStatusLabel(status: string) {
     const map: Record<string, string> = {
@@ -709,11 +727,22 @@ tr:nth-child(even){background:#f9f9f9}
               <Input id="rep-to" type="date" lang="en-GB" dir="ltr" value={filters.dateTo}
                 onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
             </Field>
-            <Field label={t("reports.statusFilter")} htmlFor="rep-status">
-              <Select id="rep-status" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
-                {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </Select>
-            </Field>
+            <div className="sm:col-span-2 lg:col-span-4">
+              <Label>{t("reports.statusFilterMulti")}</Label>
+              <CheckGroup
+                className="mt-1"
+                ariaLabel={t("reports.statusFilterMulti")}
+                value={filters.statuses}
+                options={CUSTOMER_REPORT_STATUSES}
+                labels={customerStatusLabels(t)}
+                onToggle={opt => setFilters(f => ({ ...f, statuses: toggleIn(f.statuses, opt as CustomerReportStatus) }))}
+              />
+              <p className="text-2xs text-fg-muted mt-1.5">
+                {filters.statuses.length
+                  ? t("reports.statusSelectedCount", { count: filters.statuses.length })
+                  : t("reports.statusNoneSelectedMeansAll")}
+              </p>
+            </div>
           </div>
           <div className="px-3 py-2.5 border-t border-line bg-surface-subtle flex justify-end">
             <Button variant="primary" onClick={() => setHasSearched(true)}>
@@ -838,15 +867,22 @@ tr:nth-child(even){background:#f9f9f9}
               <Input id="appt-rep-to" type="date" lang="en-GB" dir="ltr" value={apptFilters.dateTo}
                 onChange={e => setApptFilters(f => ({ ...f, dateTo: e.target.value }))} />
             </Field>
-            <Field label={t("common.status")} htmlFor="appt-rep-status">
-              <Select id="appt-rep-status" value={apptFilters.status}
-                onChange={e => setApptFilters(f => ({ ...f, status: e.target.value }))}>
-                <option value="">{t("common.all")}</option>
-                {["SCHEDULED","RESCHEDULED","CANCELLED","PENDING"].map(sv => (
-                  <option key={sv} value={sv}>{sv}</option>
-                ))}
-              </Select>
-            </Field>
+            <div className="sm:col-span-2 lg:col-span-4">
+              <Label>{t("reports.statusFilterMulti")}</Label>
+              <CheckGroup
+                className="mt-1"
+                ariaLabel={t("reports.statusFilterMulti")}
+                value={apptFilters.statuses}
+                options={APPOINTMENT_REPORT_STATUSES}
+                labels={appointmentStatusLabels(t)}
+                onToggle={opt => setApptFilters(f => ({ ...f, statuses: toggleIn(f.statuses, opt as AppointmentReportStatus) }))}
+              />
+              <p className="text-2xs text-fg-muted mt-1.5">
+                {apptFilters.statuses.length
+                  ? t("reports.statusSelectedCount", { count: apptFilters.statuses.length })
+                  : t("reports.statusNoneSelectedMeansAll")}
+              </p>
+            </div>
           </div>
           <div className="px-3 py-2.5 border-t border-line bg-surface-subtle flex justify-end">
             <Button variant="primary" onClick={() => setHasSearchedAppts(true)}>
@@ -900,7 +936,7 @@ tr:nth-child(even){background:#f9f9f9}
                         <TD className="text-fg-secondary"><span dir="ltr">{a.customer?.phone || "—"}</span></TD>
                         <TD className="text-2xs tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
                         <TD className="text-fg-secondary text-2xs">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</TD>
-                        <TD><Badge tone="info">{a.status}</Badge></TD>
+                        <TD><Badge tone="info">{appointmentStatusLabel(a, t)}</Badge></TD>
                         <TD className="text-fg-secondary text-2xs">{apptSourceLabel(a.createdByRole)}</TD>
                       </TR>
                     ))}
@@ -944,7 +980,7 @@ tr:nth-child(even){background:#f9f9f9}
                           <TD>{locationText}</TD>
                           <TD className="text-2xs tabular-nums whitespace-nowrap"><span dir="ltr">{formatGregorianDate(a.scheduledDate)}</span></TD>
                           <TD className="text-fg-secondary text-2xs">{a.type === "INSTALLATION" ? t("appointments.installation") : t("appointments.maintenance")}</TD>
-                          <TD><Badge tone="urgent">{a.status}</Badge></TD>
+                          <TD><Badge tone="urgent">{appointmentStatusLabel(a, t)}</Badge></TD>
                           <TD className="text-fg-secondary text-2xs">{apptSourceLabel(a.createdByRole)}</TD>
                         </TR>
                       );
@@ -964,8 +1000,8 @@ tr:nth-child(even){background:#f9f9f9}
             <h3 className="text-sm font-semibold text-fg">{isAr ? "تقارير المبيعات" : "Sales Reports"}</h3>
             <p className="text-2xs text-fg-muted mt-0.5">
               {isAr
-                ? "تُنشأ تلقائياً بعد انتهاء كل أسبوع أو شهر — يبدأ العد التنازلي بعد كل تنزيل"
-                : "Generated automatically after each week or month — countdown starts after each download"}
+                ? "تقرير الأسبوع الماضي أو الشهر الماضي — يمكن إنشاؤه في أي وقت"
+                : "Covers the previous week or the previous month — generate it whenever you need it"}
             </p>
           </div>
 
@@ -977,38 +1013,7 @@ tr:nth-child(even){background:#f9f9f9}
               { period: "monthly" as const, format: "excel" as const, label: isAr ? "تقرير المبيعات الشهري (Excel)" : "Monthly Sales Report (Excel)" },
             ] as const).map(({ period, format, label }) => {
               const key = `${period}-${format}`;
-              const rem = salesRemaining(period, period, ticker);
-              const locked = rem > 0;
               const isGen = generatingSales === key;
-              const d = Math.floor(rem / 86400000);
-              const h = Math.floor((rem % 86400000) / 3600000);
-              const m = Math.floor((rem % 3600000) / 60000);
-              const sec = Math.floor((rem % 60000) / 1000);
-
-              // Locked and ready are the same tile shape -- only the state line
-              // changes, so the grid does not reflow as a countdown expires.
-              if (locked) {
-                return (
-                  <div
-                    key={key}
-                    className="rounded-md border border-line bg-surface-subtle p-3 min-h-[88px] flex flex-col justify-between select-none"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Icon name="download" className="w-4 h-4 text-fg-muted flex-shrink-0 mt-0.5" />
-                      <span className="text-xs font-medium text-fg-secondary leading-snug">{label}</span>
-                    </div>
-                    <div className="mt-2">
-                      <p className="text-2xs text-fg-muted">{isAr ? "متاح خلال" : "Available in"}</p>
-                      <p className="text-xs font-mono font-semibold text-fg-secondary tabular-nums leading-none mt-0.5">
-                        {d > 0 && <span>{d}{isAr ? " يوم " : "d "}</span>}
-                        <span>{h}{isAr ? " س " : "h "}</span>
-                        <span>{m}{isAr ? " د " : "m "}</span>
-                        <span>{sec}{isAr ? " ث" : "s"}</span>
-                      </p>
-                    </div>
-                  </div>
-                );
-              }
 
               return (
                 <button

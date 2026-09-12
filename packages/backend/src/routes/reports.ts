@@ -4,6 +4,7 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 import { computeNextMaintenanceDate, DUE_SOON_DAYS } from '../services/maintenanceSchedule.service';
 import { applySchedulingCustomerVisibility } from '../services/schedulingCustomerVisibility.service';
 import { TECHNICIAN_PUBLIC_INCLUDE } from '../services/completionPrivacy.service';
+import { CUSTOMER_REPORT_STATUSES, customerStatusFilter, parseReportStatuses } from '../services/reportStatus.service';
 
 const router = Router();
 router.use(authenticate);
@@ -64,9 +65,18 @@ function enrichWithSchedule(customers: any[], now: Date, apptsByCustomer: Map<st
 
 router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthRequest, res, next) => {
   try {
-    const { search = '', dateFrom, dateTo, status = 'ALL', page = '1', limit = '100' } = req.query as any;
-    const safeLimit = Math.min(parseInt(limit) || 100, 200);
+    const { search = '', dateFrom, dateTo, status, page = '1', limit = '100' } = req.query as any;
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 100, 1), 200);
+    const safePage = Math.max(parseInt(page) || 1, 1);
     const now = new Date();
+
+    // v4 Requirement #10C: several outcomes may be selected at once (the approved
+    // example is Completed + Postponed). Omitted / empty / 'ALL' keeps the
+    // endpoint's existing meaning -- no status filter at all.
+    const parsed = parseReportStatuses(status, CUSTOMER_REPORT_STATUSES);
+    if (!parsed.ok) {
+      return res.status(400).json({ success: false, message: `Invalid status: ${parsed.invalid.join(', ')}` });
+    }
 
     let where: any = {};
     if (search) where.OR = [
@@ -79,38 +89,7 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
       if (dateTo) where.createdAt.lte = new Date(dateTo + 'T23:59:59');
     }
 
-    if (status === 'COMPLETED') {
-      where.appointments = { some: { workStatus: 'COMPLETED' } };
-    } else if (status === 'OVERDUE') {
-      where.appointments = {
-        some: {
-          scheduledDate: { lt: now },
-          status: { not: 'CANCELLED' },
-          workStatus: { not: 'COMPLETED' }
-        }
-      };
-    } else if (status === 'POSTPONED') {
-      where.appointments = { some: { workStatus: 'POSTPONED' } };
-    } else if (status === 'UPCOMING') {
-      const in30 = new Date(now.getTime() + 30 * 86400000);
-      where.appointments = { some: { scheduledDate: { gte: now, lte: in30 }, status: { not: 'CANCELLED' } } };
-    } else if (status === 'THIS_MONTH') {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      where.appointments = { some: { scheduledDate: { gte: start, lt: end } } };
-    } else if (status === 'NEXT_MONTH') {
-      const start = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 2, 1);
-      where.appointments = { some: { scheduledDate: { gte: start, lt: end } } };
-    } else if (status === 'SCHEDULED') {
-      where.appointments = {
-        some: { scheduledDate: { gte: now }, status: { not: 'CANCELLED' }, workStatus: { in: ['WAITING'] } }
-      };
-    } else if (status === 'IN_PROGRESS') {
-      where.appointments = { some: { workStatus: 'IN_PROGRESS' } };
-    } else if (status === 'CANCELLED') {
-      where.appointments = { some: { status: 'CANCELLED' } };
-    }
+    if (parsed.statuses) Object.assign(where, customerStatusFilter(parsed.statuses, now));
 
     // Object-level authorization: same hidden-customer policy as GET /api/customers
     // and GET /dashboard/customers-list -- Scheduling must never see an admin-private
@@ -121,9 +100,9 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
     const customers = await prisma.customer.findMany({
       where,
       include: { address: true },
-      skip: (parseInt(page) - 1) * safeLimit,
+      skip: (safePage - 1) * safeLimit,
       take: safeLimit,
-      orderBy: { createdAt: 'desc' }
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]
     });
 
     // Perf fix: this previously loaded every appointment (with a nested
@@ -170,7 +149,7 @@ router.get('/customers', requireRole('ADMIN', 'SCHEDULING'), async (req: AuthReq
     const safe = req.user!.role === 'SCHEDULING'
       ? enriched.map((c: any) => { const { totalAmount, ...rest } = c; return rest; })
       : enriched;
-    res.json({ success: true, data: safe, meta: { total, page: parseInt(page), limit: safeLimit } });
+    res.json({ success: true, data: safe, meta: { total, page: safePage, limit: safeLimit, totalPages: Math.max(1, Math.ceil(total / safeLimit)) } });
   } catch (e) { next(e); }
 });
 
