@@ -5,6 +5,7 @@ echo =====================================================================
 echo  Pure Home - Build Release Installer
 echo  Source: Desktop\WFM-System-Updated
 echo  Output: packages\unified-app\dist-installer\
+echo  Local build only - no upload, no credentials required
 echo =====================================================================
 echo.
 
@@ -69,20 +70,29 @@ echo =====================================================================
 echo  BUILD COMPLETE
 echo =====================================================================
 echo.
+echo  This script builds LOCALLY ONLY. It uploads nothing, contacts no
+echo  release host, and needs no credentials: no GitHub token, no Vercel
+echo  token, no Blob token. electron-builder runs with --publish never.
+echo.
 echo  Client installer (for employee PCs):
-echo    packages\unified-app\dist-installer\Pure Home Setup 1.0.0.exe
+echo    packages\unified-app\dist-installer\Pure-Home-Setup-^<version^>.exe
+echo    (^<version^> is the "version" field in packages\unified-app\package.json)
 echo.
 echo  Installs to: C:\Program Files\Pure Home\
 echo  Requires:    Administrator rights (perMachine install)
 echo.
-echo  GitHub Release assets to upload:
-echo    1. Pure Home Setup 1.0.0.exe   (from dist-installer\)
-echo    2. latest.yml                   (from dist-installer\)
-echo    3. DEPLOYMENT.md                (deployment guide)
-echo.
-echo  NEXT STEPS:
+echo  NEXT STEPS (all manual):
 echo    1. Test the installer on a clean Windows machine
-echo    2. Upload assets to GitHub Releases (tag: v1.0.0)
-echo    3. Verify auto-update works from a previous version
+echo    2. Upload the .exe to the installer host, by hand
+echo    3. Edit website\release.json: version, releasedAt, installer.name,
+echo       installer.url, installer.sizeBytes (exact byte size of the .exe)
+echo    4. Deploy the download site, then confirm the page shows the new
+echo       version and the Download button fetches the new installer
+echo.
+echo  There is no auto-update to verify. The desktop app performs no
+echo  automatic update check; users update by downloading and running the
+echo  installer from the download site.
+echo.
+echo  Full procedure: docs\RELEASE-DISTRIBUTION.md
 echo.
 pause
