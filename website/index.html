@@ -200,6 +200,28 @@
       pointer-events: none;
     }
 
+    /* The download is genuinely unavailable (release.json missing or
+       malformed). The element keeps its shape but carries no href and cannot
+       be activated -- there is no fallback link to send anyone to. */
+    .download-btn.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    .load-error {
+      max-width: 420px;
+      margin: 14px auto 0;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #fca5a5;
+      background: rgba(153, 27, 27, 0.18);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+
     .download-icon {
       font-size: 1.3rem;
       line-height: 1;
@@ -379,8 +401,16 @@
   <div class="download-card">
     <a id="download-btn" class="download-btn loading" href="#" onclick="handleDownload(event)">
       <span class="download-icon">⬇</span>
-      <span id="btn-label" data-ar="جاري التحميل..." data-en="Loading...">جاري التحميل...</span>
+      <!-- No data-ar/data-en here: render() owns this label, because it depends
+           on the manifest state as well as the language. -->
+      <span id="btn-label">جاري التحميل...</span>
     </a>
+
+    <p id="load-error" class="load-error" role="alert" hidden
+       data-ar="تعذر تحميل معلومات الإصدار، والتنزيل غير متاح حالياً. يرجى المحاولة لاحقاً أو التواصل مع مسؤول النظام."
+       data-en="Release information could not be loaded, so the download is unavailable right now. Please try again later or contact your system administrator.">
+      تعذر تحميل معلومات الإصدار، والتنزيل غير متاح حالياً. يرجى المحاولة لاحقاً أو التواصل مع مسؤول النظام.
+    </p>
 
     <div class="meta">
       <div class="meta-item">
@@ -409,11 +439,16 @@
     </div>
   </div>
 
-  <!-- Note about updates -->
+  <!-- Deliberately silent on updater internals: v3.6.5 (still referenced by
+       release.json during the transition) retains its historical automatic
+       update check, while v4 policy is manual-only (see
+       docs/RELEASE-DISTRIBUTION.md). This line must stay true for both, so it
+       describes only the download workflow -- never "updates are automatic"
+       or "updates are manual". -->
   <p style="font-size:0.75rem; color:var(--muted); margin-bottom: 4px;"
-     data-ar="✓ التطبيق يتحقق من التحديثات تلقائياً عند كل تشغيل"
-     data-en="✓ The app checks for updates automatically on every launch">
-    ✓ التطبيق يتحقق من التحديثات تلقائياً عند كل تشغيل
+     data-ar="✓ يمكنك تنزيل أحدث إصدار من Pure Home من هنا عند الحاجة إلى التحديث"
+     data-en="✓ Download the latest Pure Home installer here whenever you need to update">
+    ✓ يمكنك تنزيل أحدث إصدار من Pure Home من هنا عند الحاجة إلى التحديث
   </p>
 </section>
 
@@ -466,73 +501,121 @@
 
 <!-- ═══════════════════════════════════════ FOOTER ═══ -->
 <footer>
+  <!-- The "All Releases" link used to point at the GitHub Releases page. It is
+       removed rather than repointed: there is no public release index any more,
+       and this page already shows the only version anyone should install. -->
   <span>Pure Home &copy; 2026 Pure Home</span>
-  &nbsp;·&nbsp;
-  <a id="releases-link" href="#" target="_blank" rel="noopener"
-     data-ar="جميع الإصدارات" data-en="All Releases">جميع الإصدارات</a>
 </footer>
 
 <script>
   // ═══════════════════════════════════════════════════════════
-  //  CONFIGURATION
-  //  Replace these two values with your actual GitHub details
+  //  RELEASE MANIFEST
+  //
+  //  This page is driven entirely by release.json, deployed next to it and
+  //  edited by hand at release time. There is NO GitHub API call and NO
+  //  GitHub Releases fallback anywhere on this page: the source repository
+  //  becomes private, at which point every github.com request from a
+  //  visitor's browser -- API or release asset -- answers 404.
+  //
+  //  Schema (see docs/RELEASE-DISTRIBUTION.md):
+  //    version              string  shown verbatim, e.g. "v3.6.5"
+  //    releasedAt           string  ISO-8601 instant
+  //    installer.name       string  installer filename
+  //    installer.url        string  absolute URL of the Windows installer
+  //    installer.sizeBytes  number  exact byte size
   // ═══════════════════════════════════════════════════════════
-  const GITHUB_OWNER = 'Fahd070';  // GitHub username
-  const GITHUB_REPO  = 'pure-home';            // ← change this if different
-  // ═══════════════════════════════════════════════════════════
+  const MANIFEST_URL = './release.json';
 
-  const RELEASES_URL  = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
-  const LATEST_API    = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
-
-  let downloadUrl = RELEASES_URL;  // fallback until we load the real URL
+  let release = null;   // parsed manifest, or null when it could not be loaded
+  let loaded = false;   // has the first fetch settled? null-release means two very
+                        // different things before and after that.
   let isAr = true;
 
-  // ── Load release info from GitHub ──────────────────────────
+  /** Everything render() reads must be present and the right type, or the
+   *  page is better off showing the failure state than a half-filled card. */
+  function isValidManifest(d) {
+    return !!d
+      && typeof d.version === 'string' && d.version !== ''
+      && !!d.installer
+      && typeof d.installer.url === 'string' && d.installer.url !== ''
+      && Number.isFinite(d.installer.sizeBytes);
+  }
+
   async function loadRelease() {
     try {
-      const res = await fetch(LATEST_API, {
-        headers: { Accept: 'application/vnd.github+json' }
-      });
-      if (!res.ok) throw new Error('not ok');
+      // no-store: the manifest is the one file that changes on every release,
+      // so a cached copy would keep handing out the previous installer.
+      const res = await fetch(MANIFEST_URL, { cache: 'no-store' });
+      if (!res.ok) throw new Error('manifest HTTP ' + res.status);
       const data = await res.json();
-
-      const version = data.tag_name || '—';
-      const date = data.published_at
-        ? new Date(data.published_at).toLocaleDateString(isAr ? 'ar-SA' : 'en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
-        : '—';
-
-      // Find Windows installer (.exe)
-      const asset = (data.assets || []).find(a => a.name && a.name.endsWith('.exe'));
-      downloadUrl = asset?.browser_download_url || RELEASES_URL;
-      const sizeMB = asset ? `${(asset.size / 1024 / 1024).toFixed(0)} MB` : '—';
-
-      document.getElementById('version').textContent = version;
-      document.getElementById('date').textContent = date;
-      document.getElementById('size').textContent = sizeMB;
-
-      const btn = document.getElementById('download-btn');
-      btn.href = downloadUrl;
-      btn.classList.remove('loading');
-      updateBtnLabel();
+      if (!isValidManifest(data)) throw new Error('manifest malformed');
+      release = data;
     } catch {
-      // Fallback: send user to releases page
-      const btn = document.getElementById('download-btn');
-      btn.href = RELEASES_URL;
-      btn.classList.remove('loading');
-      updateBtnLabel();
-      document.getElementById('version').textContent = '—';
-      document.getElementById('date').textContent = '—';
-      document.getElementById('size').textContent = '—';
+      // Deliberately no fallback URL. A download that cannot work is worse
+      // than a clearly disabled one, so the action is switched off instead.
+      release = null;
+    } finally {
+      loaded = true;
+    }
+    render();
+  }
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value;
+  }
+
+  function formatDate(iso) {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? '—'
+      : d.toLocaleDateString(isAr ? 'ar-SA' : 'en-GB',
+          { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+
+  /** Paints the current manifest state in the current language. Safe to call
+   *  repeatedly; it is the only thing that touches the download control. */
+  function render() {
+    const btn = document.getElementById('download-btn');
+    const label = document.getElementById('btn-label');
+    const err = document.getElementById('load-error');
+
+    if (!loaded) {
+      // Still fetching. A language toggle lands here on a slow link, and must
+      // NOT be mistaken for a failure -- announcing "could not be loaded" over
+      // a request that is still in flight is a lie the page then retracts.
+      label.textContent = isAr ? 'جاري التحميل...' : 'Loading...';
+      err.hidden = true;
+      return;   // keeps .loading, which is what makes the control inert
     }
 
-    document.getElementById('releases-link').href = RELEASES_URL;
+    btn.classList.remove('loading');
+
+    if (!release) {
+      btn.classList.add('disabled');
+      btn.removeAttribute('href');       // not a dead "#" -- no target at all
+      btn.setAttribute('aria-disabled', 'true');
+      label.textContent = isAr ? 'التنزيل غير متاح حالياً' : 'Download unavailable';
+      err.hidden = false;
+      setText('version', '—');
+      setText('date', '—');
+      setText('size', '—');
+      return;
+    }
+
+    btn.classList.remove('disabled');
+    btn.removeAttribute('aria-disabled');
+    btn.href = release.installer.url;
+    label.textContent = isAr ? 'تنزيل Pure Home' : 'Download Pure Home';
+    err.hidden = true;
+
+    setText('version', release.version);
+    setText('date', formatDate(release.releasedAt));
+    setText('size', (release.installer.sizeBytes / 1024 / 1024).toFixed(0) + ' MB');
   }
 
   function handleDownload(e) {
-    if (document.getElementById('download-btn').classList.contains('loading')) {
-      e.preventDefault();
-    }
-    // otherwise let the <a href> do its job
+    // Nothing to download until a valid manifest has loaded.
+    if (!release) e.preventDefault();
   }
 
   // ── Language toggle ─────────────────────────────────────────
@@ -545,21 +628,14 @@
       el.textContent = ar ? el.dataset.ar : el.dataset.en;
     });
 
-    // Re-render date in new locale
-    loadRelease();
+    // Re-render from whatever state is already in memory. Switching language
+    // must not re-fetch, and must not change the manifest state -- including
+    // during the first fetch, when the answer is "not known yet", not "failed".
+    render();
   }
 
   function toggleLang() {
     setLang(!isAr);
-  }
-
-  function updateBtnLabel() {
-    const label = document.getElementById('btn-label');
-    if (label) {
-      label.textContent = isAr ? 'تنزيل Pure Home' : 'Download Pure Home';
-      label.dataset.ar = 'تنزيل Pure Home';
-      label.dataset.en = 'Download Pure Home';
-    }
   }
 
   // ── Init ────────────────────────────────────────────────────
