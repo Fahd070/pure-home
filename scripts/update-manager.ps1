@@ -4,9 +4,10 @@
 # installer, STOP THE SHARED BACKEND, apply the update, and restart the
 # backend -- all on an unattended 6-hour Windows Scheduled Task timer.
 #
-# That design is retired. `electron-updater`, running inside the Pure Home
-# desktop app itself, is now the single canonical update mechanism (see
-# packages/unified-app/electron/main/index.ts). Running two independent
+# That design is retired. Desktop updates are now MANUAL: the app performs no
+# automatic update check at all, and a new version is installed by downloading
+# the installer from the download site and running it (see
+# packages/unified-app/electron/main/index.ts and docs/RELEASE-DISTRIBUTION.md). Running two independent
 # updaters against the same installation could let this scheduled task force-
 # kill the backend and every connected employee's session at an arbitrary
 # moment, including one already in the middle of downloading/installing an
@@ -39,6 +40,6 @@ function Write-Log {
     Add-Content -Path $logFile -Value $line -ErrorAction SilentlyContinue
 }
 
-Write-Log "INFO" "update-manager.ps1 is deprecated and took no action. Desktop updates are handled exclusively by the in-app updater (electron-updater). See docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md. If this task still fires periodically, run scripts/remove-legacy-update-task.ps1 once as Administrator to remove it."
+Write-Log "INFO" "update-manager.ps1 is deprecated and took no action. Desktop updates are manual -- the app never checks for updates on its own; install a new version from the download site. See docs/RELEASE-DISTRIBUTION.md. If this task still fires periodically, run scripts/remove-legacy-update-task.ps1 once as Administrator to remove it."
 
 exit 0

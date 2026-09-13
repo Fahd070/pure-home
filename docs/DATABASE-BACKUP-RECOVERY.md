@@ -7,13 +7,30 @@ retrieves and decrypts one.
 
 ## Why the backup is encrypted
 
-This repository is public — GitHub Releases here also serve as the distribution
-channel for the Electron desktop app's auto-updater, so repository visibility
-cannot be changed without breaking that separate architecture. On a public
-repository, Actions artifacts are downloadable by any authenticated GitHub user,
-not only collaborators. Since the backup contains the full production database
-(customer names, phone numbers, addresses, appointment and payment records), the
-raw `pg_dump` output is **never** uploaded — only an AES256-encrypted copy is.
+This repository is public. On a public repository, Actions artifacts are
+downloadable by any authenticated GitHub user, not only collaborators. Since the
+backup contains the full production database (customer names, phone numbers,
+addresses, appointment and payment records), the raw `pg_dump` output is
+**never** uploaded — only an AES256-encrypted copy is.
+
+This used to be permanent: GitHub Releases here doubled as the distribution
+channel for the desktop app's auto-updater, so the repository could not be made
+private without breaking it. That is no longer structural — the desktop app
+performs no update check, and the download site reads its own manifest instead
+of the GitHub API.
+
+**But do not read that as "this repository can be made private today."** The
+manifest still resolves the installer through a GitHub Release asset during the
+transition, and release assets on a private repository are not publicly
+downloadable. Flipping visibility before the installer is re-hosted breaks the
+download page for every employee — and breaks it *silently*, because the
+manifest still loads fine, so the page shows a working Download button that
+leads to a 404. Follow the ordering in
+[`RELEASE-DISTRIBUTION.md`](RELEASE-DISTRIBUTION.md) ("Transition state") first.
+
+The encryption stays regardless of visibility. It is not a workaround for being
+public; it is the reason a leaked or over-shared artifact is not a customer-data
+breach, and that argument does not weaken on a private repository.
 
 ## What you need
 

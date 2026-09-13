@@ -131,7 +131,11 @@ $config = [PSCustomObject]@{
     installDir          = "C:\Program Files\Pure Home"
     installedVersion    = $CurrentVersion
     watchdogEnabled     = $true
-    autoUpdateEnabled   = $true
+    # Desktop updates are manual from v4 -- nothing on this machine checks for,
+    # downloads, or installs an update on a timer. Kept (rather than dropped) so
+    # an admin reading an existing config file sees the state change explicitly.
+    # `githubRepo` above is likewise inert: nothing reads it any more.
+    autoUpdateEnabled   = $false
     maxRestartAttempts  = 3
 }
 $config | ConvertTo-Json -Depth 5 | Set-Content $configFile -Force
@@ -252,8 +256,10 @@ Register-ScheduledTask -TaskName "WFM Watchdog" -Action $watchdogAction -Trigger
 Write-Host "  [OK] WFM Watchdog     -- runs every 60 seconds, self-heals backend + Tailscale"
 
 # Task 3: WFM Update Manager -- DEPRECATED, no longer registered.
-# electron-updater (running inside the Pure Home desktop app itself) is now the
-# single canonical update mechanism -- see docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md.
+# Desktop updates are manual from v4: the app performs no automatic update
+# check, and a new version is installed by downloading the installer from the
+# download site -- see docs/RELEASE-DISTRIBUTION.md and
+# docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md.
 # A separate 6-hour scheduled task that could force-kill the shared backend and
 # silently install updates behind the in-app updater's back is exactly the
 # collision that caused intermittent runtime errors for employees actively
@@ -318,9 +324,10 @@ Write-Host "  Active scheduled tasks:"
 Write-Host "    'WFM Backend'       -- backend server (auto-start, auto-restart)"
 Write-Host "    'WFM Watchdog'      -- self-healing monitor (every 60 s)"
 Write-Host ""
-Write-Host "  Desktop app updates are handled by the in-app updater (electron-updater),"
-Write-Host "  not by a scheduled task. The legacy 'WFM Update Manager' task is no longer"
-Write-Host "  registered by this installer; see docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md."
+Write-Host "  Desktop app updates are MANUAL: the app never checks for updates on its own."
+Write-Host "  To update a PC, download the installer from the download site and run it as"
+Write-Host "  Administrator. The legacy 'WFM Update Manager' task is no longer registered by"
+Write-Host "  this installer; see docs/RELEASE-DISTRIBUTION.md."
 Write-Host ""
 Write-Host "  Logs:"
 Write-Host "    Watchdog : $dataDir\logs\watchdog.log"
