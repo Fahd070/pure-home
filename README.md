@@ -159,7 +159,7 @@ Pure Home is distributed as a ready-to-run Windows desktop application. No techn
 
 ### For Employees
 
-1. Download the latest installer from the [Releases page](../../releases/latest)
+1. Download the latest installer from the [download page](https://pure-home-download.vercel.app)
 2. Run `Pure-Home-Setup-X.X.X.exe`
 3. Click through the setup wizard (under two minutes)
 4. Launch Pure Home from the Start Menu or Desktop shortcut
@@ -280,6 +280,6 @@ Pure Home is production-ready and actively maintained.
 
 ---
 
-**[Download Latest Release](../../releases/latest)** · **[View Documentation](docs/)** · **[Changelog](CHANGELOG.md)**
+**[Download Latest Release](https://pure-home-download.vercel.app)** · **[View Documentation](docs/)** · **[Changelog](CHANGELOG.md)**
 
 </div>

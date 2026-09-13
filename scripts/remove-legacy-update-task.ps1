@@ -1,7 +1,7 @@
 # Pure Home - Remove Legacy "WFM Update Manager" Scheduled Task
 #
-# One-time, idempotent cleanup for server PCs that were set up before
-# electron-updater became the single canonical desktop update mechanism.
+# One-time, idempotent cleanup for server PCs that were set up while a
+# scheduled task was still allowed to install desktop updates unattended.
 # See docs/LEGACY-UPDATE-MANAGER-DEPRECATION.md for why this task is retired.
 #
 # This script does ONLY one thing: unregisters the "WFM Update Manager"
@@ -36,6 +36,7 @@ Write-Host "  Found (state: $($task.State)). Removing..."
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
 Write-Host "  Removed '$TaskName'."
 Write-Host ""
-Write-Host "Desktop updates on this machine are now handled exclusively by the"
-Write-Host "in-app updater (electron-updater) inside the Pure Home application."
+Write-Host "Desktop updates on this machine are now manual. Pure Home never checks"
+Write-Host "for updates on its own; install a new version by downloading the"
+Write-Host "installer from the download site and running it as Administrator."
 Write-Host ""

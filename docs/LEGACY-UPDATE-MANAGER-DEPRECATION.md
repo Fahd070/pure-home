@@ -5,9 +5,9 @@
 Pure Home used to have **two independent update mechanisms** running at once
 on a server PC set up via `scripts/install-production.ps1`:
 
-1. **`electron-updater`**, running inside the desktop app itself — checks
-   GitHub Releases shortly after each launch, downloads updates in the
-   background.
+1. **`electron-updater`**, running inside the desktop app itself — at the time,
+   it checked GitHub Releases shortly after each launch and downloaded updates
+   in the background.
 2. **`scripts/update-manager.ps1`**, run every 6 hours by a Windows Scheduled
    Task named `WFM Update Manager` — independently checked GitHub Releases,
    downloaded the installer, **force-stopped the shared backend and any node
@@ -19,8 +19,20 @@ app when the scheduled task fired could see the backend disappear mid-session
 with no warning, and the two updaters could race installing the desktop app at
 the same time.
 
-`electron-updater` is now the **single canonical update mechanism**. The
-scheduled-task updater is deprecated.
+The scheduled-task updater is deprecated, and this document records how it was
+retired.
+
+## Where this ended up
+
+The conflict above was first resolved by making `electron-updater` the single
+canonical mechanism. **From v4 that mechanism is gone too**: the desktop app
+performs no automatic update check at all, and updates are installed by hand
+from the download site. So there is now exactly **one** update path, and it is
+not automated — see [`RELEASE-DISTRIBUTION.md`](RELEASE-DISTRIBUTION.md).
+
+The cleanup below is still required. A leftover `WFM Update Manager` scheduled
+task is, if anything, more clearly wrong now: nothing else on the machine is
+supposed to be fetching or installing anything on a timer.
 
 ## What happened to `update-manager.ps1`
 

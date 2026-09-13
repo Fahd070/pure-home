@@ -19,8 +19,22 @@ log.initialize();
 log.transports.file.level = "info";
 log.transports.console.level = "warn";
 
+// MANUAL UPDATES ONLY (v4 distribution policy).
+//
+// The desktop app performs NO automatic update check, download, or install.
+// Updates are distributed by downloading a new installer from the download
+// site and running it. Nothing below reaches the network unless an explicit
+// IPC call arrives from the renderer, and nothing in the renderer issues one
+// (see "Dormant updater scaffolding" below).
+//
+// The scaffolding is deliberately left in place rather than deleted: it is
+// inert without a check, and removing it would churn the preload contract,
+// the renderer banner and its tests for no behavioural gain. Keeping it means
+// a future "Check for updates" menu item is a single call, not a re-build.
 autoUpdater.logger = log;
-autoUpdater.autoDownload = true;           // download silently in background
+autoUpdater.autoDownload = false;          // so the policy does not rest on one deleted call
+                                            // site: a check added back later still downloads
+                                            // nothing without the explicit "update:download" IPC.
 autoUpdater.autoInstallOnAppQuit = false;  // never install just because the window was closed —
                                             // install only happens via the explicit "Restart & Update"
                                             // button (ipcMain "update:install" below). A silent install
@@ -32,10 +46,10 @@ const ALLOWED_STORE_KEYS = new Set(["wfm-unified", "serverUrl", "language", "the
 
 let mainWindow: BrowserWindow | null = null;
 
-// ─── Auto-updater ────────────────────────────────────────────────────────────
+// ─── Dormant updater scaffolding (no automatic check) ────────────────────────
 
 function setupUpdater(): void {
-  log.info(`[updater] app version ${app.getVersion()} — starting update check lifecycle`);
+  log.info(`[updater] app version ${app.getVersion()} — automatic update checks are disabled (manual updates only)`);
 
   autoUpdater.on("checking-for-update", () => {
     log.info("[updater] checking for update...");
@@ -81,21 +95,9 @@ function setupUpdater(): void {
     return autoUpdater.quitAndInstall(false, true);
   });
 
-  // One check, 5 s after launch so the UI is fully ready before any banner
-  // shows. This does NOT retry on its own -- there is no polling loop here.
-  // The next check happens the next time the app starts (see
-  // UpdateBanner.tsx's error-phase copy, which deliberately does not promise
-  // an automatic retry).
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      // checkForUpdates() already emits "error" above in the normal case; this
-      // catch only guards against a network/DNS failure rejecting the promise
-      // itself (e.g. no internet on a LAN-only deployment) so it can never
-      // reach an unhandled rejection. Non-fatal: the app continues normally.
-      log.warn(formatUpdaterErrorLogLine("checkForUpdates()", err));
-      mainWindow?.webContents.send("update:error", { message: sanitizeUpdaterError(err) });
-    });
-  }, 5000);
+  // The startup checkForUpdates() used to be here. Nothing replaces it -- not
+  // polling, not another updater, not an update feed. Registration only, so an
+  // ordinary launch makes zero update network requests.
 }
 
 // ─── PDF export ──────────────────────────────────────────────────────────────

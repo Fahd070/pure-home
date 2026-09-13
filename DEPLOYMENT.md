@@ -391,19 +391,27 @@ All events propagate via Socket.io within **< 200 ms** on a Tailscale network.
 
 ### Electron App Update (Employee PCs)
 
-The app checks GitHub Releases automatically on startup (via `electron-updater`).
+**Updates are manual.** The app performs no automatic update check, download,
+or install — there is no polling, no background updater, and no update feed.
+Nothing happens on a machine until someone installs a new version on it.
 
-**When an update is available:**
-1. A notification banner appears in the app
-2. The user clicks "Download Update"
-3. After download, they click "Install & Restart"
-4. Windows UAC prompts for Administrator credentials (required for `C:\Program Files\`)
-5. The installer runs elevated, updates the app, and relaunches
+To update an employee PC:
 
-**Manual update (if auto-update is unavailable):**
-1. Download the new `Pure Home Setup x.x.x.exe` from the GitHub Release
-2. Right-click → **Run as Administrator**
-3. The installer updates in-place; server URL is preserved
+1. Open the download site and click **Download** — it always serves the current
+   release
+2. Right-click the downloaded `Pure-Home-Setup-x.x.x.exe` → **Run as
+   Administrator** (required for `C:\Program Files\`)
+3. The installer updates in place; the configured server URL and local
+   preferences are preserved
+4. Launch Pure Home again
+
+Machines still running v3.6.5 do check GitHub on launch, because that behaviour
+is baked into the build they already have. Once the source repository is
+private that check fails and shows a dismissible, non-blocking notice; the app
+is unaffected otherwise. Installing v4 over it ends the checks for good.
+
+Publishing a new version is a separate, entirely manual procedure — see
+[`docs/RELEASE-DISTRIBUTION.md`](docs/RELEASE-DISTRIBUTION.md).
 
 ### Backend Update (Server PC)
 
